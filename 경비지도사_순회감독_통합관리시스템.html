@@ -35,11 +35,15 @@
             border-collapse: collapse;
             font-size: 11px;
             background: white;
+            border-style: hidden;
+            box-shadow: 0 0 0 1px #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
         }
         
         .legend-table th, .legend-table td {
-            border: 1px solid #94a3b8;
-            padding: 3px 6px;
+            border: 1px solid #e2e8f0;
+            padding: 4px 8px;
             text-align: center;
         }
         
@@ -61,10 +65,13 @@
         }
 
         .title-box {
-            border: 2px solid #0f172a;
+            border: 2px solid #334155;
+            border-radius: 8px;
             padding: 15px 50px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             display: inline-block;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         }
 
         .title-box h1 {
@@ -83,10 +90,14 @@
         .approval-table {
             border-collapse: collapse;
             background: white;
+            border-style: hidden;
+            box-shadow: 0 0 0 1px #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
         }
 
         .approval-table th, .approval-table td {
-            border: 1px solid #94a3b8;
+            border: 1px solid #e2e8f0;
             width: 70px;
             text-align: center;
         }
@@ -105,31 +116,59 @@
         .info-row {
             display: flex;
             justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            font-size: 13px;
-            align-items: center;
+            margin-bottom: 15px;
+            font-size: 14px;
         }
 
         .date-box {
-            border: 1px solid #94a3b8;
-            padding: 4px 10px;
             display: flex;
-            gap: 10px;
+            align-items: center;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            overflow: hidden;
+            background-color: #ffffff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
         
-        .date-box span:first-child {
-            background-color: #bbf7d0;
-            padding: 0 5px;
+        .date-box span {
+            padding: 6px 12px;
         }
-        .date-box span:nth-child(3) {
-            background-color: #fecaca;
-            padding: 0 5px;
+
+        .date-box .date-label.start {
+            background-color: #dcfce7;
+            color: #166534;
+            font-weight: 600;
+        }
+        
+        .date-box .date-label.end {
+            background-color: #fee2e2;
+            color: #991b1b;
+            font-weight: 600;
+        }
+
+        .date-box .date-val {
+            font-weight: 500;
+            color: #334155;
+            border-right: 1px solid #e2e8f0;
+        }
+        .date-box .date-val:last-child {
+            border-right: none;
+        }
+
+        .table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
         }
 
         .sub-info {
-            font-size: 13px;
-            margin-left: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #334155;
+            background-color: #f8fafc;
+            padding: 4px 12px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
         }
 
         .main-table {
@@ -137,12 +176,20 @@
             border-collapse: collapse;
             font-size: 11px;
             text-align: center;
+            border-style: hidden;
+            box-shadow: 0 0 0 1px #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
         }
 
         .main-table th, .main-table td {
-            border: 1px solid #94a3b8;
-            padding: 5px 2px;
+            border: 1px solid #e2e8f0;
+            padding: 6px 3px;
             white-space: nowrap;
+        }
+        
+        .main-table tbody tr:hover {
+            background-color: #f8fafc;
         }
 
         .main-table th {
@@ -226,17 +273,16 @@
             <div class="title-section">
                 <div class="title-box">
                     <h2>2026년</h2>
-                    <h1>근무실적[최종]</h1>
+                    <h1>근무실적</h1>
                     <h2>08월</h2>
                 </div>
                 <div class="info-row">
                     <div class="date-box">
-                        <span>시작일</span>
-                        <span>2026-08-01</span>
-                        <span>종료일</span>
-                        <span>2026-08-31</span>
+                        <span class="date-label start">시작일</span>
+                        <span class="date-val">2026-08-01</span>
+                        <span class="date-label end">종료일</span>
+                        <span class="date-val">2026-08-31</span>
                     </div>
-                    <div class="sub-info">경비지도사 권인호</div>
                 </div>
             </div>
 
@@ -253,6 +299,11 @@
                     <td></td>
                 </tr>
             </table>
+        </div>
+
+        <!-- 메인 근무표 상단 툴바 -->
+        <div class="table-toolbar">
+            <div class="sub-info">경비지도사 권인호</div>
         </div>
 
         <!-- 메인 근무표 -->
