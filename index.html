@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>경비지도사 순회감독 일정 · 근무표 통합관리 시스템</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#16233F; --navy-light:#233458; --navy-dark:#0E1830;
+    --bg:#F1F3F7; --card:#FFFFFF; --border:#D7DEE9;
+    --accent:#2F6FED; --accent-warm:#C87F3A;
+    --text:#1D2433; --text-mute:#6B7686;
+    --danger:#C0392B; --danger-bg:#FBEAE8;
+    --good:#227A5A; --good-bg:#E7F5EF;
+    --warn:#B4790C; --warn-bg:#FDF3DE;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: -apple-system, system-ui, "Pretendard", "Malgun Gothic", "맑은 고딕", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh;}
+  header.app{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-dark) 100%);color:#fff;padding:22px 28px;}
+  header.app h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-0.2px;}
+  header.app p{margin:4px 0 0;font-size:12.5px;color:#B9C4DC;}
+  .status-pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);padding:4px 10px;border-radius:999px;margin-top:10px;margin-right:8px;}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:#5BD69B;}
+
+  nav.tabs{display:flex;gap:2px;background:var(--navy-light);padding:0 24px;overflow-x:auto;}
+  nav.tabs button{background:transparent;border:none;color:#C6D0E4;padding:12px 13px;font-size:12.3px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;font-family:var(--sans);}
+  nav.tabs button.active{color:#fff;border-bottom-color:var(--accent-warm);}
+  nav.tabs button:hover{color:#fff;}
+
+  main{max-width:1380px;margin:0 auto;padding:22px 24px 60px;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+  .card h2{font-size:15px;margin:0 0 3px;}
+  .card .sub{font-size:12px;color:var(--text-mute);margin:0 0 14px;}
+
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .toolbar select, .toolbar input[type=text], .toolbar input[type=date], .toolbar input[type=number]{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;font-family:var(--sans);background:#fff;}
+  .btn{border:none;border-radius:6px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--sans);}
+  .btn-primary{background:var(--accent);color:#fff;}
+  .btn-outline{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .btn-warm{background:var(--accent-warm);color:#fff;}
+  .btn-danger{background:var(--danger-bg);color:var(--danger);}
+  .btn-good{background:var(--good-bg);color:var(--good);}
+  .btn:hover{filter:brightness(0.96);}
+  .btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .spacer{flex:1;}
+
+  table.grid{width:100%;border-collapse:collapse;font-size:12.3px;}
+  table.grid th{background:#F6F8FB;color:var(--text-mute);font-weight:700;text-align:left;padding:8px 8px;border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:1;}
+  table.grid td{padding:5px 6px;border-bottom:1px solid #EEF1F6;vertical-align:middle;}
+  table.grid tr:hover td{background:#FAFBFD;}
+  table.grid input, table.grid select{width:100%;border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:5px;font-size:12.3px;font-family:var(--sans);}
+  table.grid input:hover, table.grid select:hover{border-color:var(--border);background:#fff;}
+  table.grid input:focus, table.grid select:focus{border-color:var(--accent);background:#fff;outline:none;}
+  .num{font-family:var(--mono);text-align:right;}
+  .table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:8px;max-height:70vh;}
+
+  .badge{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+  .badge-warn{background:var(--danger-bg);color:var(--danger);}
+  .badge-ok{background:var(--good-bg);color:var(--good);}
+  .badge-mute{background:#EEF1F6;color:var(--text-mute);}
+
+  /* calendar */
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-dow{font-size:11px;color:var(--text-mute);text-align:center;font-weight:700;padding:4px 0;}
+  .cal-cell{min-height:92px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:11px;}
+  .cal-cell.empty{background:transparent;border:none;}
+  .cal-date{font-weight:700;color:var(--text-mute);font-size:11px;margin-bottom:4px;}
+  .cal-chip{display:block;background:#EAF1FF;color:var(--navy);border-radius:5px;padding:2px 5px;margin-top:3px;font-size:10.3px;line-height:1.35;}
+
+  /* 별지1 print doc */
+  .doc-wrap{background:#fff;border:1px solid var(--border);border-radius:8px;padding:34px 40px;max-width:900px;margin:0 auto;}
+  .doc-title{text-align:left;font-size:14px;font-weight:700;margin:0 0 14px;}
+  table.doc{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;}
+  table.doc th, table.doc td{border:1px solid #333;padding:8px 6px;text-align:center;}
+  table.doc th{background:#F5F5F5;font-weight:700;}
+  table.doc .addr{text-align:left;font-size:11.8px;line-height:1.4;}
+  .doc-footer{margin-top:22px;font-size:11px;color:var(--text-mute);text-align:right;}
+  .doc-empty{padding:40px;text-align:center;color:var(--text-mute);font-size:13px;}
+  .doc-wrap-wide{max-width:100%;overflow-x:auto;margin-top:14px;}
+  table.roster-preview-table{font-size:10px;}
+  table.roster-preview-table th, table.roster-preview-table td{padding:3px 3px;white-space:nowrap;}
+  table.roster-preview-table .dow-sun{background:#FBEAE8;}
+  table.roster-preview-table .dow-sat{background:#EAF1FF;}
+
+  /* import */
+  .drop{border:2px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--text-mute);font-size:12.5px;}
+  .map-row{display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid #EEF1F6;font-size:12.5px;}
+
+  /* roster grid */
+  .roster-scroll{overflow:auto;border:1px solid var(--border);border-radius:8px;max-height:64vh;}
+  table.roster{border-collapse:collapse;font-size:11px;}
+  table.roster th, table.roster td{border:1px solid #EEF1F6;padding:2px;text-align:center;}
+  table.roster th.dcol{min-width:40px;background:#F6F8FB;color:var(--text-mute);position:sticky;top:0;z-index:2;}
+  table.roster th.head-fixed{position:sticky;left:0;background:#F6F8FB;z-index:3;text-align:left;padding:6px 8px;min-width:190px;}
+  table.roster td.fixed{position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;z-index:1;white-space:nowrap;font-size:11.5px;}
+  table.roster select.codecell{width:44px;border:none;background:transparent;font-size:10.3px;text-align:center;padding:3px 0;font-family:var(--sans);border-radius:4px;}
+  table.roster td.is-override{background:#FFF7EA;}
+  table.roster select.codecell:hover{background:#F0F3F8;}
+  .code-야{color:#8C4FC9;font-weight:700;}
+  .code-주{color:#2F6FED;font-weight:700;}
+  .code-휴{color:#8A94A6;}
+  .code-숙{color:#0E7C6B;font-weight:700;}
+  .code-연차{color:#C87F3A;font-weight:700;}
+  .code-청원{color:#C87F3A;}
+  .code-전일{color:#C0392B;font-weight:700;}
+  .code-공가{color:#B4790C;}
+  .code-병가{color:#B4790C;}
+  .code-교육{color:#227A5A;}
+  .code-비번{color:#8A94A6;}
+  .add-emp-row{display:grid;grid-template-columns:110px 1fr 90px 90px 110px 150px;gap:8px;align-items:center;margin-top:10px;}
+  .add-emp-row input, .add-emp-row select{padding:7px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);}
+
+  /* alerts */
+  .alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #EEF1F6;}
+  .alert-item:last-child{border-bottom:none;}
+  .alert-main{flex:1;font-size:12.5px;line-height:1.5;}
+  .alert-note-box{width:100%;font-family:var(--mono);font-size:11.5px;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;resize:vertical;min-height:54px;}
+
+  /* admin */
+  .admin-row{display:grid;grid-template-columns:100px 90px 130px 44px 70px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid #EEF1F6;}
+  .admin-row input{padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-family:var(--sans);}
+  .branch-chip{display:inline-flex;align-items:center;gap:6px;background:#F1F3F7;border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;margin:3px 4px 3px 0;}
+  .branch-chip button{border:none;background:transparent;color:var(--danger);cursor:pointer;font-weight:700;padding:0 4px;}
+  .log-row{font-size:11.8px;padding:6px 0;border-bottom:1px solid #EEF1F6;display:flex;gap:10px;}
+  .log-ts{color:var(--text-mute);font-family:var(--mono);white-space:nowrap;}
+  .handover-row{display:grid;grid-template-columns:1fr 40px 1fr auto;gap:8px;align-items:center;}
+
+  @media print{
+    header.app, nav.tabs, .no-print{display:none !important;}
+    main{padding:0;max-width:100%;}
+    .card{border:none;box-shadow:none;padding:0;}
+    .doc-wrap{border:none;padding:0;max-width:100%;}
+    #panel-roster .card > h2, #panel-roster .card > .sub{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <h1>경비지도사 순회감독 일정 · 근무표 통합관리 시스템</h1>
+  <p>강북/강원사업지원팀 · 순회일정 + 근무표 단일 스키마 · 자동 월 롤오버 · 실근무 자동대조</p>
+  <div class="status-pill"><span class="status-dot"></span><span id="syncStatus">동기화 대기중</span></div>
+  <div class="status-pill" id="monthPill">관리월 확인 중...</div>
+</header>
+
+<nav class="tabs">
+  <button class="active" data-tab="table">통합 순회 일정표</button>
+  <button data-tab="roster">근무표 관리</button>
+  <button data-tab="calendar">경비지도사 캘린더</button>
+  <button data-tab="doc">경찰서 제출용 (별지1)</button>
+  <button data-tab="alerts">운영 알림 · 자동검증</button>
+  <button data-tab="import">엑셀 가져오기</button>
+  <button data-tab="admin">관리자 설정</button>
+</nav>
+
+<main>
+
+  <!-- TABLE PANEL -->
+  <section class="panel active" id="panel-table">
+    <div class="card">
+      <h2>통합 순회 일정 (표준 스키마)</h2>
+      <p class="sub">"현장 실근무" 열은 근무표 관리 탭 데이터를 기준으로 자동 계산됩니다. 지도사·지사 목록은 관리자 설정 탭에서 바뀝니다.</p>
+      <div class="toolbar no-print">
+        <select id="filterGuide"><option value="all">전체 경비지도사</option></select>
+        <select id="filterBranch"><option value="all">전체 지사</option></select>
+        <input type="text" id="searchBox" placeholder="주소·비고 검색">
+        <span class="spacer"></span>
+        <button class="btn btn-outline" id="btnExportExcel">엑셀로 내보내기</button>
+        <button class="btn btn-outline" id="btnAddCol">+ 컬럼 추가</button>
+        <button class="btn btn-primary" id="btnAddRow">+ 일정 추가</button>
+      </div>
+      <div class="table-scroll">
+        <table class="grid" id="mainTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROSTER PANEL -->
+  <section class="panel" id="panel-roster">
+    <div class="card">
+      <h2>지사별 근무표 (근태 로스터)</h2>
+      <p class="sub">각 직원은 "반복 패턴 + 예외(연차 등)"로 관리됩니다. 다음 달로 넘어가도 패턴이 자동으로 이어지며, 예외만 새로 입력하면 됩니다.</p>
+      <div class="toolbar no-print">
+        <select id="rosterBranch"></select>
+        <select id="rosterMonth"></select>
+        <span class="spacer"></span>
+        <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
+        <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
+        <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
+        <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
+      </div>
+      <div class="no-print">
+        <div class="roster-scroll">
+          <table class="roster" id="rosterTable"><thead></thead><tbody></tbody></table>
+        </div>
+        <div class="add-emp-row">
+          <input type="text" id="newEmpNo" placeholder="사번">
+          <input type="text" id="newEmpName" placeholder="성명">
+          <input type="text" id="newEmpRank" placeholder="직급(G4 등)">
+          <select id="newEmpShift"><option value="교대">교대</option><option value="상시">상시</option><option value="계약직">계약직</option></select>
+          <select id="newEmpPreset">
+            <option value="">패턴 선택 안함</option>
+            <option value="shift_night">4조2교대(야 시작)</option>
+            <option value="shift_day">4조2교대(주 시작)</option>
+            <option value="standby">상시(휴휴주주주주주)</option>
+          </select>
+          <button class="btn btn-primary" id="btnAddEmp">+ 직원 추가</button>
+        </div>
+      </div>
+    </div>
+    <div class="doc-wrap doc-wrap-wide" id="rosterPreviewContainer" style="display:none;">
+      <div id="rosterPreviewWrap"></div>
+    </div>
+  </section>
+
+  <!-- CALENDAR PANEL -->
+  <section class="panel" id="panel-calendar">
+    <div class="card">
+      <h2>경비지도사별 순회 캘린더</h2>
+      <p class="sub">통합 일정표와 실시간 연동됩니다. 월을 넘겨도 자동으로 이어집니다.</p>
+      <div class="toolbar no-print">
+        <select id="calGuide"></select>
+        <select id="calMonth"></select>
+      </div>
+      <div id="calDow" class="cal-grid" style="margin-bottom:4px;"></div>
+      <div id="calBody" class="cal-grid"></div>
+    </div>
+  </section>
+
+  <!-- DOC PANEL -->
+  <section class="panel" id="panel-doc">
+    <div class="card no-print">
+      <h2>경찰서 제출용 별지1 자동생성</h2>
+      <p class="sub">경비지도사를 선택하면 통합 일정표에서 자동으로 별지1 양식을 채웁니다.</p>
+      <div class="toolbar">
+        <select id="docGuide"></select>
+        <span class="spacer"></span>
+        <button class="btn btn-warm" id="btnPrint">인쇄 / PDF 저장</button>
+      </div>
+    </div>
+    <div class="doc-wrap" id="docWrap"></div>
+  </section>
+
+  <!-- ALERTS PANEL -->
+  <section class="panel" id="panel-alerts">
+    <div class="card">
+      <h2>운영 자동화 대시보드</h2>
+      <div class="toolbar no-print">
+        <label style="font-size:12px;color:var(--text-mute);">기준일</label>
+        <input type="date" id="refDate">
+        <label style="font-size:12px;color:var(--text-mute);">향후</label>
+        <input type="number" id="lookaheadDays" value="7" min="1" max="30" style="width:60px;">
+        <span style="font-size:12px;color:var(--text-mute);">일 이내</span>
+      </div>
+    </div>
+    <div class="card"><h2>① 다가오는 순회 일정</h2><div id="upcomingList"></div></div>
+    <div class="card"><h2>② 배치인원 불일치 경고</h2><p class="sub">근무표가 등록된 지사만 자동 대조됩니다.</p><div id="mismatchList"></div></div>
+  </section>
+
+  <!-- IMPORT PANEL -->
+  <section class="panel" id="panel-import">
+    <div class="card">
+      <h2>지사별 엑셀 가져오기 (순회 일정)</h2>
+      <p class="sub">지사마다 양식이 달라도 됩니다 — 열 매핑만 지정하면 통합 일정표에 추가됩니다.</p>
+      <div class="drop no-print">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        <div id="fileHint" style="margin-top:8px;">지사 순회일정 엑셀 파일을 선택하세요.</div>
+      </div>
+      <div id="mapArea" style="margin-top:16px;"></div>
+      <div class="table-scroll" id="previewArea" style="margin-top:12px;"></div>
+      <div class="toolbar no-print" id="importActions" style="display:none;margin-top:12px;">
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="btnImport">매핑한 열로 가져오기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADMIN PANEL -->
+  <section class="panel" id="panel-admin">
+    <div class="card">
+      <h2>배포 저장소 연동 상태</h2>
+      <p class="sub" id="storageModeDesc">확인 중...</p>
+      <div class="toolbar no-print" id="ghConfigBox" style="display:none;">
+        <input type="text" id="ghOwner" placeholder="GitHub 계정/조직명">
+        <input type="text" id="ghRepo" placeholder="저장소명(repo)">
+        <input type="text" id="ghBranch" placeholder="브랜치(기본 main)">
+        <input type="text" id="ghPath" placeholder="파일 경로(예: data/patrol-system.json)">
+      </div>
+      <div class="toolbar no-print" id="ghConfigBox2" style="display:none;">
+        <input type="password" id="ghToken" placeholder="GitHub Personal Access Token (repo 쓰기 권한)" style="flex:1;min-width:260px;">
+        <button class="btn btn-primary" id="btnGhConnect">연결 테스트 후 저장</button>
+        <button class="btn btn-danger" id="btnGhDisconnect">연동 해제</button>
+      </div>
+      <p class="sub no-print" id="ghHint" style="display:none;margin-top:10px;">
+        토큰은 이 브라우저에만 저장되며 GitHub API로만 전송됩니다. 팀원마다 각자 저장소에 쓰기 권한이 있는 토큰을 직접 발급해 입력해야 합니다
+        (GitHub → Settings → Developer settings → Fine-grained tokens → 해당 저장소에 Contents 읽기/쓰기 권한 부여).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>경비지도사 관리</h2>
+      <p class="sub">이름/연락처 수정은 자동으로 연결된 순회 일정에도 반영됩니다. 삭제는 연결된 일정이 없을 때만 가능합니다.</p>
+      <div id="guideAdminList"></div>
+      <div class="add-emp-row no-print" style="grid-template-columns:110px 90px 140px 60px 110px;">
+        <input type="text" id="newGuideName" placeholder="성명">
+        <input type="text" id="newGuideLicense" placeholder="자격번호">
+        <input type="text" id="newGuidePhone" placeholder="연락처">
+        <input type="color" id="newGuideColor" value="#2F6FED">
+        <button class="btn btn-primary" id="btnAddGuide">+ 지도사 추가</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>지도사 인계 (담당 변경 이벤트)</h2>
+      <p class="sub">특정 지도사가 담당하던 모든 순회 일정을 다른 지도사에게 한 번에 이관합니다. (인사이동·구역 재배정 시 사용)</p>
+      <div class="handover-row no-print">
+        <select id="handoverOld"></select>
+        <span style="text-align:center;color:var(--text-mute);">→</span>
+        <select id="handoverNew"></select>
+        <button class="btn btn-warm" id="btnHandover">인계 실행</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>지사 관리</h2>
+      <p class="sub">사용 중(순회 일정·근무표에 연결)인 지사는 삭제할 수 없습니다.</p>
+      <div id="branchAdminList"></div>
+      <div class="toolbar no-print" style="margin-top:10px;">
+        <input type="text" id="newBranchName" placeholder="새 지사명">
+        <button class="btn btn-primary" id="btnAddBranch">+ 지사 추가</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>변경 이력 로그</h2>
+      <p class="sub">지도사/지사 변경, 인계, 월 롤오버 등 관리자 이벤트가 자동 기록됩니다.</p>
+      <div id="changeLogList" style="max-height:260px;overflow-y:auto;"></div>
+    </div>
+
+    <div class="card">
+      <h2>데이터 백업 · 복원</h2>
+      <p class="sub">전체 데이터를 JSON 파일로 내려받거나, 이전 백업 파일로 복원할 수 있습니다.</p>
+      <div class="toolbar no-print">
+        <button class="btn btn-outline" id="btnBackup">전체 백업 다운로드(JSON)</button>
+        <input type="file" id="restoreInput" accept=".json">
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ---------- 정적 상수 ---------- */
+const CORE_FIELDS = [
+  {key:'guide_name', label:'경비지도사'}, {key:'branch', label:'지사'}, {key:'company', label:'선임업체명'},
+  {key:'site_address', label:'배치현장 주소'}, {key:'police_station', label:'관할경찰서'},
+  {key:'visit_date', label:'순회일자'}, {key:'visit_time', label:'순회시간'}, {key:'headcount', label:'배치인원'},
+  {key:'manager', label:'담당자'}, {key:'remark', label:'비고'},
+];
+const CODE_LIST = ['','주','야','숙','전일','연차','청원','공가','병가','교육','비번'];
+const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
+const PRESETS = {
+  shift_night: ['야','휴','휴','주','주','야','야','휴'],
+  shift_day:   ['주','야','야','휴','휴','주','주','야'],
+  standby:     ['휴','휴','주','주','주','주','주'],
+};
+
+/* ---------- 날짜 유틸 ---------- */
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function dstr(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function daysBetween(a,b){ const da=new Date(a+'T00:00:00'), db=new Date(b+'T00:00:00'); return Math.round((db-da)/86400000); }
+function getCurrentYM(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function ymParts(ym){ const [y,m]=ym.split('-').map(Number); return {y,m}; }
+function monthOptions(centerYM){
+  const {y:cy,m:cm} = ymParts(centerYM); const opts=[];
+  for(let i=-6;i<=12;i++){ let m=cm+i,y=cy; while(m<1){m+=12;y--;} while(m>12){m-=12;y++;} opts.push(`${y}-${String(m).padStart(2,'0')}`); }
+  return opts;
+}
+function fmtDoc(ym,d){ const {y,m}=ymParts(ym); return `'${String(y).slice(2)}. ${String(m).padStart(2,'0')}. ${String(d).padStart(2,'0')}`; }
+
+/* ---------- 근무표: 패턴 + 예외 모델 ---------- */
+function patternCodeFor(emp, dateStr){
+  if(!emp.pattern || emp.pattern.length===0) return '';
+  const diff = daysBetween(emp.patternStart, dateStr);
+  const idx = ((diff % emp.pattern.length)+emp.pattern.length)%emp.pattern.length;
+  return emp.pattern[idx];
+}
+function effectiveCode(emp, dateStr){
+  if(emp.overrides && Object.prototype.hasOwnProperty.call(emp.overrides,dateStr)) return emp.overrides[dateStr];
+  return patternCodeFor(emp, dateStr);
+}
+function onDutyCount(branch, dateStr){
+  if(!dateStr) return {count:0,total:0};
+  const staff = employees.filter(e=>e.branch===branch);
+  let count=0;
+  staff.forEach(e=>{ if(!OFF_CODES.has(effectiveCode(e,dateStr))) count++; });
+  return {count, total:staff.length};
+}
+function generateFromPreset(key, monthStartStr){
+  const p = PRESETS[key]; if(!p) return {pattern:[], patternStart: monthStartStr};
+  return {pattern:p.slice(), patternStart: monthStartStr};
+}
+
+/* ---------- 시드 데이터 ---------- */
+function seedGuides(){
+  return [
+    {id:'g1',name:'권O호', license:'22257', phone:'010-****-3565', color:'#2F6FED'},
+    {id:'g2',name:'서O석', license:'22027', phone:'010-****-7428', color:'#C87F3A'},
+    {id:'g3',name:'원O석', license:'22230', phone:'010-****-5058', color:'#227A5A'},
+    {id:'g4',name:'김O환', license:'20769', phone:'010-****-4631', color:'#8C4FC9'},
+    {id:'g5',name:'오O철', license:'22077', phone:'010-****-4702', color:'#C0392B'},
+  ];
+}
+function seedBranches(){ return ['중앙','강북','서대문','고양','의정부','남양주','강릉','원주']; }
+function seedRecords(){
+  const co = '케이티텔레캅㈜';
+  const rows = [
+    ['권O호','중앙',co,'서울시 동대문구 왕산로 15\n(강북/강원본부 중앙지사)','동대문경찰서','2026-08-25','08:30~09:30',17],
+    ['권O호','중앙',co,'서울시 동대문구 왕산로 15\n(강북/강원본부 중앙지사)','동대문경찰서','2026-08-27','08:30~09:30',8],
+    ['권O호','의정부',co,'경기도 의정부시 용현로 168\n(강북/강원본부 의정부지사)','의정부경찰서','2026-08-19','08:30~09:30',12],
+    ['권O호','의정부',co,'경기도 의정부시 용현로 168\n(강북/강원본부 의정부지사)','의정부경찰서','2026-08-20','08:30~09:30',3],
+    ['권O호','의정부',co,'경기도 의정부시 용현로 168\n(강북/강원본부 의정부지사)','의정부경찰서','2026-08-21','08:30~09:30',1],
+    ['서O석','강북',co,'서울시 강북구 솔매로 50길 43\n(강북/강원본부 강북지사)','강북경찰서','2026-08-19','08:00~10:00',15],
+    ['서O석','강북',co,'서울시 강북구 솔매로 50길 43\n(강북/강원본부 강북지사)','강북경찰서','2026-08-21','08:00~10:00',5],
+    ['서O석','강북',co,'서울시 강북구 솔매로 50길 43\n(강북/강원본부 강북지사)','강북경찰서','2026-08-24','17:00~19:00',1],
+    ['서O석','서대문',co,'서울시 마포구 숭문4길 15\n(강북/강원본부 서대문지사)','마포경찰서','2026-08-12','08:00~10:00',10],
+    ['서O석','서대문',co,'서울시 마포구 숭문4길 15\n(강북/강원본부 서대문지사)','마포경찰서','2026-08-13','17:00~19:00',4],
+    ['서O석','서대문',co,'서울시 마포구 숭문4길 15\n(강북/강원본부 서대문지사)','마포경찰서','2026-08-25','08:00~10:00',2],
+    ['원O석','고양',co,'경기도 고양시 일산동구 중앙로 1228\n(강북/강원본부 고양지사)','일산동부경찰서','2026-08-03','17:30~19:00',8],
+    ['원O석','고양',co,'경기도 고양시 일산동구 중앙로 1228\n(강북/강원본부 고양지사)','일산동부경찰서','2026-08-04','17:30~19:00',4],
+    ['원O석','고양',co,'경기도 고양시 일산동구 중앙로 1228\n(강북/강원본부 고양지사)','일산동부경찰서','2026-08-21','17:30~19:00',6],
+    ['원O석','고양',co,'경기도 고양시 일산동구 중앙로 1229\n(강북/강원본부 고양지사)','일산동부경찰서','2026-08-26','17:30~19:00',4],
+    ['김O환','남양주',co,'경기도 남양주시 다산순환로 20\n(강북/강원본부 남양주지사)','남양주남부경찰서','2026-08-03','16:30~18:00',10],
+    ['김O환','남양주',co,'경기도 남양주시 다산순환로 20\n(강북/강원본부 남양주지사)','남양주남부경찰서','2026-08-05','07:30~09:00',4],
+    ['김O환','남양주',co,'경기도 남양주시 다산순환로 20\n(강북/강원본부 남양주지사)','남양주남부경찰서','2026-08-21','07:30~09:00',2],
+    ['김O환','남양주',co,'경기도 남양주시 다산순환로 20\n(강북/강원본부 남양주지사)','남양주남부경찰서','2026-08-31','07:30~09:00',1],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-18','08:00~10:00',3],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-18','17:00~19:00',2],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-19','08:00~10:00',2],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-19','17:00~19:00',2],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-26','08:00~10:00',4],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-26','17:00~19:00',3],
+    ['오O철','강릉',co,'강원도 강릉시 임영로 131번길 12\n(강북/강원본부 강릉지사)','강릉경찰서','2026-08-28','17:00~19:00',1],
+    ['오O철','원주',co,'강원도 원주시 서원대로 491\n(강북/강원본부 원주지사)','원주경찰서','2026-08-07','08:00~10:00',4],
+    ['오O철','원주',co,'강원도 원주시 서원대로 491\n(강북/강원본부 원주지사)','원주경찰서','2026-08-07','17:00~19:00',4],
+    ['오O철','원주',co,'강원도 원주시 서원대로 491\n(강북/강원본부 원주지사)','원주경찰서','2026-08-10','08:00~10:00',2],
+    ['오O철','원주',co,'강원도 원주시 서원대로 491\n(강북/강원본부 원주지사)','원주경찰서','2026-08-10','17:00~19:00',1],
+    ['오O철','원주',co,'강원도 원주시 서원대로 491\n(강북/강원본부 원주지사)','원주경찰서','2026-08-28','08:00~10:00',1],
+    ['오O철','원주',co,'강원도 춘천시 금강로 11\n(강북/강원본부 원주지사 춘천고객지원팀)','춘천경찰서','2026-08-06','08:00~10:00',4],
+    ['오O철','원주',co,'강원도 춘천시 금강로 11\n(강북/강원본부 원주지사 춘천고객지원팀)','춘천경찰서','2026-08-06','17:00~19:00',4],
+    ['오O철','원주',co,'강원도 춘천시 금강로 11\n(강북/강원본부 원주지사 춘천고객지원팀)','춘천경찰서','2026-08-27','17:00~19:00',1],
+  ];
+  return rows.map((r,i)=>({ id:'seed_'+i, guide_name:r[0], branch:r[1], company:r[2], site_address:r[3], police_station:r[4],
+    visit_date:r[5], visit_time:r[6], headcount:r[7], manager:'', remark:'', extra:{} }));
+}
+function seedEmployees(){
+  const raw = [
+    {empno:'07729',name:'신O균',rank:'G4',shift:'교대',zone:'401호',pattern:['야','휴','휴','주','주','야'],overrides:{'2026-08-10':'연차','2026-08-11':'연차'}},
+    {empno:'08422',name:'윤O진',rank:'G4',shift:'교대',zone:'401호',pattern:['휴','주','주','야','야','휴'],overrides:{'2026-08-14':'연차','2026-08-15':'연차'}},
+    {empno:'87854',name:'안O정',rank:'계약',shift:'교대',zone:'401호',pattern:['주','야','야','휴','휴','주'],overrides:{'2026-08-15':'휴','2026-08-16':'연차','2026-08-17':'연차'}},
+    {empno:'07940',name:'윤O경',rank:'G4',shift:'교대',zone:'402호',pattern:['야','야','휴','휴','주','주'],overrides:{'2026-08-02':'휴','2026-08-04':'연차'}},
+    {empno:'08577',name:'최O현',rank:'G4',shift:'교대',zone:'402호',pattern:['휴','휴','주','주','야','야'],overrides:{'2026-08-02':'주'}},
+    {empno:'87756',name:'전O용',rank:'계약',shift:'교대',zone:'402호',pattern:['주','주','야','야','휴','휴'],overrides:{'2026-08-02':'야'}},
+    {empno:'08226',name:'박O진',rank:'G4',shift:'교대',zone:'403호',pattern:['휴','주','주','야','야','휴'],overrides:{}},
+    {empno:'08619',name:'변O석',rank:'G4',shift:'교대',zone:'403호',pattern:['야','휴','휴','주','주','야'],overrides:{'2026-08-28':'연차','2026-08-29':'연차'}},
+    {empno:'08621',name:'최O현',rank:'G4',shift:'교대',zone:'403호',pattern:['주','야','야','휴','휴','주'],overrides:{'2026-08-18':'연차','2026-08-19':'연차','2026-08-25':'청원'}},
+  ];
+  return raw.map(r=>({ id:'emp_'+r.empno, branch:'중앙', zone:r.zone, empno:r.empno, name:r.name, rank:r.rank, shift:r.shift,
+    pattern:r.pattern, patternStart:'2026-08-01', overrides:r.overrides }));
+}
+
+/* ---------- 상태 ---------- */
+let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[];
+let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
+let storageMode = 'none'; // 'artifact' | 'github' | 'none'
+let ghConfig = null;      // {owner, repo, branch, path, token}
+let ghSha = null;         // 마지막으로 읽은 GitHub 파일의 sha (충돌 방지용)
+
+function setSyncStatus(msg, ok=true){
+  document.getElementById('syncStatus').textContent = msg;
+  document.querySelector('.status-dot').style.background = ok ? '#5BD69B' : '#E4A93B';
+}
+function logEvent(msg){
+  changeLog.unshift({ts:new Date().toISOString(), msg});
+  if(changeLog.length>200) changeLog.length=200;
+}
+function fmtTs(iso){ const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function esc(v){ return (v===undefined||v===null) ? '' : String(v).replace(/"/g,'&quot;'); }
+
+/* --- 저장소 어댑터: Claude 미리보기(window.storage) / GitHub / 이 기기만(localStorage) 자동 판별 --- */
+function detectArtifactStorage(){
+  return typeof window.storage !== 'undefined' && window.storage && typeof window.storage.get === 'function';
+}
+function safeLocalGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function safeLocalSet(key,val){ try{ localStorage.setItem(key,val); return true; }catch(e){ return false; } }
+function loadGhConfig(){ const raw = safeLocalGet('patrol_gh_config'); return raw ? JSON.parse(raw) : null; }
+function saveGhConfig(cfg){ return safeLocalSet('patrol_gh_config', JSON.stringify(cfg)); }
+function b64EncodeUnicode(str){ return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,(m,p)=>String.fromCharCode('0x'+p))); }
+function b64DecodeUnicode(b64){ return decodeURIComponent(atob(b64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')); }
+async function ghGetFile(cfg){
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}?ref=${cfg.branch||'main'}`;
+  const res = await fetch(url, {headers:{Authorization:`token ${cfg.token}`, Accept:'application/vnd.github+json'}});
+  if(res.status===404) return null;
+  if(!res.ok) throw new Error('GitHub 읽기 실패 (' + res.status + ')');
+  return res.json();
+}
+async function ghPutFile(cfg, stateObj, sha){
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path}`;
+  const body = { message:`순회일정 시스템 자동 저장 ${new Date().toISOString()}`, content: b64EncodeUnicode(JSON.stringify(stateObj,null,2)), branch: cfg.branch||'main' };
+  if(sha) body.sha = sha;
+  const res = await fetch(url, {method:'PUT', headers:{Authorization:`token ${cfg.token}`, Accept:'application/vnd.github+json','Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!res.ok) throw new Error('GitHub 저장 실패 (' + res.status + ')');
+  return res.json();
+}
+function packState(){ return {records, extraCols, employees, guides, branches, changeLog}; }
+function applyState(data){
+  records = data.records || seedRecords();
+  extraCols = data.extraCols || [];
+  employees = data.employees || seedEmployees();
+  guides = data.guides || seedGuides();
+  branches = data.branches || seedBranches();
+  changeLog = data.changeLog || [];
+}
+function renderStorageAdmin(){
+  const desc = document.getElementById('storageModeDesc');
+  const box1 = document.getElementById('ghConfigBox');
+  const box2 = document.getElementById('ghConfigBox2');
+  const hint = document.getElementById('ghHint');
+  if(storageMode==='artifact'){
+    desc.textContent = '현재 Claude 미리보기 환경에서 실행 중입니다 (동기화는 이 채팅 안에서만 유효). 이 파일을 다운로드해 실제로 배포하면 아래에서 GitHub 연동을 설정해야 팀원 간 실시간 공유가 됩니다.';
+    box1.style.display='flex'; box2.style.display='flex'; hint.style.display='block';
+  } else if(storageMode==='github'){
+    desc.textContent = `GitHub 저장소(${ghConfig.owner}/${ghConfig.repo})와 동기화되고 있습니다. 같은 저장소에 연결된 팀원 모두 실시간으로 같은 데이터를 봅니다.`;
+    box1.style.display='flex'; box2.style.display='flex'; hint.style.display='block';
+  } else {
+    desc.textContent = '⚠ 이 기기(브라우저)에만 데이터가 저장되고 있습니다. 다른 사람과 공유되지 않습니다. 아래에 GitHub 저장소를 연결하면 팀 전체가 실시간으로 같은 데이터를 보게 됩니다.';
+    box1.style.display='flex'; box2.style.display='flex'; hint.style.display='block';
+  }
+  if(ghConfig){
+    document.getElementById('ghOwner').value = ghConfig.owner||'';
+    document.getElementById('ghRepo').value = ghConfig.repo||'';
+    document.getElementById('ghBranch').value = ghConfig.branch||'main';
+    document.getElementById('ghPath').value = ghConfig.path||'data/patrol-system.json';
+  } else {
+    document.getElementById('ghBranch').value = document.getElementById('ghBranch').value || 'main';
+    document.getElementById('ghPath').value = document.getElementById('ghPath').value || 'data/patrol-system.json';
+  }
+}
+document.getElementById('btnGhConnect').addEventListener('click', async ()=>{
+  const cfg = {
+    owner: document.getElementById('ghOwner').value.trim(),
+    repo: document.getElementById('ghRepo').value.trim(),
+    branch: document.getElementById('ghBranch').value.trim() || 'main',
+    path: document.getElementById('ghPath').value.trim() || 'data/patrol-system.json',
+    token: document.getElementById('ghToken').value.trim(),
+  };
+  if(!cfg.owner || !cfg.repo || !cfg.token){ alert('계정명, 저장소명, 토큰은 필수입니다.'); return; }
+  const btn = document.getElementById('btnGhConnect');
+  const oldLabel = btn.textContent; btn.textContent='연결 확인 중...'; btn.disabled=true;
+  try{
+    const file = await ghGetFile(cfg);
+    saveGhConfig(cfg); ghConfig = cfg;
+    if(file){
+      const data = JSON.parse(b64DecodeUnicode(file.content.replace(/\n/g,'')));
+      applyState(data); ghSha = file.sha;
+      logEvent(`GitHub 저장소 연결됨: ${cfg.owner}/${cfg.repo} (기존 데이터 불러옴)`);
+    } else {
+      ghSha = null;
+      logEvent(`GitHub 저장소 연결됨: ${cfg.owner}/${cfg.repo} (신규 파일 생성 예정)`);
+    }
+    storageMode = 'github';
+    persist(true);
+    refreshSelects(); renderTableHead(); renderTableBody(); renderRoster(); renderAdmin();
+    alert('GitHub 저장소에 연결되었습니다.');
+  }catch(e){
+    alert('연결 실패: ' + e.message + '\\n계정명/저장소명/브랜치/토큰 권한을 확인하세요.');
+  }
+  btn.textContent = oldLabel; btn.disabled=false;
+});
+document.getElementById('btnGhDisconnect').addEventListener('click', ()=>{
+  if(!confirm('GitHub 연동을 해제할까요? 이후 데이터는 이 기기에만 저장됩니다.')) return;
+  try{ localStorage.removeItem('patrol_gh_config'); }catch(e){}
+  ghConfig = null; ghSha = null; storageMode = detectArtifactStorage() ? 'artifact' : 'none';
+  logEvent('GitHub 연동 해제됨');
+  document.getElementById('ghToken').value='';
+  persist(true); renderAdmin();
+});
+
+async function loadState(){
+  setSyncStatus('불러오는 중...', true);
+  ghConfig = loadGhConfig();
+  let lastYM = null;
+
+  if(detectArtifactStorage()){
+    storageMode = 'artifact';
+    async function get(key, fallback){
+      try{ const r = await window.storage.get(key, true); return r&&r.value!==undefined ? JSON.parse(r.value) : fallback; }
+      catch(e){ return fallback; }
+    }
+    const state = await get('patrol_state_v1', null);
+    if(state) applyState(state); else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+    lastYM = await get('patrol_lastmonth_v1', null);
+    setSyncStatus('동기화됨 (Claude 팀 공유 저장소 · 미리보기 전용)', true);
+  } else if(ghConfig && ghConfig.owner && ghConfig.repo && ghConfig.token){
+    storageMode = 'github';
+    try{
+      const file = await ghGetFile(ghConfig);
+      if(file){
+        const data = JSON.parse(b64DecodeUnicode(file.content.replace(/\n/g,'')));
+        applyState(data); lastYM = data.lastKnownMonth || null; ghSha = file.sha;
+      } else {
+        records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; ghSha=null;
+      }
+      setSyncStatus('동기화됨 (GitHub 저장소: ' + ghConfig.owner + '/' + ghConfig.repo + ')', true);
+    }catch(e){
+      storageMode = 'none';
+      const cached = safeLocalGet('patrol_state_v1');
+      if(cached){ const d=JSON.parse(cached); applyState(d); lastYM=d.lastKnownMonth||null; }
+      else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+      setSyncStatus('⚠ GitHub 연결 실패(' + e.message + ') - 이 기기에만 저장됩니다', false);
+    }
+  } else {
+    storageMode = 'none';
+    const cached = safeLocalGet('patrol_state_v1');
+    if(cached){ const d=JSON.parse(cached); applyState(d); lastYM=d.lastKnownMonth||null; }
+    else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+    setSyncStatus('⚠ 저장소 미연결 - 이 기기에만 임시 저장됩니다', false);
+  }
+
+  const nowYM = getCurrentYM();
+  if(lastYM && lastYM < nowYM){
+    logEvent(`${lastYM} → ${nowYM} 자동 롤오버됨 — 패턴 기반 근무표가 자동으로 이어지며, 필요한 예외만 입력하면 됩니다.`);
+  }
+  currentMonth = nowYM;
+  document.getElementById('monthPill').textContent = '관리월: ' + currentMonth + (lastYM && lastYM<nowYM ? ' (자동 롤오버됨)' : '');
+  persist(true); // lastKnownMonth 갱신을 위해 즉시 1회 저장
+}
+
+let saveTimer=null;
+function persist(immediate){
+  const label = storageMode==='artifact' ? '동기화됨 (Claude 팀 공유 저장소 · 미리보기 전용)'
+              : storageMode==='github' ? ('동기화됨 (GitHub 저장소: ' + (ghConfig?ghConfig.owner+'/'+ghConfig.repo:'') + ')')
+              : '⚠ 이 기기에만 저장됨 (팀 공유 안 됨)';
+  setSyncStatus('저장 중...', true);
+  clearTimeout(saveTimer);
+  const run = async ()=>{
+    const state = packState();
+    state.lastKnownMonth = getCurrentYM();
+    try{
+      if(storageMode==='artifact'){
+        await window.storage.set('patrol_state_v1', JSON.stringify(state), true);
+        await window.storage.set('patrol_lastmonth_v1', state.lastKnownMonth, true);
+      } else if(storageMode==='github'){
+        const result = await ghPutFile(ghConfig, state, ghSha);
+        ghSha = result.content ? result.content.sha : ghSha;
+      } else {
+        safeLocalSet('patrol_state_v1', JSON.stringify(state));
+      }
+      setSyncStatus(label, storageMode!=='none');
+    }catch(e){
+      setSyncStatus((storageMode==='github'?'GitHub 저장 실패: '+e.message:'저장 실패 - 로컬에만 유지됨'), false);
+    }
+  };
+  if(immediate) run(); else saveTimer = setTimeout(run, 500);
+}
+
+
+/* ---------- 탭 전환 ---------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='calendar') renderCalendar();
+    if(btn.dataset.tab==='doc') renderDoc();
+    if(btn.dataset.tab==='roster') renderRoster();
+    if(btn.dataset.tab==='alerts') renderAlerts();
+    if(btn.dataset.tab==='table') renderTableBody();
+    if(btn.dataset.tab==='admin') renderAdmin();
+  });
+});
+
+/* ---------- 셀렉트 새로고침 (지도사/지사 목록이 바뀔 때마다 재호출) ---------- */
+function refreshSelects(){
+  function fillSel(el, items, withAll){
+    const cur = el.value;
+    el.innerHTML = (withAll?'<option value="all">전체</option>':'') + items.map(v=>`<option value="${v}">${v}</option>`).join('');
+    if([...el.options].some(o=>o.value===cur)) el.value = cur;
+  }
+  const guideNames = guides.map(g=>g.name);
+  fillSel(document.getElementById('filterGuide'), guideNames, true);
+  document.getElementById('filterGuide').firstChild && (document.getElementById('filterGuide').options[0].textContent='전체 경비지도사');
+  fillSel(document.getElementById('filterBranch'), branches, true);
+  document.getElementById('filterBranch').options[0].textContent='전체 지사';
+  fillSel(document.getElementById('calGuide'), guideNames, false);
+  fillSel(document.getElementById('docGuide'), guideNames, false);
+  fillSel(document.getElementById('rosterBranch'), branches, false);
+  fillSel(document.getElementById('handoverOld'), guideNames, false);
+  fillSel(document.getElementById('handoverNew'), guideNames, false);
+
+  const cm = document.getElementById('calMonth'); const curCal = cm.value || currentMonth;
+  cm.innerHTML = monthOptions(currentMonth).map(m=>`<option value="${m}">${m}</option>`).join('');
+  cm.value = curCal;
+  const rm = document.getElementById('rosterMonth'); const curRoster = rm.value || currentMonth;
+  rm.innerHTML = monthOptions(currentMonth).map(m=>`<option value="${m}">${m}</option>`).join('');
+  rm.value = curRoster;
+}
+
+/* ---------- 통합 일정표 ---------- */
+function renderTableHead(){
+  const thead = document.querySelector('#mainTable thead');
+  let html = '<tr>';
+  CORE_FIELDS.forEach(f=>{ html += `<th>${f.label}</th>`; });
+  html += `<th>현장 실근무(자동)</th>`;
+  extraCols.forEach(c=>{ html += `<th>${c.label} <span class="no-print" style="cursor:pointer;color:#C0392B;" onclick="removeCol('${c.key}')">×</span></th>`; });
+  html += '<th class="no-print"></th></tr>';
+  thead.innerHTML = html;
+}
+function removeCol(key){
+  if(!confirm('이 컬럼을 삭제할까요? 입력된 값도 함께 사라집니다.')) return;
+  extraCols = extraCols.filter(c=>c.key!==key);
+  records.forEach(r=>{ if(r.extra) delete r.extra[key]; });
+  persist(); renderTableHead(); renderTableBody();
+}
+function renderTableBody(){
+  const tbody = document.querySelector('#mainTable tbody');
+  const gf = document.getElementById('filterGuide').value;
+  const bf = document.getElementById('filterBranch').value;
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  const guideNames = guides.map(g=>g.name);
+
+  const filtered = records.filter(r=>{
+    if(gf!=='all' && r.guide_name!==gf) return false;
+    if(bf!=='all' && r.branch!==bf) return false;
+    if(q && !((r.site_address||'')+(r.remark||'')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=> (a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
+
+  tbody.innerHTML = '';
+  filtered.forEach(r=>{
+    const tr = document.createElement('tr');
+    let html = '';
+    html += `<td><select onchange="updateField('${r.id}','guide_name',this.value)">${guideNames.map(n=>`<option value="${n}" ${n===r.guide_name?'selected':''}>${n}</option>`).join('')}</select></td>`;
+    html += `<td><select onchange="updateField('${r.id}','branch',this.value)">${branches.map(b=>`<option value="${b}" ${b===r.branch?'selected':''}>${b}</option>`).join('')}</select></td>`;
+    html += `<td><input value="${esc(r.company)}" onchange="updateField('${r.id}','company',this.value)"></td>`;
+    html += `<td style="min-width:220px;"><input value="${esc((r.site_address||'').replace(/\\n/g,' '))}" onchange="updateField('${r.id}','site_address',this.value)"></td>`;
+    html += `<td><input value="${esc(r.police_station)}" onchange="updateField('${r.id}','police_station',this.value)"></td>`;
+    html += `<td><input type="date" value="${esc(r.visit_date)}" onchange="updateField('${r.id}','visit_date',this.value)"></td>`;
+    html += `<td style="min-width:110px;"><input value="${esc(r.visit_time)}" onchange="updateField('${r.id}','visit_time',this.value)"></td>`;
+    html += `<td class="num" style="min-width:60px;"><input class="num" type="number" value="${esc(r.headcount)}" onchange="updateField('${r.id}','headcount',this.value)"></td>`;
+    html += `<td><input value="${esc(r.manager)}" onchange="updateField('${r.id}','manager',this.value)"></td>`;
+    html += `<td style="min-width:140px;"><input value="${esc(r.remark)}" onchange="updateField('${r.id}','remark',this.value)"></td>`;
+    const dc = onDutyCount(r.branch, r.visit_date);
+    if(dc.total===0){ html += `<td><span class="badge badge-mute">근무표 미등록</span></td>`; }
+    else{ const ok = dc.count >= (parseInt(r.headcount)||0); html += `<td><span class="badge ${ok?'badge-ok':'badge-warn'}">실근무 ${dc.count}명 / 예정 ${r.headcount}명</span></td>`; }
+    extraCols.forEach(c=>{ html += `<td><input value="${esc((r.extra&&r.extra[c.key])||'')}" onchange="updateExtra('${r.id}','${c.key}',this.value)"></td>`; });
+    html += `<td class="no-print"><button class="btn btn-danger" style="padding:4px 8px;" onclick="deleteRow('${r.id}')">삭제</button></td>`;
+    tr.innerHTML = html;
+    tbody.appendChild(tr);
+  });
+  if(filtered.length===0){
+    tbody.innerHTML = `<tr><td colspan="${CORE_FIELDS.length+extraCols.length+2}" style="text-align:center;color:var(--text-mute);padding:24px;">조건에 맞는 일정이 없습니다.</td></tr>`;
+  }
+}
+function updateField(id, key, val){
+  const r = records.find(r=>r.id===id); if(!r) return;
+  r[key] = key==='headcount' ? (parseInt(val)||0) : val;
+  persist(); renderTableBody();
+}
+function updateExtra(id, key, val){
+  const r = records.find(r=>r.id===id); if(!r) return;
+  if(!r.extra) r.extra={}; r.extra[key]=val; persist();
+}
+function deleteRow(id){
+  if(!confirm('이 일정을 삭제할까요?')) return;
+  records = records.filter(r=>r.id!==id); persist(); renderTableBody();
+}
+document.getElementById('btnAddRow').addEventListener('click', ()=>{
+  records.push({ id:'r_'+Date.now(), guide_name:guides[0]?guides[0].name:'', branch:branches[0]||'', company:'케이티텔레캅㈜',
+    site_address:'', police_station:'', visit_date: currentMonth+'-01', visit_time:'08:00~10:00', headcount:0, manager:'', remark:'', extra:{} });
+  persist(); renderTableBody();
+});
+document.getElementById('btnAddCol').addEventListener('click', ()=>{
+  const label = prompt('추가할 컬럼 이름을 입력하세요 (예: 확인자, 특이사항, 사진첨부여부)');
+  if(!label) return;
+  const key = 'ex_' + label.replace(/\s+/g,'_') + '_' + Date.now();
+  extraCols.push({key, label});
+  records.forEach(r=>{ if(!r.extra) r.extra={}; r.extra[key]=''; });
+  persist(); renderTableHead(); renderTableBody();
+});
+['filterGuide','filterBranch'].forEach(id=> document.getElementById(id).addEventListener('change', renderTableBody));
+document.getElementById('searchBox').addEventListener('input', renderTableBody);
+document.getElementById('btnExportExcel').addEventListener('click', ()=>{
+  const data = records.map(r=>({ 경비지도사:r.guide_name, 지사:r.branch, 선임업체명:r.company, 배치현장주소:(r.site_address||'').replace(/\n/g,' '),
+    관할경찰서:r.police_station, 순회일자:r.visit_date, 순회시간:r.visit_time, 배치인원:r.headcount, 담당자:r.manager, 비고:r.remark }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '순회일정');
+  XLSX.writeFile(wb, `순회일정_${new Date().toISOString().slice(0,10)}.xlsx`);
+});
+
+/* ---------- 근무표 관리 ---------- */
+function renderRoster(){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const {y,m} = ymParts(ym);
+  const dim = daysInMonth(y,m);
+  const staff = employees.filter(e=>e.branch===branch);
+
+  const thead = document.querySelector('#rosterTable thead');
+  let h = '<tr><th class="head-fixed">사번 / 성명 / 직급 / 근무조</th>';
+  for(let d=1; d<=dim; d++) h += `<th class="dcol">${d}</th>`;
+  h += '<th class="dcol no-print">삭제</th></tr>';
+  thead.innerHTML = h;
+
+  const tbody = document.querySelector('#rosterTable tbody');
+  let b = '';
+  staff.forEach(e=>{
+    b += `<tr><td class="fixed">${e.empno} · ${e.name} · ${e.rank} · ${e.shift}
+      <div class="no-print" style="margin-top:3px;">
+        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
+        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
+        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
+      </div></td>`;
+    for(let d=1; d<=dim; d++){
+      const ds = dstr(y,m,d);
+      const isOverride = e.overrides && Object.prototype.hasOwnProperty.call(e.overrides, ds);
+      const code = effectiveCode(e, ds);
+      const patCode = patternCodeFor(e, ds);
+      b += `<td class="${isOverride?'is-override':''}"><select class="codecell code-${code}" onchange="updateCode('${e.id}','${ds}',this.value)">`
+        + `<option value="__auto__" ${!isOverride?'selected':''}>자동${patCode?'('+patCode+')':''}</option>`
+        + CODE_LIST.map(c=>`<option value="${c}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
+        + `</select></td>`;
+    }
+    b += `<td class="no-print"><button class="btn btn-danger" style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
+  });
+  if(staff.length===0){
+    b = `<tr><td class="fixed" colspan="${dim+2}" style="color:var(--text-mute);padding:14px;">이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.</td></tr>`;
+  }
+  tbody.innerHTML = b;
+  refreshRosterPreviewIfOpen();
+}
+function updateCode(empId, dateStr, val){
+  const e = employees.find(e=>e.id===empId); if(!e) return;
+  if(!e.overrides) e.overrides={};
+  if(val==='__auto__') delete e.overrides[dateStr]; else e.overrides[dateStr]=val;
+  persist(); renderRoster();
+  if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
+}
+function applyPreset(empId, key){
+  const e = employees.find(e=>e.id===empId); if(!e) return;
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const {pattern, patternStart} = generateFromPreset(key, ym+'-01');
+  e.pattern = pattern; e.patternStart = patternStart; e.overrides = {};
+  logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key}`);
+  persist(); renderRoster();
+}
+function deleteEmp(empId){
+  const e = employees.find(e=>e.id===empId); if(!e) return;
+  if(!confirm(`${e.name} 직원의 근무표를 삭제할까요?`)) return;
+  employees = employees.filter(x=>x.id!==empId);
+  logEvent(`직원 삭제: ${e.name}(${e.empno})`);
+  persist(); renderRoster();
+}
+document.getElementById('rosterBranch').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterMonth').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+
+/* ---------- 근무표 미리보기 · 엑셀출력 · PDF출력 ---------- */
+function renderRosterPreview(){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const {y,m} = ymParts(ym);
+  const dim = daysInMonth(y,m);
+  const staff = employees.filter(e=>e.branch===branch);
+  const dowNames = ['일','월','화','수','목','금','토'];
+
+  let html = `<div class="doc-title">${branch}지사 ${ym} 근무계획표</div>`;
+  html += `<table class="doc roster-preview-table"><thead>
+    <tr><th>사번</th><th>성명</th><th>직급</th><th>근무조</th>`;
+  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); html += `<th class="${wd===0?'dow-sun':wd===6?'dow-sat':''}">${d}</th>`; }
+  html += `</tr><tr><th colspan="4" style="font-size:9px;color:#888;">요일</th>`;
+  for(let d=1; d<=dim; d++){ const wd=new Date(y,m-1,d).getDay(); html += `<th class="${wd===0?'dow-sun':wd===6?'dow-sat':''}" style="font-size:9px;color:#888;">${dowNames[wd]}</th>`; }
+  html += `</tr></thead><tbody>`;
+  if(staff.length===0){
+    html += `<tr><td colspan="${dim+4}" style="padding:20px;color:#888;">등록된 직원이 없습니다.</td></tr>`;
+  }else{
+    staff.forEach(e=>{
+      html += `<tr><td>${e.empno}</td><td style="text-align:left;">${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>`;
+      for(let d=1; d<=dim; d++){ const code = effectiveCode(e, dstr(y,m,d)); html += `<td>${code||'·'}</td>`; }
+      html += `</tr>`;
+    });
+  }
+  html += `</tbody></table>`;
+  const now = new Date();
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  html += `<div class="doc-footer">박희본 /강북/강원사업지원팀 / ${ts}</div>`;
+  document.getElementById('rosterPreviewWrap').innerHTML = html;
+}
+function refreshRosterPreviewIfOpen(){
+  if(document.getElementById('rosterPreviewContainer').style.display !== 'none') renderRosterPreview();
+}
+document.getElementById('btnRosterPreview').addEventListener('click', ()=>{
+  const box = document.getElementById('rosterPreviewContainer');
+  if(box.style.display==='none'){ renderRosterPreview(); box.style.display='block'; document.getElementById('btnRosterPreview').textContent='미리보기 닫기'; }
+  else{ box.style.display='none'; document.getElementById('btnRosterPreview').textContent='미리보기'; }
+});
+document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
+  renderRosterPreview();
+  document.getElementById('rosterPreviewContainer').style.display='block';
+  document.getElementById('btnRosterPreview').textContent='미리보기 닫기';
+  setTimeout(()=>window.print(), 60);
+});
+document.getElementById('btnRosterExcel').addEventListener('click', ()=>{
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const {y,m} = ymParts(ym);
+  const dim = daysInMonth(y,m);
+  const staff = employees.filter(e=>e.branch===branch);
+  const dowNames = ['일','월','화','수','목','금','토'];
+  const headerDates = ['사번','성명','직급','근무조'].concat(Array.from({length:dim},(_,i)=>i+1));
+  const headerDow = ['','','',''].concat(Array.from({length:dim},(_,i)=> dowNames[new Date(y,m-1,i+1).getDay()]));
+  const rows = staff.map(e=>{
+    const arr = [e.empno, e.name, e.rank, e.shift];
+    for(let d=1; d<=dim; d++) arr.push(effectiveCode(e, dstr(y,m,d)));
+    return arr;
+  });
+  const aoa = [[`${branch}지사 ${ym} 근무계획표`], headerDates, headerDow, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, branch+'_'+ym);
+  XLSX.writeFile(wb, `${branch}_근무표_${ym}.xlsx`);
+});
+document.getElementById('btnAddEmp').addEventListener('click', ()=>{
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const empno = document.getElementById('newEmpNo').value.trim();
+  const name = document.getElementById('newEmpName').value.trim();
+  const rank = document.getElementById('newEmpRank').value.trim();
+  const shift = document.getElementById('newEmpShift').value;
+  const preset = document.getElementById('newEmpPreset').value;
+  if(!name){ alert('성명을 입력하세요.'); return; }
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const gen = preset ? generateFromPreset(preset, ym+'-01') : {pattern:[], patternStart: ym+'-01'};
+  employees.push({ id:'emp_'+Date.now(), branch, zone:'', empno: empno||'-', name, rank: rank||'-', shift,
+    pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} });
+  logEvent(`직원 추가: ${name} (${branch})`);
+  document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpRank').value='';
+  persist(); renderRoster();
+});
+
+/* ---------- 캘린더 ---------- */
+function renderCalendar(){
+  const guide = document.getElementById('calGuide').value || (guides[0]&&guides[0].name);
+  const ym = document.getElementById('calMonth').value || currentMonth;
+  const {y,m} = ymParts(ym);
+  const first = new Date(y, m-1, 1);
+  const dim = daysInMonth(y,m);
+  const startDow = first.getDay();
+  document.getElementById('calDow').innerHTML = ['일','월','화','수','목','금','토'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  const body = document.getElementById('calBody');
+  let html = '';
+  for(let i=0;i<startDow;i++) html += '<div class="cal-cell empty"></div>';
+  for(let d=1; d<=dim; d++){
+    const ds = dstr(y,m,d);
+    const items = records.filter(r=>r.guide_name===guide && r.visit_date===ds);
+    html += `<div class="cal-cell"><div class="cal-date">${d}</div>`;
+    items.forEach(it=>{ html += `<span class="cal-chip">${it.branch} ${it.visit_time.split('~')[0]} · ${it.headcount}명</span>`; });
+    html += `</div>`;
+  }
+  body.innerHTML = html;
+}
+document.getElementById('calGuide').addEventListener('change', renderCalendar);
+document.getElementById('calMonth').addEventListener('change', renderCalendar);
+
+/* ---------- 별지1 제출용 ---------- */
+function renderDoc(){
+  const guide = document.getElementById('docGuide').value || (guides[0]&&guides[0].name);
+  const g = guides.find(g=>g.name===guide);
+  const rows = records.filter(r=>r.guide_name===guide).sort((a,b)=>(a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
+  let html = `<div class="doc-title">별지1 경비지도사 순회감독 일정표</div>`;
+  html += `<table class="doc" style="margin-bottom:14px;">
+    <tr><th style="width:20%;">경비지도사 성명</th><td style="width:30%;">${g?g.name:''}</td>
+        <th style="width:20%;">자격번호</th><td style="width:30%;">${g?g.license:''}</td></tr>
+    <tr><th>연락처</th><td colspan="3">${g?g.phone:''}</td></tr>
+  </table>`;
+  if(rows.length===0){ html += `<div class="doc-empty">이 경비지도사에게 배정된 순회 일정이 없습니다.</div>`; }
+  else{
+    html += `<table class="doc"><thead><tr><th>선임업체명</th><th>경비원 배치현장 주소</th><th>순회 예정 일시</th><th>배치인원</th><th>비고</th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const dateFmt = r.visit_date ? `'${r.visit_date.slice(2,4)}. ${r.visit_date.slice(5,7)}. ${r.visit_date.slice(8,10)}` : '';
+      html += `<tr><td>${r.company}</td><td class="addr">${(r.site_address||'').replace(/\n/g,'<br>')}</td>
+        <td>${dateFmt}<br>${r.visit_time}</td><td>${r.headcount}명</td><td>${r.police_station}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  const now = new Date();
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  html += `<div class="doc-footer">박희본 /강북/강원사업지원팀 / ${ts}</div>`;
+  document.getElementById('docWrap').innerHTML = html;
+}
+document.getElementById('docGuide').addEventListener('change', renderDoc);
+document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
+
+/* ---------- 운영 알림 · 자동검증 ---------- */
+function copyText(str, btn){
+  const done = ()=>{ if(btn){ const old=btn.textContent; btn.textContent='복사됨!'; setTimeout(()=>btn.textContent=old,1200); } };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(str).then(done).catch(()=>fallbackCopy(str,done)); }
+  else{ fallbackCopy(str,done); }
+}
+function fallbackCopy(str, done){
+  const ta = document.createElement('textarea'); ta.value=str; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} document.body.removeChild(ta);
+}
+function noticeText(r){
+  const dateFmt = r.visit_date ? `${r.visit_date.slice(5,7)}월 ${r.visit_date.slice(8,10)}일` : '';
+  return `[순회감독 알림] ${dateFmt} ${r.visit_time} · ${r.branch}지사 순회 예정\n담당 경비지도사: ${r.guide_name}\n배치현장: ${(r.site_address||'').replace(/\n/g,' ')}\n예정 배치인원: ${r.headcount}명 · 관할서: ${r.police_station}`;
+}
+function renderAlerts(){
+  const ref = document.getElementById('refDate').value || currentMonth+'-01';
+  const days = parseInt(document.getElementById('lookaheadDays').value)||7;
+  const refDate = new Date(ref+'T00:00:00');
+  const limitDate = new Date(refDate.getTime() + days*86400000);
+  const upcoming = records.filter(r=>{ if(!r.visit_date) return false; const d=new Date(r.visit_date+'T00:00:00'); return d>=refDate && d<=limitDate; })
+    .sort((a,b)=>(a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
+  const upEl = document.getElementById('upcomingList');
+  if(upcoming.length===0){ upEl.innerHTML = `<p style="color:var(--text-mute);font-size:12.5px;">기준일로부터 ${days}일 이내 예정된 순회 일정이 없습니다.</p>`; }
+  else{
+    upEl.innerHTML = upcoming.map((r,i)=>`
+      <div class="alert-item"><div class="alert-main">
+        <b>${r.visit_date} ${r.visit_time}</b> · ${r.guide_name} · ${r.branch}지사 (${r.police_station}) · 배치 ${r.headcount}명
+        <div class="no-print"><button class="btn btn-outline" style="padding:3px 8px;font-size:11px;margin-top:5px;" onclick="toggleNote('up${i}')">알림 문구 생성</button></div>
+        <div id="note_up${i}" style="display:none;">
+          <textarea class="alert-note-box" readonly>${noticeText(r)}</textarea>
+          <button class="btn btn-good" style="padding:4px 10px;font-size:11px;margin-top:4px;" onclick="copyText(\`${noticeText(r).replace(/`/g,"'")}\`, this)">복사</button>
+        </div>
+      </div></div>`).join('');
+  }
+  const mismatches = records.filter(r=>{ const dc=onDutyCount(r.branch,r.visit_date); return dc.total>0 && dc.count < (parseInt(r.headcount)||0); });
+  const mmEl = document.getElementById('mismatchList');
+  if(mismatches.length===0){ mmEl.innerHTML = `<p style="color:var(--text-mute);font-size:12.5px;">근무표가 등록된 지사 기준으로 불일치가 발견되지 않았습니다.</p>`; }
+  else{
+    mmEl.innerHTML = mismatches.map(r=>{ const dc=onDutyCount(r.branch,r.visit_date);
+      return `<div class="alert-item"><div class="alert-main"><span class="badge badge-warn">불일치</span>
+        <b>${r.visit_date}</b> ${r.branch}지사 · ${r.guide_name} 순회 예정 배치인원 <b>${r.headcount}명</b>,
+        근무표상 실근무 <b>${dc.count}명</b> (등록 인원 ${dc.total}명 중)</div></div>`; }).join('');
+  }
+}
+function toggleNote(id){ const el=document.getElementById('note_'+id); el.style.display = el.style.display==='none'?'block':'none'; }
+document.getElementById('refDate').addEventListener('change', renderAlerts);
+document.getElementById('lookaheadDays').addEventListener('change', renderAlerts);
+
+/* ---------- 엑셀 가져오기 ---------- */
+let importedRows=[], importedHeaders=[];
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  document.getElementById('fileHint').textContent = '읽는 중: ' + file.name;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      let headerIdx=0, best=-1;
+      for(let i=0;i<Math.min(5,rows.length);i++){ const ne=rows[i].filter(v=>String(v).trim()!=='').length; if(ne>best){best=ne;headerIdx=i;} }
+      importedHeaders = rows[headerIdx].map((h,i)=> String(h).trim() || ('열'+(i+1)));
+      importedRows = rows.slice(headerIdx+1).filter(r=>r.some(v=>String(v).trim()!==''));
+      document.getElementById('fileHint').textContent = `${file.name} — ${importedRows.length}개 행 인식됨 (헤더: ${headerIdx+1}행)`;
+      renderMapUI(); renderPreview();
+      document.getElementById('importActions').style.display='flex';
+    }catch(err){ document.getElementById('fileHint').textContent = '파일을 읽지 못했습니다: ' + err.message; }
+  };
+  reader.readAsArrayBuffer(file);
+});
+function renderMapUI(){
+  const area = document.getElementById('mapArea');
+  let html = '<div class="card no-print" style="background:#F8FAFD;"><h2 style="font-size:13px;">열 매핑</h2>';
+  CORE_FIELDS.forEach(f=>{ html += `<div class="map-row"><label>${f.label}</label>
+    <select id="map_${f.key}"><option value="">— 사용 안함 —</option>${importedHeaders.map((h,i)=>`<option value="${i}">${h}</option>`).join('')}</select></div>`; });
+  html += `<div class="map-row"><label>공통 경비지도사</label><select id="map_default_guide">${guides.map(g=>`<option value="${g.name}">${g.name}</option>`).join('')}</select></div>`;
+  html += `<div class="map-row"><label>공통 지사</label><select id="map_default_branch">${branches.map(b=>`<option value="${b}">${b}</option>`).join('')}</select></div>`;
+  html += '</div>';
+  area.innerHTML = html;
+}
+function renderPreview(){
+  const area = document.getElementById('previewArea');
+  let html = '<table class="grid"><thead><tr>' + importedHeaders.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+  importedRows.slice(0,10).forEach(r=>{ html += '<tr>' + importedHeaders.map((h,i)=>`<td>${r[i]!==undefined?r[i]:''}</td>`).join('') + '</tr>'; });
+  html += '</tbody></table>';
+  area.innerHTML = html;
+}
+document.getElementById('btnImport').addEventListener('click', ()=>{
+  const get = (key)=> document.getElementById('map_'+key) ? document.getElementById('map_'+key).value : '';
+  const idx = {}; CORE_FIELDS.forEach(f=> idx[f.key] = get(f.key));
+  const defGuide = document.getElementById('map_default_guide').value;
+  const defBranch = document.getElementById('map_default_branch').value;
+  let added=0;
+  importedRows.forEach(r=>{
+    const rec = { id:'imp_'+Date.now()+'_'+added,
+      guide_name: idx.guide_name!=='' ? String(r[idx.guide_name]) : defGuide,
+      branch: idx.branch!=='' ? String(r[idx.branch]) : defBranch,
+      company: idx.company!=='' ? String(r[idx.company]) : '케이티텔레캅㈜',
+      site_address: idx.site_address!=='' ? String(r[idx.site_address]) : '',
+      police_station: idx.police_station!=='' ? String(r[idx.police_station]) : '',
+      visit_date: idx.visit_date!=='' ? String(r[idx.visit_date]) : '',
+      visit_time: idx.visit_time!=='' ? String(r[idx.visit_time]) : '',
+      headcount: idx.headcount!=='' ? (parseInt(r[idx.headcount])||0) : 0,
+      manager: idx.manager!=='' ? String(r[idx.manager]) : '',
+      remark: idx.remark!=='' ? String(r[idx.remark]) : '', extra:{} };
+    if(rec.site_address || rec.visit_date){ records.push(rec); added++; }
+  });
+  persist();
+  alert(added + '개 일정을 통합 일정표에 추가했습니다.');
+  document.querySelector('nav.tabs button[data-tab="table"]').click();
+  renderTableBody();
+});
+
+/* ---------- 관리자 설정 ---------- */
+function renderAdmin(){
+  renderStorageAdmin();
+  const gArea = document.getElementById('guideAdminList');
+  gArea.innerHTML = guides.map(g=>{
+    const used = records.filter(r=>r.guide_name===g.name).length;
+    return `<div class="admin-row">
+      <input value="${esc(g.name)}" onchange="editGuide('${g.id}','name',this.value)">
+      <input value="${esc(g.license)}" onchange="editGuide('${g.id}','license',this.value)">
+      <input value="${esc(g.phone)}" onchange="editGuide('${g.id}','phone',this.value)">
+      <input type="color" value="${g.color}" onchange="editGuide('${g.id}','color',this.value)">
+      <button class="btn btn-danger" onclick="deleteGuide('${g.id}')">삭제(${used})</button>
+    </div>`;
+  }).join('');
+
+  const bArea = document.getElementById('branchAdminList');
+  bArea.innerHTML = branches.map(b=>{
+    const used = records.filter(r=>r.branch===b).length + employees.filter(e=>e.branch===b).length;
+    return `<span class="branch-chip">${b} <span style="color:var(--text-mute);font-size:10.5px;">(${used})</span><button onclick="deleteBranch('${b}')">×</button></span>`;
+  }).join('');
+
+  renderLog();
+  refreshSelects();
+}
+function editGuide(id, key, val){
+  const g = guides.find(g=>g.id===id); if(!g) return;
+  if(key==='name' && val!==g.name){
+    const old = g.name;
+    let cnt=0;
+    records.forEach(r=>{ if(r.guide_name===old){ r.guide_name=val; cnt++; } });
+    logEvent(`경비지도사명 변경: ${old} → ${val} (연결된 순회 일정 ${cnt}건 자동 반영)`);
+  }
+  g[key]=val;
+  persist(); renderAdmin(); renderTableBody(); renderDoc();
+}
+function deleteGuide(id){
+  const g = guides.find(g=>g.id===id); if(!g) return;
+  const used = records.filter(r=>r.guide_name===g.name).length;
+  if(used>0){ alert(`이 지도사와 연결된 순회 일정 ${used}건이 있어 삭제할 수 없습니다. 먼저 "지도사 인계"로 다른 지도사에게 이관하세요.`); return; }
+  if(!confirm(`${g.name} 지도사를 삭제할까요?`)) return;
+  guides = guides.filter(x=>x.id!==id);
+  logEvent(`경비지도사 삭제: ${g.name}`);
+  persist(); renderAdmin();
+}
+document.getElementById('btnAddGuide').addEventListener('click', ()=>{
+  const name = document.getElementById('newGuideName').value.trim();
+  const license = document.getElementById('newGuideLicense').value.trim();
+  const phone = document.getElementById('newGuidePhone').value.trim();
+  const color = document.getElementById('newGuideColor').value;
+  if(!name){ alert('성명을 입력하세요.'); return; }
+  guides.push({id:'g_'+Date.now(), name, license, phone, color});
+  logEvent(`경비지도사 추가: ${name}`);
+  document.getElementById('newGuideName').value=''; document.getElementById('newGuideLicense').value=''; document.getElementById('newGuidePhone').value='';
+  persist(); renderAdmin();
+});
+document.getElementById('btnHandover').addEventListener('click', ()=>{
+  const oldName = document.getElementById('handoverOld').value;
+  const newName = document.getElementById('handoverNew').value;
+  if(!oldName || !newName || oldName===newName){ alert('서로 다른 지도사를 선택하세요.'); return; }
+  const cnt = records.filter(r=>r.guide_name===oldName).length;
+  if(cnt===0){ alert('해당 지도사에게 배정된 순회 일정이 없습니다.'); return; }
+  if(!confirm(`${oldName} → ${newName} 로 ${cnt}건의 순회 일정을 인계할까요?`)) return;
+  records.forEach(r=>{ if(r.guide_name===oldName) r.guide_name=newName; });
+  logEvent(`지도사 인계: ${oldName} → ${newName} (${cnt}건 순회 일정 이관)`);
+  persist(); renderTableBody(); renderDoc(); renderAdmin();
+});
+document.getElementById('btnAddBranch').addEventListener('click', ()=>{
+  const name = document.getElementById('newBranchName').value.trim();
+  if(!name){ return; }
+  if(branches.includes(name)){ alert('이미 있는 지사명입니다.'); return; }
+  branches.push(name);
+  logEvent(`지사 추가: ${name}`);
+  document.getElementById('newBranchName').value='';
+  persist(); renderAdmin();
+});
+function deleteBranch(name){
+  const used = records.filter(r=>r.branch===name).length + employees.filter(e=>e.branch===name).length;
+  if(used>0){ alert(`이 지사를 사용 중인 데이터가 ${used}건 있어 삭제할 수 없습니다.`); return; }
+  if(!confirm(`${name} 지사를 삭제할까요?`)) return;
+  branches = branches.filter(b=>b!==name);
+  logEvent(`지사 삭제: ${name}`);
+  persist(); renderAdmin();
+}
+function renderLog(){
+  const el = document.getElementById('changeLogList');
+  if(changeLog.length===0){ el.innerHTML = `<p style="color:var(--text-mute);font-size:12px;">기록된 변경 이력이 없습니다.</p>`; return; }
+  el.innerHTML = changeLog.slice(0,50).map(e=>`<div class="log-row"><span class="log-ts">${fmtTs(e.ts)}</span><span>${esc(e.msg)}</span></div>`).join('');
+}
+document.getElementById('btnBackup').addEventListener('click', ()=>{
+  const payload = { records, extraCols, employees, guides, branches, changeLog, exportedAt:new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download = `순회일정_백업_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('restoreInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      if(!confirm('현재 데이터를 백업 파일 내용으로 덮어씁니다. 계속할까요?')) return;
+      records = data.records||records; extraCols = data.extraCols||extraCols; employees = data.employees||employees;
+      guides = data.guides||guides; branches = data.branches||branches; changeLog = data.changeLog||changeLog;
+      logEvent('백업 파일로부터 데이터 복원됨');
+      persist();
+      refreshSelects(); renderTableHead(); renderTableBody(); renderRoster(); renderAdmin();
+      alert('복원이 완료되었습니다.');
+    }catch(err){ alert('복원 실패: ' + err.message); }
+  };
+  reader.readAsText(file);
+});
+
+/* ---------- 초기화 ---------- */
+(async function init(){
+  await loadState();
+  refreshSelects();
+  document.getElementById('refDate').value = currentMonth + '-24';
+  renderTableHead();
+  renderTableBody();
+  renderCalendar();
+  renderDoc();
+})();
+</script>
+</body>
+</html>
