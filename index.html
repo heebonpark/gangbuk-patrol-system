@@ -977,6 +977,10 @@ document.getElementById('rosterMonth').addEventListener('change', ()=>{ renderRo
 
 /* ---------- 근무표 미리보기 · 엑셀출력 · PDF출력 ---------- */
 
+function isGroupSel(sel){ return false; }
+function getRosterStaff(sel){ return employees.filter(e=>e.branch===sel); }
+function rosterSelLabel(sel){ return "지사: " + sel; }
+
 function renderRosterPreview(){
   const sel = document.getElementById("rosterBranch").value || branches[0];
   const grouped = isGroupSel(sel);
