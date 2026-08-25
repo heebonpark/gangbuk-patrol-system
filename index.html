@@ -196,6 +196,10 @@
   .login-field{margin-bottom:12px;}
   .login-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text-mute);margin-bottom:5px;}
   .login-field select, .login-field input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);}
+  .login-pw-wrap{position:relative;}
+  .login-pw-wrap input{padding-right:38px;}
+  .login-pw-toggle{position:absolute;top:0;right:0;height:100%;width:36px;border:none;background:transparent;color:var(--text-mute);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;}
+  .login-pw-toggle:hover{color:var(--text);}
   .login-admin-toggle{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-mute);margin:2px 0 14px;cursor:pointer;user-select:none;}
   .login-error{background:var(--danger-bg);color:var(--danger);font-size:11.5px;border-radius:6px;padding:7px 10px;margin-bottom:12px;display:none;}
   #btnLoginSubmit{width:100%;padding:10px;font-size:13px;}
@@ -224,7 +228,12 @@
     <label class="login-admin-toggle"><input type="checkbox" id="loginAsAdmin"> 관리자로 로그인</label>
     <div class="login-field">
       <label>비밀번호</label>
-      <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="off">
+      <div class="login-pw-wrap">
+        <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="off">
+        <button type="button" id="btnTogglePw" class="login-pw-toggle" aria-label="비밀번호 표시">
+          <svg id="pwEyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
     </div>
     <div class="login-error" id="loginError">비밀번호가 올바르지 않습니다.</div>
     <button class="btn btn-primary" id="btnLoginSubmit">로그인</button>
@@ -653,6 +662,16 @@ function initLoginGate(){
   const pwInput = document.getElementById('loginPw');
   const errBox = document.getElementById('loginError');
   adminChk.addEventListener('change', ()=>{ branchField.classList.toggle('login-hidden', adminChk.checked); });
+  const btnTogglePw = document.getElementById('btnTogglePw');
+  const pwEyeIcon = document.getElementById('pwEyeIcon');
+  const EYE_OPEN = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
+  const EYE_OFF = '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.3 20.3 0 0 1 5.06-6.06M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a20.3 20.3 0 0 1-3.22 4.44"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>';
+  btnTogglePw.addEventListener('click', ()=>{
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    pwEyeIcon.innerHTML = show ? EYE_OFF : EYE_OPEN;
+    btnTogglePw.setAttribute('aria-label', show ? '비밀번호 숨김' : '비밀번호 표시');
+  });
   updateLoginStatusPill();
   if(currentAuth()){ gate.classList.add('login-hidden'); applyTabRestriction(); return; }
   function attempt(){
