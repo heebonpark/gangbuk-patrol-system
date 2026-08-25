@@ -133,6 +133,7 @@
   .handover-row{display:grid;grid-template-columns:1fr 40px 1fr auto;gap:8px;align-items:center;}
 
   @media print{
+    body{min-height:0 !important;}
     header.app, nav.tabs, .no-print{display:none !important;}
     main{padding:0;max-width:100%;}
     .card{border:none;box-shadow:none;padding:0;}
@@ -140,7 +141,6 @@
     #panel-roster .card > h2, #panel-roster .card > .sub{display:none;}
     #rosterPreviewWrap.print-fit-page{ page-break-inside: avoid; }
   }
-  @page{ size: A3 landscape; margin: 8mm; }
 
   /* Print Layout for Roster */
   #rosterPreviewWrap { font-family: "Pretendard", sans-serif; color: #334155; }
@@ -708,6 +708,7 @@ function applyTabRestriction(){
     btn.classList.toggle('active', isRoster);
   });
   document.querySelectorAll('.panel').forEach(p=>{ p.classList.toggle('active', p.id === 'panel-roster'); });
+  renderRoster();
 }
 function initLoginGate(){
   const gate = document.getElementById('loginGate');
@@ -1489,8 +1490,15 @@ function fitPreviewToOnePage(){
   const wrap = document.getElementById('rosterPreviewWrap');
   wrap.style.zoom = 1;
   wrap.classList.add('print-fit-page');
+  let pageStyle = document.getElementById('rosterPrintPageStyle');
+  if(!pageStyle){
+    pageStyle = document.createElement('style');
+    pageStyle.id = 'rosterPrintPageStyle';
+    document.head.appendChild(pageStyle);
+  }
+  pageStyle.textContent = '@page{ size: A3 landscape; margin: 8mm; }';
   const contentWidth = wrap.scrollWidth, contentHeight = wrap.scrollHeight;
-  const PAGE_W_PX = 1520, PAGE_H_PX = 1050; // A3 가로, 여백 8mm 기준 대략치(96dpi)
+  const PAGE_W_PX = 1460, PAGE_H_PX = 1000; // A3 가로, 여백 8mm 기준 대략치(96dpi) - 여유 확보를 위해 보수적으로 산정
   const scale = Math.min(PAGE_W_PX/contentWidth, PAGE_H_PX/contentHeight, 1);
   wrap.style.zoom = scale;
 }
@@ -1498,6 +1506,8 @@ function resetPreviewFit(){
   const wrap = document.getElementById('rosterPreviewWrap');
   wrap.style.zoom = 1;
   wrap.classList.remove('print-fit-page');
+  const pageStyle = document.getElementById('rosterPrintPageStyle');
+  if(pageStyle) pageStyle.remove();
 }
 window.addEventListener('afterprint', resetPreviewFit);
 document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
