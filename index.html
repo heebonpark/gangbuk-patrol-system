@@ -673,6 +673,10 @@ function seedEmployees(){
 /* ---------- 상태 ---------- */
 let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[];
 let rosterFinalized={}, changeRequests=[]; // rosterFinalized: {branch: {ym:true}}
+let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
+let storageMode = 'none'; // 'artifact' | 'github' | 'none'
+let ghConfig = null;      // {owner, repo, branch, path, token}
+let ghSha = null;         // 마지막으로 읽은 GitHub 파일의 sha (충돌 방지용)
 
 /* ---------- 로그인 게이트 (지사별 + 관리자 비밀번호) ----------
    서버 없는 정적 파일이라 완전한 보안 인증은 불가하며, 오조작 방지용
@@ -778,11 +782,6 @@ document.getElementById('btnLogout').addEventListener('click', (e)=>{
   sessionStorage.removeItem('patrol_auth');
   location.reload();
 });
-let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
-let storageMode = 'none'; // 'artifact' | 'github' | 'none'
-let ghConfig = null;      // {owner, repo, branch, path, token}
-let ghSha = null;         // 마지막으로 읽은 GitHub 파일의 sha (충돌 방지용)
-
 function setSyncStatus(msg, ok=true){
   document.getElementById('syncStatus').textContent = msg;
   document.querySelector('.status-dot').style.background = ok ? '#5BD69B' : '#E4A93B';
@@ -1143,6 +1142,7 @@ document.getElementById('rosterViewMode').addEventListener('change', ()=>{
 document.getElementById('rosterRefDate').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
 
 function renderRoster(){
+  if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const dateList = getRosterDateList();
   const staff = employees.filter(e=>e.branch===branch);
@@ -1510,6 +1510,9 @@ function resetPreviewFit(){
   if(pageStyle) pageStyle.remove();
 }
 window.addEventListener('afterprint', resetPreviewFit);
+window.addEventListener('beforeprint', ()=>{
+  if(document.getElementById('rosterPreviewContainer').style.display !== 'none') fitPreviewToOnePage();
+});
 document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
   renderRosterPreview();
   document.getElementById('rosterPreviewContainer').style.display='block';
