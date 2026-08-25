@@ -629,10 +629,11 @@ let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[]
 
 /* ---------- 로그인 게이트 (지사별 + 관리자 비밀번호) ----------
    서버 없는 정적 파일이라 완전한 보안 인증은 불가하며, 오조작 방지용
-   가벼운 접근 제한입니다. 비밀번호는 지사명(공백/괄호 제거)+1234,
-   관리자는 admin1234 입니다. 필요시 아래 두 값만 바꾸면 됩니다. */
-const ADMIN_PASSWORD = 'admin1234';
-function branchPassword(b){ return b.replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234'; }
+   가벼운 접근 제한입니다. 비밀번호는 지사명(공백/괄호 제거)+1234+!,
+   예) 중앙 -> 중앙1234+! . 관리자는 admin1234+! 입니다.
+   필요시 아래 두 값만 바꾸면 됩니다. */
+const ADMIN_PASSWORD = 'admin1234+!';
+function branchPassword(b){ return b.replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234+!'; }
 function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
 function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사') : ''; }
 function applyLoginBranchDefault(){
@@ -1241,7 +1242,7 @@ function renderRosterPreview(){
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
       }
       
-      html += `<td>${e.empno}</td><td style="text-align:left;">${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
+      html += `<td>${e.empno}</td><td>${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
