@@ -138,7 +138,9 @@
     .card{border:none;box-shadow:none;padding:0;}
     .doc-wrap{border:none;padding:0;max-width:100%;}
     #panel-roster .card > h2, #panel-roster .card > .sub{display:none;}
+    #rosterPreviewWrap.print-fit-page{ page-break-inside: avoid; }
   }
+  @page{ size: A3 landscape; margin: 8mm; }
 
   /* Print Layout for Roster */
   #rosterPreviewWrap { font-family: "Pretendard", sans-serif; color: #334155; }
@@ -181,6 +183,7 @@
   .sig-cell{padding:2px !important;}
   .sig-img{max-width:56px;max-height:26px;cursor:pointer;}
   .sig-btn{padding:2px 5px !important;font-size:9px !important;}
+  .hours-over{background:#fee2e2 !important;color:#b91c1c !important;font-weight:700;}
   
   .preview-row-group-0 .group-header { background-color: #fef08a; }
   .preview-row-group-1 .group-header { background-color: #fed7aa; }
@@ -252,6 +255,24 @@
   </div>
 </div>
 
+<div class="sig-modal login-hidden no-print" id="reqModal">
+  <div class="sig-modal-box">
+    <h3>근무표 수정 요청</h3>
+    <div class="login-field">
+      <label>대상 직원 (선택)</label>
+      <select id="reqEmp"><option value="">전체 / 공통</option></select>
+    </div>
+    <div class="login-field">
+      <label>요청 내용</label>
+      <textarea id="reqNote" rows="4" placeholder="예: 8/15 연차를 8/16으로 변경 요청" style="width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);resize:vertical;"></textarea>
+    </div>
+    <div class="sig-modal-actions">
+      <button class="btn btn-outline" id="btnReqCancel">취소</button>
+      <button class="btn btn-primary" id="btnReqSubmit">요청 보내기</button>
+    </div>
+  </div>
+</div>
+
 <header class="app">
   <h1>경비지도사 순회감독 일정 · 근무표 통합관리 시스템</h1>
   <p>강북/강원사업지원팀 · 순회일정 + 근무표 단일 스키마 · 자동 월 롤오버 · 실근무 자동대조</p>
@@ -310,10 +331,14 @@
         <input type="date" id="rosterRefDate" style="display:none;">
         <span class="spacer"></span>
         <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
+        <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
+        <button class="btn btn-outline" id="btnRosterFinalize" style="display:none;">근무표 확정</button>
+        <button class="btn btn-danger" id="btnRosterRequest" style="display:none;">수정 요청</button>
         <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
       </div>
+      <div class="sub no-print" id="unsignedInfo" style="margin:2px 0 8px;"></div>
       <div class="no-print">
         <div class="roster-scroll">
           <table class="roster" id="rosterTable"><thead></thead><tbody></tbody></table>
@@ -381,6 +406,7 @@
     </div>
     <div class="card"><h2>① 다가오는 순회 일정</h2><div id="upcomingList"></div></div>
     <div class="card"><h2>② 배치인원 불일치 경고</h2><p class="sub">근무표가 등록된 지사만 자동 대조됩니다.</p><div id="mismatchList"></div></div>
+    <div class="card"><h2>③ 근무표 수정 요청</h2><p class="sub">확정된 근무표에 대해 지사에서 보낸 수정 요청입니다.</p><div id="changeRequestList"></div></div>
   </section>
 
   <!-- IMPORT PANEL -->
@@ -454,6 +480,24 @@
     </div>
 
     <div class="card">
+      <h2>비밀번호 관리</h2>
+      <p class="sub">로그인 게이트 비밀번호를 바꿉니다. 이 브라우저에만 저장되며(팀원 기기와 공유 안 됨), 초기화하면 기본값(지사명+1234+!)으로 돌아갑니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:8px;">
+        <select id="pwAdminBranch"></select>
+        <input type="text" id="pwAdminBranchNew" placeholder="새 비밀번호">
+        <button class="btn btn-primary" id="btnPwBranchSave">변경</button>
+        <button class="btn btn-outline" id="btnPwBranchReset">기본값으로</button>
+        <span id="pwAdminBranchCurrent" class="sub" style="margin:0;"></span>
+      </div>
+      <div class="toolbar no-print">
+        <input type="text" id="pwAdminNew" placeholder="새 관리자 비밀번호">
+        <button class="btn btn-primary" id="btnPwAdminSave">관리자 비밀번호 변경</button>
+        <button class="btn btn-outline" id="btnPwAdminReset">기본값으로</button>
+        <span id="pwAdminCurrent" class="sub" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>경비지도사 관리</h2>
       <p class="sub">이름/연락처 수정은 자동으로 연결된 순회 일정에도 반영됩니다. 삭제는 연결된 일정이 없을 때만 가능합니다.</p>
       <div id="guideAdminList"></div>
@@ -518,6 +562,8 @@ const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번',''
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
 const HOUR_MAP = { '':0, '주':8, '야':14, '휴':0, '숙':0, '전일':22, '연차':0, '청원':0, '공가':8, '병가':0, '교육':8, '비번':0 };
+/* 초과근무 경고 기준(시간). 사업장 실제 기준에 맞게 조정하세요. */
+const OVERTIME_THRESHOLD_HOURS = 240;
 function codeHours(code){ return HOUR_MAP.hasOwnProperty(code) ? HOUR_MAP[code] : 0; }
 function monthlyHours(emp, dateList){ return dateList.reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
 const PRESETS = {
@@ -626,6 +672,7 @@ function seedEmployees(){
 
 /* ---------- 상태 ---------- */
 let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[];
+let rosterFinalized={}, changeRequests=[]; // rosterFinalized: {branch: {ym:true}}
 
 /* ---------- 로그인 게이트 (지사별 + 관리자 비밀번호) ----------
    서버 없는 정적 파일이라 완전한 보안 인증은 불가하며, 오조작 방지용
@@ -634,6 +681,14 @@ let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[]
    필요시 아래 두 값만 바꾸면 됩니다. */
 const ADMIN_PASSWORD = 'admin1234+!';
 function branchPassword(b){ return b.replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234+!'; }
+/* 관리자 설정 탭에서 바꾼 비밀번호는 이 브라우저의 localStorage에만 저장됩니다(다른 팀원 기기와는 공유되지 않음). */
+function getPasswordOverrides(){ try{ return JSON.parse(safeLocalGet('patrol_pw_overrides')||'{}'); }catch(e){ return {}; } }
+function savePasswordOverrides(o){ safeLocalSet('patrol_pw_overrides', JSON.stringify(o)); }
+function effectiveAdminPassword(){ const o=getPasswordOverrides(); return o.admin || ADMIN_PASSWORD; }
+function effectiveBranchPassword(b){ const o=getPasswordOverrides(); return (o.branches && o.branches[b]) || branchPassword(b); }
+const LOGIN_MAX_FAILS = 5, LOGIN_LOCK_MS = 5*60*1000;
+function getLoginFailState(){ try{ return JSON.parse(safeLocalGet('patrol_login_fails')||'{}'); }catch(e){ return {}; } }
+function saveLoginFailState(s){ safeLocalSet('patrol_login_fails', JSON.stringify(s)); }
 function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
 function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사') : ''; }
 function applyLoginBranchDefault(){
@@ -675,23 +730,45 @@ function initLoginGate(){
   });
   updateLoginStatusPill();
   if(currentAuth()){ gate.classList.add('login-hidden'); applyTabRestriction(); return; }
+  const btnSubmit = document.getElementById('btnLoginSubmit');
+  let lockTimer = null;
+  function updateLockUI(){
+    const st = getLoginFailState();
+    const remain = st.lockUntil - Date.now();
+    if(remain > 0){
+      btnSubmit.disabled = true;
+      errBox.style.display = 'block';
+      errBox.textContent = `로그인 시도가 많아 ${Math.ceil(remain/1000)}초 후 다시 시도할 수 있습니다.`;
+      if(!lockTimer) lockTimer = setInterval(updateLockUI, 1000);
+      return true;
+    }
+    btnSubmit.disabled = false;
+    if(lockTimer){ clearInterval(lockTimer); lockTimer = null; }
+    return false;
+  }
   function attempt(){
+    if(updateLockUI()) return;
     errBox.style.display = 'none';
     const isAdmin = adminChk.checked;
-    if(isAdmin){
-      if(pwInput.value === ADMIN_PASSWORD){
+    const ok = isAdmin ? (pwInput.value === effectiveAdminPassword()) : (pwInput.value === effectiveBranchPassword(sel.value));
+    if(ok){
+      saveLoginFailState({count:0, lockUntil:0});
+      if(isAdmin){
         sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null}));
-        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyTabRestriction();
-      } else { errBox.style.display = 'block'; }
+      } else {
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value}));
+      }
+      gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault(); applyTabRestriction();
     } else {
-      const b = sel.value;
-      if(pwInput.value === branchPassword(b)){
-        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:b}));
-        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault(); applyTabRestriction();
-      } else { errBox.style.display = 'block'; }
+      const st = getLoginFailState();
+      st.count = (st.count||0) + 1;
+      if(st.count >= LOGIN_MAX_FAILS){ st.lockUntil = Date.now() + LOGIN_LOCK_MS; st.count = 0; }
+      saveLoginFailState(st);
+      if(!updateLockUI()){ errBox.style.display = 'block'; errBox.textContent = '비밀번호가 올바르지 않습니다.'; }
     }
   }
-  document.getElementById('btnLoginSubmit').addEventListener('click', attempt);
+  updateLockUI();
+  btnSubmit.addEventListener('click', attempt);
   pwInput.addEventListener('keydown', e=>{ if(e.key==='Enter') attempt(); });
 }
 initLoginGate();
@@ -714,7 +791,7 @@ function logEvent(msg){
   if(changeLog.length>200) changeLog.length=200;
 }
 function fmtTs(iso){ const d=new Date(iso); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
-function esc(v){ return (v===undefined||v===null) ? '' : String(v).replace(/"/g,'&quot;'); }
+function esc(v){ return (v===undefined||v===null) ? '' : String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 /* --- 저장소 어댑터: Claude 미리보기(window.storage) / GitHub / 이 기기만(localStorage) 자동 판별 --- */
 function detectArtifactStorage(){
@@ -741,7 +818,7 @@ async function ghPutFile(cfg, stateObj, sha){
   if(!res.ok) throw new Error('GitHub 저장 실패 (' + res.status + ')');
   return res.json();
 }
-function packState(){ return {records, extraCols, employees, guides, branches, changeLog}; }
+function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, changeRequests}; }
 function applyState(data){
   records = data.records || seedRecords();
   extraCols = data.extraCols || [];
@@ -749,6 +826,8 @@ function applyState(data){
   guides = data.guides || seedGuides();
   branches = data.branches || seedBranches();
   changeLog = data.changeLog || [];
+  rosterFinalized = data.rosterFinalized || {};
+  changeRequests = data.changeRequests || [];
 }
 function renderStorageAdmin(){
   const desc = document.getElementById('storageModeDesc');
@@ -1066,6 +1145,12 @@ function renderRoster(){
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const dateList = getRosterDateList();
   const staff = employees.filter(e=>e.branch===branch);
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const auth = currentAuth();
+  const isAdmin = !!(auth && auth.isAdmin);
+  const finalized = isRosterFinalized(branch, ym);
+  const locked = finalized && !isAdmin;
+  const dis = locked ? 'disabled' : '';
 
   const thead = document.querySelector('#rosterTable thead');
   let h = '<tr><th class="head-fixed">사번 / 성명 / 직급 / 근무조</th>';
@@ -1078,28 +1163,101 @@ function renderRoster(){
   staff.forEach(e=>{
     b += `<tr><td class="fixed">${e.empno} · ${e.name} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
-        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
-        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
-        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
-        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','duty')">주주야휴숙숙</button>
+        <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
+        <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
+        <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
+        <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','duty')">주주야휴숙숙</button>
       </div></td>`;
     dateList.forEach(ds=>{
       const isOverride = e.overrides && Object.prototype.hasOwnProperty.call(e.overrides, ds);
       const code = effectiveCode(e, ds);
       const patCode = patternCodeFor(e, ds);
-      b += `<td class="${isOverride?'is-override':''}"><select class="codecell code-${code}" onchange="updateCode('${e.id}','${ds}',this.value)">`
+      b += `<td class="${isOverride?'is-override':''}"><select class="codecell code-${code}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
         + `<option value="__auto__" ${!isOverride?'selected':''}>자동${patCode?'('+patCode+')':''}</option>`
         + CODE_LIST.map(c=>`<option value="${c}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
         + `</select></td>`;
     });
-    b += `<td class="no-print"><button class="btn btn-danger" style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
+    b += `<td class="no-print"><button class="btn btn-danger" ${dis} style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
   });
   if(staff.length===0){
     b = `<tr><td class="fixed" colspan="${dateList.length+2}" style="color:var(--text-mute);padding:14px;">이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.</td></tr>`;
   }
   tbody.innerHTML = b;
   refreshRosterPreviewIfOpen();
+  applyRosterToolbarState(branch, ym, finalized, isAdmin);
+  renderUnsignedInfo(ym, staff);
 }
+function isRosterFinalized(branch, ym){ return !!(rosterFinalized[branch] && rosterFinalized[branch][ym]); }
+function applyRosterToolbarState(branch, ym, finalized, isAdmin){
+  const dis = finalized && !isAdmin;
+  ['newEmpNo','newEmpName','newEmpRank','newEmpShift','newEmpPreset','btnAddEmp'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.disabled = dis;
+  });
+  document.getElementById('rosterFinalizeBadge').style.display = finalized ? 'inline-block' : 'none';
+  const btnFinalize = document.getElementById('btnRosterFinalize');
+  const btnRequest = document.getElementById('btnRosterRequest');
+  if(!finalized){
+    btnFinalize.style.display = ''; btnFinalize.textContent = '근무표 확정'; btnRequest.style.display = 'none';
+  } else if(isAdmin){
+    btnFinalize.style.display = ''; btnFinalize.textContent = '확정 취소'; btnRequest.style.display = 'none';
+  } else {
+    btnFinalize.style.display = 'none'; btnRequest.style.display = '';
+  }
+}
+function renderUnsignedInfo(ym, staff){
+  const el = document.getElementById('unsignedInfo');
+  if(!el) return;
+  if(staff.length===0){ el.textContent = ''; return; }
+  const unsigned = staff.filter(e=> !(e.signatures && e.signatures[ym]));
+  if(unsigned.length===0){
+    el.textContent = `${ym} 근무표 서명: 전원 완료 (${staff.length}명)`;
+    el.style.color = 'var(--good)';
+  } else {
+    el.textContent = `${ym} 근무표 서명 미완료: ${unsigned.length}명 (${unsigned.map(e=>e.name).join(', ')})`;
+    el.style.color = 'var(--danger)';
+  }
+}
+document.getElementById('btnRosterFinalize').addEventListener('click', ()=>{
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const finalized = isRosterFinalized(branch, ym);
+  if(!finalized){
+    if(!confirm(`${branch}지사 ${ym} 근무표를 확정할까요?\n확정 후에는 지사에서 직접 수정할 수 없고, 수정 요청을 통해서만 변경할 수 있습니다.`)) return;
+    if(!rosterFinalized[branch]) rosterFinalized[branch] = {};
+    rosterFinalized[branch][ym] = true;
+    logEvent(`${branch}지사 ${ym} 근무표 확정`);
+  } else {
+    if(!confirm(`${branch}지사 ${ym} 근무표 확정을 취소할까요?`)) return;
+    delete rosterFinalized[branch][ym];
+    logEvent(`${branch}지사 ${ym} 근무표 확정 취소`);
+  }
+  persist(); renderRoster();
+});
+function openChangeRequestModal(){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const staff = employees.filter(e=>e.branch===branch);
+  const sel = document.getElementById('reqEmp');
+  sel.innerHTML = '<option value="">전체 / 공통</option>' + staff.map(e=>`<option value="${e.id}">${esc(e.name)}(${esc(e.empno)})</option>`).join('');
+  document.getElementById('reqNote').value = '';
+  document.getElementById('reqModal').classList.remove('login-hidden');
+}
+document.getElementById('btnRosterRequest').addEventListener('click', openChangeRequestModal);
+document.getElementById('btnReqCancel').addEventListener('click', ()=>{
+  document.getElementById('reqModal').classList.add('login-hidden');
+});
+document.getElementById('btnReqSubmit').addEventListener('click', ()=>{
+  const note = document.getElementById('reqNote').value.trim();
+  if(!note){ alert('요청 내용을 입력해주세요.'); return; }
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const empId = document.getElementById('reqEmp').value;
+  const emp = employees.find(e=>e.id===empId);
+  changeRequests.push({ id:'req_'+Date.now(), branch, ym, empId: empId||null, empName: emp?emp.name:'', note, status:'open', ts: new Date().toISOString() });
+  logEvent(`${branch}지사 ${ym} 근무표 수정 요청 등록${emp?(' ('+emp.name+')'):''}`);
+  persist();
+  document.getElementById('reqModal').classList.add('login-hidden');
+  alert('수정 요청이 접수되었습니다. 관리자 확인 후 반영됩니다.');
+});
 function updateCode(empId, dateStr, val){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!e.overrides) e.overrides={};
@@ -1253,7 +1411,8 @@ function renderRosterPreview(){
       const sigCell = sig
         ? `<td class="sig-cell"><img src="${sig}" alt="서명" class="sig-img" onclick="openSignaturePad('${e.id}','${sigYM}')"></td>`
         : `<td class="sig-cell no-print"><button class="btn btn-outline sig-btn" onclick="openSignaturePad('${e.id}','${sigYM}')">서명하기</button></td>`;
-      html += `<td>${monthlyHours(e, dateList)}</td>${sigCell}<td style="font-size:9.5px;text-align:left;line-height:1.2;">${e.phone||""}<br>${e.note||""}</td></tr>`;
+      const hrs = monthlyHours(e, dateList);
+      html += `<td class="${hrs>OVERTIME_THRESHOLD_HOURS?'hours-over':''}">${hrs}</td>${sigCell}<td style="font-size:9.5px;text-align:left;line-height:1.2;">${e.phone||""}<br>${e.note||""}</td></tr>`;
     });
   }
   html += `</tbody></table>`;
@@ -1326,11 +1485,26 @@ document.getElementById('btnRosterPreview').addEventListener('click', ()=>{
   if(box.style.display==='none'){ renderRosterPreview(); box.style.display='block'; document.getElementById('btnRosterPreview').textContent='미리보기 닫기'; }
   else{ box.style.display='none'; document.getElementById('btnRosterPreview').textContent='미리보기'; }
 });
+function fitPreviewToOnePage(){
+  const wrap = document.getElementById('rosterPreviewWrap');
+  wrap.style.zoom = 1;
+  wrap.classList.add('print-fit-page');
+  const contentWidth = wrap.scrollWidth, contentHeight = wrap.scrollHeight;
+  const PAGE_W_PX = 1520, PAGE_H_PX = 1050; // A3 가로, 여백 8mm 기준 대략치(96dpi)
+  const scale = Math.min(PAGE_W_PX/contentWidth, PAGE_H_PX/contentHeight, 1);
+  wrap.style.zoom = scale;
+}
+function resetPreviewFit(){
+  const wrap = document.getElementById('rosterPreviewWrap');
+  wrap.style.zoom = 1;
+  wrap.classList.remove('print-fit-page');
+}
+window.addEventListener('afterprint', resetPreviewFit);
 document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
   renderRosterPreview();
   document.getElementById('rosterPreviewContainer').style.display='block';
   document.getElementById('btnRosterPreview').textContent='미리보기 닫기';
-  setTimeout(()=>window.print(), 60);
+  setTimeout(()=>{ fitPreviewToOnePage(); window.print(); }, 60);
 });
 document.getElementById('btnRosterExcel').addEventListener('click', ()=>{
   const branch = document.getElementById('rosterBranch').value || branches[0];
@@ -1466,6 +1640,26 @@ function renderAlerts(){
         <b>${r.visit_date}</b> ${r.branch}지사 · ${r.guide_name} 순회 예정 배치인원 <b>${r.headcount}명</b>,
         근무표상 실근무 <b>${dc.count}명</b> (등록 인원 ${dc.total}명 중)</div></div>`; }).join('');
   }
+  renderChangeRequests();
+}
+function renderChangeRequests(){
+  const el = document.getElementById('changeRequestList');
+  if(!el) return;
+  const list = changeRequests.slice().sort((a,b)=> (a.status===b.status?0:(a.status==='open'?-1:1)) || b.ts.localeCompare(a.ts));
+  if(list.length===0){ el.innerHTML = `<p style="color:var(--text-mute);font-size:12.5px;">접수된 수정 요청이 없습니다.</p>`; return; }
+  el.innerHTML = list.map(r=>`
+    <div class="alert-item"><div class="alert-main">
+      <span class="badge ${r.status==='open'?'badge-warn':''}" ${r.status!=='open'?'style="background:var(--good-bg);color:var(--good);"':''}>${r.status==='open'?'대기중':'처리완료'}</span>
+      <b>${r.branch}지사</b> · ${r.ym}${r.empName?(' · '+esc(r.empName)):''} · ${fmtTs(r.ts)}
+      <div style="margin-top:4px;white-space:pre-wrap;">${esc(r.note)}</div>
+      ${r.status==='open' ? `<div class="no-print" style="margin-top:5px;"><button class="btn btn-good" style="padding:3px 8px;font-size:11px;" onclick="resolveChangeRequest('${r.id}')">처리완료로 표시</button></div>` : ''}
+    </div></div>`).join('');
+}
+function resolveChangeRequest(id){
+  const r = changeRequests.find(x=>x.id===id); if(!r) return;
+  r.status = 'done';
+  logEvent(`${r.branch}지사 ${r.ym} 근무표 수정 요청 처리완료`);
+  persist(); renderChangeRequests();
 }
 function toggleNote(id){ const el=document.getElementById('note_'+id); el.style.display = el.style.display==='none'?'block':'none'; }
 document.getElementById('refDate').addEventListener('change', renderAlerts);
@@ -1809,8 +2003,52 @@ document.getElementById('btnBatchImport').addEventListener('click', ()=>{
 });
 
 /* ---------- 관리자 설정 ---------- */
+function renderPasswordAdmin(){
+  const sel = document.getElementById('pwAdminBranch');
+  const cur = sel.value;
+  sel.innerHTML = branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  if(cur && branches.includes(cur)) sel.value = cur;
+  const b = sel.value || branches[0];
+  document.getElementById('pwAdminBranchCurrent').textContent = b ? `현재: ${effectiveBranchPassword(b)}` : '';
+  document.getElementById('pwAdminCurrent').textContent = `현재: ${effectiveAdminPassword()}`;
+}
+document.getElementById('pwAdminBranch').addEventListener('change', renderPasswordAdmin);
+document.getElementById('btnPwBranchSave').addEventListener('click', ()=>{
+  const b = document.getElementById('pwAdminBranch').value;
+  const val = document.getElementById('pwAdminBranchNew').value.trim();
+  if(!b || !val){ alert('지사와 새 비밀번호를 입력하세요.'); return; }
+  const o = getPasswordOverrides(); if(!o.branches) o.branches = {};
+  o.branches[b] = val; savePasswordOverrides(o);
+  logEvent(`${b}지사 비밀번호 변경`);
+  document.getElementById('pwAdminBranchNew').value = '';
+  renderPasswordAdmin();
+  alert(`${b}지사 비밀번호가 변경되었습니다.`);
+});
+document.getElementById('btnPwBranchReset').addEventListener('click', ()=>{
+  const b = document.getElementById('pwAdminBranch').value; if(!b) return;
+  const o = getPasswordOverrides();
+  if(o.branches) delete o.branches[b];
+  savePasswordOverrides(o);
+  logEvent(`${b}지사 비밀번호 기본값으로 초기화`);
+  renderPasswordAdmin();
+});
+document.getElementById('btnPwAdminSave').addEventListener('click', ()=>{
+  const val = document.getElementById('pwAdminNew').value.trim();
+  if(!val){ alert('새 관리자 비밀번호를 입력하세요.'); return; }
+  const o = getPasswordOverrides(); o.admin = val; savePasswordOverrides(o);
+  logEvent('관리자 비밀번호 변경');
+  document.getElementById('pwAdminNew').value = '';
+  renderPasswordAdmin();
+  alert('관리자 비밀번호가 변경되었습니다.');
+});
+document.getElementById('btnPwAdminReset').addEventListener('click', ()=>{
+  const o = getPasswordOverrides(); delete o.admin; savePasswordOverrides(o);
+  logEvent('관리자 비밀번호 기본값으로 초기화');
+  renderPasswordAdmin();
+});
 function renderAdmin(){
   renderStorageAdmin();
+  renderPasswordAdmin();
   const gArea = document.getElementById('guideAdminList');
   gArea.innerHTML = guides.map(g=>{
     const used = records.filter(r=>r.guide_name===g.name).length;
