@@ -175,8 +175,12 @@
   .preview-main-table th.sun, .preview-main-table td.sun { color: #dc2626; background-color: #fef2f2; }
   .preview-main-table th.sat, .preview-main-table td.sat { color: #2563eb; background-color: #eff6ff; }
   
-  .preview-signature-col { width: 40px; }
+  .preview-hours-col { width: 44px; }
+  .preview-signature-col { width: 64px; }
   .preview-contact-col { width: 60px; }
+  .sig-cell{padding:2px !important;}
+  .sig-img{max-width:56px;max-height:26px;cursor:pointer;}
+  .sig-btn{padding:2px 5px !important;font-size:9px !important;}
   
   .preview-row-group-0 .group-header { background-color: #fef08a; }
   .preview-row-group-1 .group-header { background-color: #fed7aa; }
@@ -197,6 +201,14 @@
   #btnLoginSubmit{width:100%;padding:10px;font-size:13px;}
   .login-hidden{display:none !important;}
 
+  /* ---------- 서명 모달 ---------- */
+  .sig-modal{position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.55);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .sig-modal-box{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.35);}
+  .sig-modal-box h3{margin:0 0 10px;font-size:14px;color:var(--text);}
+  #sigCanvas{width:100%;height:160px;border:1px solid var(--border);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair;display:block;}
+  .sig-modal-actions{display:flex;gap:8px;margin-top:12px;}
+  .sig-modal-actions .btn{flex:1;}
+
 </style>
 </head>
 <body>
@@ -216,6 +228,18 @@
     </div>
     <div class="login-error" id="loginError">비밀번호가 올바르지 않습니다.</div>
     <button class="btn btn-primary" id="btnLoginSubmit">로그인</button>
+  </div>
+</div>
+
+<div class="sig-modal login-hidden no-print" id="sigModal">
+  <div class="sig-modal-box">
+    <h3>근무자 확인 서명</h3>
+    <canvas id="sigCanvas"></canvas>
+    <div class="sig-modal-actions">
+      <button class="btn btn-outline" id="btnSigClear">지우기</button>
+      <button class="btn btn-outline" id="btnSigCancel">취소</button>
+      <button class="btn btn-primary" id="btnSigSave">서명 저장</button>
+    </div>
   </div>
 </div>
 
@@ -482,6 +506,11 @@ const CORE_FIELDS = [
 ];
 const CODE_LIST = ['','주','야','숙','전일','연차','청원','공가','병가','교육','비번'];
 const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
+/* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
+   시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
+const HOUR_MAP = { '':0, '주':8, '야':14, '휴':0, '숙':0, '전일':22, '연차':0, '청원':0, '공가':8, '병가':0, '교육':8, '비번':0 };
+function codeHours(code){ return HOUR_MAP.hasOwnProperty(code) ? HOUR_MAP[code] : 0; }
+function monthlyHours(emp, dateList){ return dateList.reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
 const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
@@ -605,6 +634,16 @@ function updateLoginStatusPill(){
   const el = document.getElementById('loginStatusLabel');
   if(el) el.textContent = loginLabel() ? ('로그인: ' + loginLabel()) : '';
 }
+function applyTabRestriction(){
+  const a = currentAuth();
+  if(!a || a.isAdmin) return;
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    const isRoster = btn.dataset.tab === 'roster';
+    btn.classList.toggle('login-hidden', !isRoster);
+    btn.classList.toggle('active', isRoster);
+  });
+  document.querySelectorAll('.panel').forEach(p=>{ p.classList.toggle('active', p.id === 'panel-roster'); });
+}
 function initLoginGate(){
   const gate = document.getElementById('loginGate');
   const sel = document.getElementById('loginBranch');
@@ -615,20 +654,20 @@ function initLoginGate(){
   const errBox = document.getElementById('loginError');
   adminChk.addEventListener('change', ()=>{ branchField.classList.toggle('login-hidden', adminChk.checked); });
   updateLoginStatusPill();
-  if(currentAuth()){ gate.classList.add('login-hidden'); return; }
+  if(currentAuth()){ gate.classList.add('login-hidden'); applyTabRestriction(); return; }
   function attempt(){
     errBox.style.display = 'none';
     const isAdmin = adminChk.checked;
     if(isAdmin){
       if(pwInput.value === ADMIN_PASSWORD){
         sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null}));
-        gate.classList.add('login-hidden'); updateLoginStatusPill();
+        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyTabRestriction();
       } else { errBox.style.display = 'block'; }
     } else {
       const b = sel.value;
       if(pwInput.value === branchPassword(b)){
         sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:b}));
-        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault();
+        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault(); applyTabRestriction();
       } else { errBox.style.display = 'block'; }
     }
   }
@@ -1080,10 +1119,11 @@ function renderRosterPreview(){
   const staff = getRosterStaff(sel).slice().sort((a,b)=> grouped ? (a.branch.localeCompare(b.branch) || (a.zone||"").localeCompare(b.zone||"")) : (a.zone||"").localeCompare(b.zone||""));
   const dowNames = ["일","월","화","수","목","금","토"];
   
-  let [y, m] = currentMonth.split("-");
+  let [y, m] = (document.getElementById("rosterMonth").value || currentMonth).split("-");
   if(mode === "week7") {
       [y, m] = dateList[0].split("-");
   }
+  const sigYM = `${y}-${m}`;
 
   let html = `
     <div class="preview-header-section">
@@ -1103,7 +1143,7 @@ function renderRosterPreview(){
       <div class="preview-title-section">
           <div class="preview-title-box">
               <h2>${y}년</h2>
-              <h1>근무실적</h1>
+              <h1>근무실적(계획)</h1>
               <h2>${m}월</h2>
           </div>
           <div class="preview-info-row">
@@ -1136,7 +1176,8 @@ function renderRosterPreview(){
                 ${grouped?"<th rowspan=\"2\">지사</th>":""}
 `;
   dateList.forEach(ds=>{ html += `<th>${shortLabel(ds)}</th>`; });
-  html += `     <th rowspan="2" class="preview-signature-col">근무자<br>확인 서명</th>
+  html += `     <th rowspan="2" class="preview-hours-col">합계<br>(시간)</th>
+                <th rowspan="2" class="preview-signature-col">근무자<br>확인 서명</th>
                 <th rowspan="2" class="preview-contact-col">연락처<br>/ 비고</th>
             </tr>
             <tr>`;
@@ -1146,7 +1187,7 @@ function renderRosterPreview(){
         <tbody>`;
 
   if(staff.length===0){
-    html += `<tr><td colspan="${dateList.length+(grouped?8:7)}" style="padding:20px;color:#888;">등록된 직원이 없습니다.</td></tr>`;
+    html += `<tr><td colspan="${dateList.length+(grouped?9:8)}" style="padding:20px;color:#888;">등록된 직원이 없습니다.</td></tr>`;
   }else{
     let currentGroup = "";
     let groupIndex = -1;
@@ -1183,12 +1224,16 @@ function renderRosterPreview(){
       
       html += `<td>${e.empno}</td><td style="text-align:left;">${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
-      dateList.forEach(ds=>{ 
+      dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
           const code = effectiveCode(e, ds);
-          html += `<td class="${wd===0?"sun":wd===6?"sat":""}">${code||"·"}</td>`; 
+          html += `<td class="${wd===0?"sun":wd===6?"sat":""}">${code||"·"}</td>`;
       });
-      html += `<td></td><td style="font-size:9.5px;text-align:left;line-height:1.2;">${e.phone||""}<br>${e.note||""}</td></tr>`;
+      const sig = e.signatures && e.signatures[sigYM];
+      const sigCell = sig
+        ? `<td class="sig-cell"><img src="${sig}" alt="서명" class="sig-img" onclick="openSignaturePad('${e.id}','${sigYM}')"></td>`
+        : `<td class="sig-cell no-print"><button class="btn btn-outline sig-btn" onclick="openSignaturePad('${e.id}','${sigYM}')">서명하기</button></td>`;
+      html += `<td>${monthlyHours(e, dateList)}</td>${sigCell}<td style="font-size:9.5px;text-align:left;line-height:1.2;">${e.phone||""}<br>${e.note||""}</td></tr>`;
     });
   }
   html += `</tbody></table>`;
@@ -1201,6 +1246,61 @@ function renderRosterPreview(){
 function refreshRosterPreviewIfOpen(){
   if(document.getElementById('rosterPreviewContainer').style.display !== 'none') renderRosterPreview();
 }
+
+/* ---------- 근무자 확인 서명 (웹 배포용 전자서명) ---------- */
+let sigTargetEmpId = null, sigTargetYM = null, sigDrawing = false, sigHasDrawn = false, sigCtx = null;
+function sigPointerPos(evt, canvas){
+  const rect = canvas.getBoundingClientRect();
+  return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+}
+function openSignaturePad(empId, ym){
+  sigTargetEmpId = empId; sigTargetYM = ym; sigHasDrawn = false;
+  const canvas = document.getElementById('sigCanvas');
+  document.getElementById('sigModal').classList.remove('login-hidden');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+  sigCtx = canvas.getContext('2d');
+  sigCtx.scale(dpr, dpr);
+  sigCtx.lineWidth = 2.2; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round'; sigCtx.strokeStyle = '#0f172a';
+  sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+(function initSignaturePad(){
+  const canvas = document.getElementById('sigCanvas');
+  if(!canvas) return;
+  canvas.addEventListener('pointerdown', e=>{
+    sigDrawing = true; sigHasDrawn = true;
+    const p = sigPointerPos(e, canvas);
+    sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!sigDrawing) return;
+    const p = sigPointerPos(e, canvas);
+    sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+  });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=> canvas.addEventListener(ev, ()=>{ sigDrawing = false; }));
+})();
+document.getElementById('btnSigClear').addEventListener('click', ()=>{
+  const canvas = document.getElementById('sigCanvas');
+  sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  sigHasDrawn = false;
+});
+document.getElementById('btnSigCancel').addEventListener('click', ()=>{
+  document.getElementById('sigModal').classList.add('login-hidden');
+});
+document.getElementById('btnSigSave').addEventListener('click', ()=>{
+  if(!sigHasDrawn){ alert('서명을 입력해주세요.'); return; }
+  const e = employees.find(x=>x.id===sigTargetEmpId);
+  if(e){
+    if(!e.signatures) e.signatures = {};
+    e.signatures[sigTargetYM] = document.getElementById('sigCanvas').toDataURL('image/png');
+    logEvent(`${e.name}(${e.empno}) ${sigTargetYM} 근무표 서명`);
+    persist();
+  }
+  document.getElementById('sigModal').classList.add('login-hidden');
+  refreshRosterPreviewIfOpen();
+});
 document.getElementById('btnRosterPreview').addEventListener('click', ()=>{
   const box = document.getElementById('rosterPreviewContainer');
   if(box.style.display==='none'){ renderRosterPreview(); box.style.display='block'; document.getElementById('btnRosterPreview').textContent='미리보기 닫기'; }
@@ -1219,11 +1319,12 @@ document.getElementById('btnRosterExcel').addEventListener('click', ()=>{
   const staff = employees.filter(e=>e.branch===branch);
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
-  const headerDates = ['사번','성명','직급','근무조'].concat(dateList.map(shortLabel));
-  const headerDow = ['','','',''].concat(dateList.map(ds=>dowNames[new Date(ds+'T00:00:00').getDay()]));
+  const headerDates = ['사번','성명','직급','근무조'].concat(dateList.map(shortLabel)).concat(['합계(시간)']);
+  const headerDow = ['','','',''].concat(dateList.map(ds=>dowNames[new Date(ds+'T00:00:00').getDay()])).concat(['']);
   const rows = staff.map(e=>{
     const arr = [e.empno, e.name, e.rank, e.shift];
     dateList.forEach(ds=> arr.push(effectiveCode(e, ds)));
+    arr.push(monthlyHours(e, dateList));
     return arr;
   });
   const aoa = [[`${branch}지사 ${titleRange} 근무계획표`], headerDates, headerDow, ...rows];
@@ -1810,6 +1911,7 @@ document.getElementById('restoreInput').addEventListener('change', (e)=>{
   renderCalendar();
   renderDoc();
   applyLoginBranchDefault();
+  applyTabRestriction();
 })();
 </script>
 </body>
