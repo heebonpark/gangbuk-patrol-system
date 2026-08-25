@@ -149,9 +149,9 @@
   .preview-legend-table .bg-gray { background-color: #e2e8f0; }
   
   .preview-title-section { text-align: center; flex-grow: 1; display: flex; flex-direction: column; align-items: center; }
-  .preview-title-box { border: 2px solid #334155; border-radius: 8px; padding: 10px 40px; margin-bottom: 10px; display: inline-block; background-color: white; }
-  .preview-title-box h1 { margin: 0; font-size: 20px; font-weight: 700; margin-bottom: 4px; color: #0f172a; }
-  .preview-title-box h2 { margin: 0; font-size: 16px; font-weight: 500; color: #0f172a; }
+  .preview-title-box { border: 2px solid #334155; border-radius: 8px; padding: 12px 20px; margin-bottom: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-width: 320px; max-width: 70%; background-color: white; }
+  .preview-title-box h1 { margin: 0; font-size: 22px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+  .preview-title-box h2 { margin: 0; font-size: 16px; font-weight: 500; color: #0f172a; white-space: nowrap; }
   
   .preview-info-row { display: flex; justify-content: center; margin-bottom: 10px; font-size: 13px; }
   .preview-date-box { display: flex; align-items: center; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background-color: #ffffff; }
@@ -184,15 +184,50 @@
   .preview-row-group-3 .group-header { background-color: #86efac; }
   .preview-row-group-4 .group-header { background-color: #cbd5e1; }
 
+  /* ---------- 로그인 게이트 ---------- */
+  .login-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,var(--navy) 0%,var(--navy-dark) 100%);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-box{background:#fff;border-radius:14px;padding:32px 30px;width:100%;max-width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.35);}
+  .login-box h1{margin:0 0 4px;font-size:16px;font-weight:700;color:var(--text);text-align:center;}
+  .login-box .sub{margin:0 0 20px;font-size:12px;color:var(--text-mute);text-align:center;}
+  .login-field{margin-bottom:12px;}
+  .login-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text-mute);margin-bottom:5px;}
+  .login-field select, .login-field input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);}
+  .login-admin-toggle{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-mute);margin:2px 0 14px;cursor:pointer;user-select:none;}
+  .login-error{background:var(--danger-bg);color:var(--danger);font-size:11.5px;border-radius:6px;padding:7px 10px;margin-bottom:12px;display:none;}
+  #btnLoginSubmit{width:100%;padding:10px;font-size:13px;}
+  .login-hidden{display:none !important;}
+
 </style>
 </head>
 <body>
+
+<div class="login-gate" id="loginGate">
+  <div class="login-box">
+    <h1>경비지도사 순회감독 통합관리 시스템</h1>
+    <p class="sub">지사를 선택하고 비밀번호를 입력하세요.</p>
+    <div class="login-field" id="loginBranchField">
+      <label>지사</label>
+      <select id="loginBranch"></select>
+    </div>
+    <label class="login-admin-toggle"><input type="checkbox" id="loginAsAdmin"> 관리자로 로그인</label>
+    <div class="login-field">
+      <label>비밀번호</label>
+      <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="off">
+    </div>
+    <div class="login-error" id="loginError">비밀번호가 올바르지 않습니다.</div>
+    <button class="btn btn-primary" id="btnLoginSubmit">로그인</button>
+  </div>
+</div>
 
 <header class="app">
   <h1>경비지도사 순회감독 일정 · 근무표 통합관리 시스템</h1>
   <p>강북/강원사업지원팀 · 순회일정 + 근무표 단일 스키마 · 자동 월 롤오버 · 실근무 자동대조</p>
   <div class="status-pill"><span class="status-dot"></span><span id="syncStatus">동기화 대기중</span></div>
   <div class="status-pill" id="monthPill">관리월 확인 중...</div>
+  <div class="status-pill" id="loginStatusPill">
+    <span id="loginStatusLabel"></span>
+    <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:6px;">로그아웃</a>
+  </div>
 </header>
 
 <nav class="tabs">
@@ -260,6 +295,7 @@
             <option value="shift_night">4조2교대(야 시작)</option>
             <option value="shift_day">4조2교대(주 시작)</option>
             <option value="standby">상시(휴휴주주주주주)</option>
+            <option value="duty">교대(주주야휴숙숙)</option>
           </select>
           <button class="btn btn-primary" id="btnAddEmp">+ 직원 추가</button>
         </div>
@@ -450,6 +486,7 @@ const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
   standby:     ['휴','휴','주','주','주','주','주'],
+  duty:        ['주','주','야','휴','숙','숙'],
 };
 
 /* ---------- 날짜 유틸 ---------- */
@@ -551,6 +588,59 @@ function seedEmployees(){
 
 /* ---------- 상태 ---------- */
 let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[];
+
+/* ---------- 로그인 게이트 (지사별 + 관리자 비밀번호) ----------
+   서버 없는 정적 파일이라 완전한 보안 인증은 불가하며, 오조작 방지용
+   가벼운 접근 제한입니다. 비밀번호는 지사명(공백/괄호 제거)+1234,
+   관리자는 admin1234 입니다. 필요시 아래 두 값만 바꾸면 됩니다. */
+const ADMIN_PASSWORD = 'admin1234';
+function branchPassword(b){ return b.replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234'; }
+function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
+function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사') : ''; }
+function applyLoginBranchDefault(){
+  const a = currentAuth();
+  if(a && !a.isAdmin && a.branch){ const rb = document.getElementById('rosterBranch'); if(rb && [...rb.options].some(o=>o.value===a.branch)) rb.value = a.branch; }
+}
+function updateLoginStatusPill(){
+  const el = document.getElementById('loginStatusLabel');
+  if(el) el.textContent = loginLabel() ? ('로그인: ' + loginLabel()) : '';
+}
+function initLoginGate(){
+  const gate = document.getElementById('loginGate');
+  const sel = document.getElementById('loginBranch');
+  sel.innerHTML = seedBranches().map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  const adminChk = document.getElementById('loginAsAdmin');
+  const branchField = document.getElementById('loginBranchField');
+  const pwInput = document.getElementById('loginPw');
+  const errBox = document.getElementById('loginError');
+  adminChk.addEventListener('change', ()=>{ branchField.classList.toggle('login-hidden', adminChk.checked); });
+  updateLoginStatusPill();
+  if(currentAuth()){ gate.classList.add('login-hidden'); return; }
+  function attempt(){
+    errBox.style.display = 'none';
+    const isAdmin = adminChk.checked;
+    if(isAdmin){
+      if(pwInput.value === ADMIN_PASSWORD){
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null}));
+        gate.classList.add('login-hidden'); updateLoginStatusPill();
+      } else { errBox.style.display = 'block'; }
+    } else {
+      const b = sel.value;
+      if(pwInput.value === branchPassword(b)){
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:b}));
+        gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault();
+      } else { errBox.style.display = 'block'; }
+    }
+  }
+  document.getElementById('btnLoginSubmit').addEventListener('click', attempt);
+  pwInput.addEventListener('keydown', e=>{ if(e.key==='Enter') attempt(); });
+}
+initLoginGate();
+document.getElementById('btnLogout').addEventListener('click', (e)=>{
+  e.preventDefault();
+  sessionStorage.removeItem('patrol_auth');
+  location.reload();
+});
 let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
 let storageMode = 'none'; // 'artifact' | 'github' | 'none'
 let ghConfig = null;      // {owner, repo, branch, path, token}
@@ -932,6 +1022,7 @@ function renderRoster(){
         <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
         <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
         <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
+        <button class="btn btn-outline" style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','duty')">주주야휴숙숙</button>
       </div></td>`;
     dateList.forEach(ds=>{
       const isOverride = e.overrides && Object.prototype.hasOwnProperty.call(e.overrides, ds);
@@ -1103,7 +1194,7 @@ function renderRosterPreview(){
   html += `</tbody></table>`;
   const now = new Date();
   const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
-  html += `<div class="doc-footer">박희본 /강북/강원사업지원팀 / ${ts}</div>`;
+  html += `<div class="doc-footer">${loginLabel() ? loginLabel() + ' / ' : ''}${ts}</div>`;
   document.getElementById("rosterPreviewWrap").innerHTML = html;
 }
 
@@ -1205,7 +1296,7 @@ function renderDoc(){
   }
   const now = new Date();
   const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  html += `<div class="doc-footer">박희본 /강북/강원사업지원팀 / ${ts}</div>`;
+  html += `<div class="doc-footer">${loginLabel() ? loginLabel() + ' / ' : ''}${ts}</div>`;
   document.getElementById('docWrap').innerHTML = html;
 }
 document.getElementById('docGuide').addEventListener('change', renderDoc);
@@ -1718,6 +1809,7 @@ document.getElementById('restoreInput').addEventListener('change', (e)=>{
   renderTableBody();
   renderCalendar();
   renderDoc();
+  applyLoginBranchDefault();
 })();
 </script>
 </body>
