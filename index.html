@@ -124,6 +124,7 @@
   table.roster td.fixed{position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;z-index:1;white-space:nowrap;font-size:11.5px;}
   table.roster select.codecell{width:44px;border:none;background:transparent;font-size:10.3px;text-align:center;padding:3px 0;font-family:var(--sans);border-radius:4px;}
   table.roster td.is-override{background:#FFF7EA;}
+  table.roster tr.zone-group-row td{background:#EEF2FF;color:var(--navy);font-weight:700;text-align:left;padding:5px 8px;font-size:11.5px;}
   table.roster th.dcol.ctx{background:#EAECF0;color:#9AA3B2;}
   table.roster td.ctx{background:#FAFBFC;}
   table.roster td.ctx select.codecell{color:#9AA3B2;}
@@ -413,6 +414,11 @@
           <button class="btn btn-primary" id="btnAddEmp">+ 직원 추가</button>
         </div>
       </div>
+    </div>
+    <div class="card no-print" id="zoneCoverageCard">
+      <h2>구역별 근무 공백 확인</h2>
+      <p class="sub">구역/호수별로 "교대" 직원의 주 · 야 · 숙 담당이 하루도 빠짐없이 채워져 있는지 자동으로 확인합니다. 근무표 편집(위 표)은 구역/호수순으로 정렬되어 있습니다.</p>
+      <div class="table-scroll" id="zoneCoverageCheck"></div>
     </div>
     <div class="card no-print" id="rosterHourMonitorCard">
       <h2>주당 · 분기 근로시간 모니터링</h2>
@@ -1382,7 +1388,7 @@ function renderRoster(){
   const coreSet = new Set(coreDateList);
   const dateList = getRosterContextDateList();
   renderZoneFilterBar(branch);
-  const staff = getRosterStaffFiltered(branch);
+  const staff = getRosterStaffFiltered(branch).slice().sort((a,b)=> (a.zone||'').localeCompare(b.zone||'') || a.empno.localeCompare(b.empno));
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1403,7 +1409,13 @@ function renderRoster(){
 
   const tbody = document.querySelector('#rosterTable tbody');
   let b = '';
+  let lastZone = null;
   staff.forEach(e=>{
+    const zoneLabel = e.zone || '(구역 미지정)';
+    if(zoneLabel !== lastZone){
+      b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(zoneLabel)}</td></tr>`;
+      lastZone = zoneLabel;
+    }
     b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
         <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">
@@ -1432,6 +1444,32 @@ function renderRoster(){
   applyRosterToolbarState(branch, ym, finalized, isAdmin);
   renderUnsignedInfo(ym, staff);
   renderHourMonitor(staff, coreDateList);
+  renderZoneCoverageCheck(staff, coreDateList);
+}
+/* 구역/호수별로 "교대" 직원의 주/야/숙 담당이 하루도 빠짐없이 채워져 있는지 확인.
+   같은 구역에 셋 중 하나라도 그 날 담당자가 없으면(근무 공백) 빨간색으로 표시. */
+function renderZoneCoverageCheck(staff, coreDateList){
+  const el = document.getElementById('zoneCoverageCheck');
+  if(!el) return;
+  const shiftStaff = staff.filter(e=>e.shift==='교대' && e.zone);
+  if(shiftStaff.length===0 || coreDateList.length===0){ el.innerHTML = '<p class="sub" style="margin:0;">구역/호수가 등록된 "교대" 직원이 없습니다.</p>'; return; }
+  const REQUIRED = ['주','야','숙'];
+  const zones = {};
+  shiftStaff.forEach(e=>{ (zones[e.zone]=zones[e.zone]||[]).push(e); });
+  const zoneNames = Object.keys(zones).sort((a,b)=>a.localeCompare(b));
+  let h = '<table class="grid zone-coverage-table"><thead><tr><th style="text-align:left;">구역/호수</th><th>인원</th><th style="text-align:left;">근무 공백(담당자 없는 날)</th></tr></thead><tbody>';
+  zoneNames.forEach(z=>{
+    const list = zones[z];
+    const gaps = [];
+    coreDateList.forEach(ds=>{
+      const codes = list.map(e=>effectiveCode(e, ds));
+      const missing = REQUIRED.filter(r=>!codes.includes(r));
+      if(missing.length>0) gaps.push(`${shortLabel(ds)}(${missing.join('·')} 없음)`);
+    });
+    h += `<tr><td style="text-align:left;">${esc(z)}</td><td>${list.length}명</td><td class="${gaps.length?'hours-over':''}" style="text-align:left;">${gaps.length ? gaps.join(', ') : '공백 없음'}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 function renderHourMonitor(staff, coreDateList){
   const el = document.getElementById('rosterHourMonitor');
