@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>경비지도사 순회감독 일정 · 근무표 통합관리 시스템</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700;900&display=swap" rel="stylesheet">
@@ -1518,7 +1519,7 @@ function renderRosterPreview(){
       const sig = e.signatures && e.signatures[sigYM];
       const sigCell = sig
         ? `<td class="sig-cell"><img src="${sig}" alt="서명" class="sig-img" onclick="openSignaturePad('${e.id}','${sigYM}')"></td>`
-        : `<td class="sig-cell no-print"><button class="btn btn-outline sig-btn" onclick="openSignaturePad('${e.id}','${sigYM}')">서명하기</button></td>`;
+        : `<td class="sig-cell"><button class="btn btn-outline sig-btn no-print" onclick="openSignaturePad('${e.id}','${sigYM}')">서명하기</button></td>`;
       const hrs = monthlyHours(e, dateList);
       html += `<td class="${hrs>OVERTIME_THRESHOLD_HOURS?'hours-over':''}">${hrs}</td>${sigCell}<td style="font-size:9.5px;text-align:left;line-height:1.2;">${e.phone||""}<br>${e.note||""}</td></tr>`;
     });
@@ -1643,26 +1644,68 @@ document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
   document.getElementById('btnRosterPreview').textContent='미리보기 닫기';
   setTimeout(()=>{ fitPreviewToOnePage(); window.print(); }, 60);
 });
-document.getElementById('btnRosterExcel').addEventListener('click', ()=>{
+document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
+  // SheetJS 무료판은 셀 테두리 스타일을 저장하지 못해서(borders/fills가 무시됨),
+  // 실제로 테두리가 보이는 파일을 만들기 위해 이 내보내기만 ExcelJS를 씁니다.
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const mode = document.getElementById('rosterViewMode').value;
   const dateList = getRosterDateList();
   const staff = employees.filter(e=>e.branch===branch);
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
-  const headerDates = ['사번','성명','직급','근무조'].concat(dateList.map(shortLabel)).concat(['합계(시간)']);
-  const headerDow = ['','','',''].concat(dateList.map(ds=>dowNames[new Date(ds+'T00:00:00').getDay()])).concat(['']);
-  const rows = staff.map(e=>{
-    const arr = [e.empno, e.name, e.rank, e.shift];
-    dateList.forEach(ds=> arr.push(effectiveCode(e, ds)));
-    arr.push(monthlyHours(e, dateList));
-    return arr;
+  const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
+  const fixedCols = ['사번','성명','직급','근무조'];
+  const colCount = fixedCols.length + dateList.length + 1;
+
+  const wb = new ExcelJS.Workbook();
+  const sheetName = ((branch+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
+  const ws = wb.addWorksheet(sheetName);
+
+  ws.mergeCells(1,1,1,colCount);
+  const titleCell = ws.getCell(1,1);
+  titleCell.value = `${branch}지사 ${titleRange} 근무계획표`;
+  titleCell.font = { bold:true, size:13 };
+  titleCell.alignment = { horizontal:'center', vertical:'middle' };
+  ws.getRow(1).height = 22;
+
+  ws.getRow(2).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
+  ws.getRow(3).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
+  staff.forEach(e=>{
+    ws.addRow([e.empno, e.name, e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
   });
-  const aoa = [[`${branch}지사 ${titleRange} 근무계획표`], headerDates, headerDow, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, (branch+'_'+titleRange).slice(0,31));
-  XLSX.writeFile(wb, `${branch}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`);
+
+  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
+  const lastRow = 3 + staff.length;
+  for(let r=2; r<=lastRow; r++){
+    for(let c=1; c<=colCount; c++){
+      const cell = ws.getCell(r,c);
+      cell.border = { top:thin, left:thin, bottom:thin, right:thin };
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      let font = {};
+      if(r<=3){
+        font.bold = true;
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+      }
+      const dateIdx = c - fixedCols.length - 1;
+      if(dateIdx>=0 && dateIdx<dateList.length){
+        const wd = dateWeekdays[dateIdx];
+        if(wd===0) font.color = {argb:'FFC0392B'};
+        else if(wd===6) font.color = {argb:'FF2F6FED'};
+      }
+      if(Object.keys(font).length) cell.font = font;
+    }
+  }
+  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i<2 ? 10 : 8; });
+  dateList.forEach((_,i)=>{ ws.getColumn(fixedCols.length+1+i).width = 5; });
+  ws.getColumn(colCount).width = 10;
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${branch}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
 document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   const branch = document.getElementById('rosterBranch').value || branches[0];
