@@ -116,11 +116,16 @@
   .roster-scroll{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:64vh;box-shadow:var(--shadow-sm);}
   table.roster{border-collapse:collapse;font-size:11px;}
   table.roster th, table.roster td{border:1px solid #EEF1F6;padding:2px;text-align:center;}
-  table.roster th.dcol{min-width:40px;background:#F6F8FB;color:var(--text-mute);position:sticky;top:0;z-index:2;}
+  table.roster th.dcol{min-width:40px;background:#F6F8FB;color:var(--text-mute);position:sticky;top:0;z-index:2;line-height:1.5;padding:4px 2px;}
+  table.roster th.dcol.sun{color:#C0392B;}
+  table.roster th.dcol.sat{color:#2F6FED;}
   table.roster th.head-fixed{position:sticky;left:0;background:#F6F8FB;z-index:3;text-align:left;padding:6px 8px;min-width:190px;}
   table.roster td.fixed{position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;z-index:1;white-space:nowrap;font-size:11.5px;}
   table.roster select.codecell{width:44px;border:none;background:transparent;font-size:10.3px;text-align:center;padding:3px 0;font-family:var(--sans);border-radius:4px;}
   table.roster td.is-override{background:#FFF7EA;}
+  table.roster th.dcol.ctx{background:#EAECF0;color:#9AA3B2;}
+  table.roster td.ctx{background:#FAFBFC;}
+  table.roster td.ctx select.codecell{color:#9AA3B2;}
   table.roster select.codecell:hover{background:#F0F3F8;}
   .code-야{color:#8C4FC9;font-weight:700;}
   .code-주{color:#2F6FED;font-weight:700;}
@@ -641,6 +646,25 @@ function monthOptions(centerYM){
 }
 function fmtDoc(ym,d){ const {y,m}=ymParts(ym); return `'${String(y).slice(2)}. ${String(m).padStart(2,'0')}. ${String(d).padStart(2,'0')}`; }
 
+/* ---------- 공휴일 (대체공휴일 포함) ----------
+   출처: publicholidays.co.kr/ko/2026-dates 등 확인 (2026-08-26 기준). 연도가 바뀌면 이 목록도 추가해야 합니다. */
+const HOLIDAYS_KR = new Set([
+  '2026-01-01', // 새해
+  '2026-02-16','2026-02-17','2026-02-18', // 설날 연휴
+  '2026-03-01','2026-03-02', // 삼일절(대체)
+  '2026-05-05', // 어린이날
+  '2026-05-24','2026-05-25', // 부처님오신날(대체)
+  '2026-06-06', // 현충일
+  '2026-07-17', // 제헌절
+  '2026-08-15','2026-08-17', // 광복절(대체)
+  '2026-09-24','2026-09-25','2026-09-26', // 추석 연휴
+  '2026-10-03','2026-10-05', // 개천절(대체)
+  '2026-10-09', // 한글날
+  '2026-12-25', // 크리스마스
+]);
+function isWeekend(dateStr){ const wd = new Date(dateStr+'T00:00:00').getDay(); return wd===0 || wd===6; }
+function isHoliday(dateStr){ return HOLIDAYS_KR.has(dateStr); }
+
 /* ---------- 근무표: 패턴 + 예외 모델 ---------- */
 function patternCodeFor(emp, dateStr){
   if(!emp.pattern || emp.pattern.length===0) return '';
@@ -648,9 +672,15 @@ function patternCodeFor(emp, dateStr){
   const idx = ((diff % emp.pattern.length)+emp.pattern.length)%emp.pattern.length;
   return emp.pattern[idx];
 }
+/* 자동값: 상시 근무자는 주말·공휴일에 기본 숙(대기)으로 처리하고, 그 외에는 패턴을 따름.
+   대체근무(야/주)가 필요한 날은 근무표에서 직접 예외로 선택하면 됩니다(overrides가 항상 우선). */
+function autoCodeFor(emp, dateStr){
+  if(emp.shift === '상시' && (isWeekend(dateStr) || isHoliday(dateStr))) return '숙';
+  return patternCodeFor(emp, dateStr);
+}
 function effectiveCode(emp, dateStr){
   if(emp.overrides && Object.prototype.hasOwnProperty.call(emp.overrides,dateStr)) return emp.overrides[dateStr];
-  return patternCodeFor(emp, dateStr);
+  return autoCodeFor(emp, dateStr);
 }
 function onDutyCount(branch, dateStr){
   if(!dateStr) return {count:0,total:0};
@@ -1185,6 +1215,19 @@ function getRosterDateList(){
   for(let d=1; d<=dim; d++) list.push(dstr(y,m,d));
   return list;
 }
+/* 근무표 관리 화면(편집용)에서만 쓰는 목록: 월 보기일 때 앞뒤 5일을 더해
+   달 경계를 넘어가는 패턴 연속성을 바로 보고 고칠 수 있게 합니다.
+   미리보기·엑셀·근무시간 합계 등은 항상 getRosterDateList()(해당 월만)를 그대로 씁니다. */
+function getRosterContextDateList(){
+  const mode = document.getElementById('rosterViewMode').value;
+  const core = getRosterDateList();
+  if(mode === 'week7' || core.length === 0) return core;
+  const list = [];
+  for(let i=5;i>=1;i--) list.push(addDaysStr(core[0], -i));
+  list.push(...core);
+  for(let i=1;i<=5;i++) list.push(addDaysStr(core[core.length-1], i));
+  return list;
+}
 document.getElementById('rosterViewMode').addEventListener('change', ()=>{
   const mode = document.getElementById('rosterViewMode').value;
   document.getElementById('rosterMonth').style.display = mode==='month' ? '' : 'none';
@@ -1199,7 +1242,9 @@ document.getElementById('rosterRefDate').addEventListener('change', ()=>{ render
 function renderRoster(){
   if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
   const branch = document.getElementById('rosterBranch').value || branches[0];
-  const dateList = getRosterDateList();
+  const coreDateList = getRosterDateList();
+  const coreSet = new Set(coreDateList);
+  const dateList = getRosterContextDateList();
   const staff = employees.filter(e=>e.branch===branch);
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
@@ -1208,9 +1253,14 @@ function renderRoster(){
   const locked = finalized && !isAdmin;
   const dis = locked ? 'disabled' : '';
 
+  const dowNamesRoster = ['일','월','화','수','목','금','토'];
   const thead = document.querySelector('#rosterTable thead');
   let h = '<tr><th class="head-fixed">사번 / 성명 / 직급 / 근무조</th>';
-  dateList.forEach(ds=> h += `<th class="dcol">${shortLabel(ds)}</th>`);
+  dateList.forEach(ds=>{
+    const wd = new Date(ds+'T00:00:00').getDay();
+    const cls = ['dcol', wd===0?'sun':wd===6?'sat':'', coreSet.has(ds)?'':'ctx'].filter(Boolean).join(' ');
+    h += `<th class="${cls}">${shortLabel(ds)}<br>${dowNamesRoster[wd]}</th>`;
+  });
   h += '<th class="dcol no-print">삭제</th></tr>';
   thead.innerHTML = h;
 
@@ -1227,9 +1277,10 @@ function renderRoster(){
     dateList.forEach(ds=>{
       const isOverride = e.overrides && Object.prototype.hasOwnProperty.call(e.overrides, ds);
       const code = effectiveCode(e, ds);
-      const patCode = patternCodeFor(e, ds);
-      b += `<td class="${isOverride?'is-override':''}"><select class="codecell code-${code}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
-        + `<option value="__auto__" ${!isOverride?'selected':''}>자동${patCode?'('+patCode+')':''}</option>`
+      const autoCode = autoCodeFor(e, ds);
+      const ctxCls = coreSet.has(ds) ? '' : ' ctx';
+      b += `<td class="${isOverride?'is-override':''}${ctxCls}"><select class="codecell code-${code}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
+        + `<option value="__auto__" ${!isOverride?'selected':''}>자동${autoCode?'('+autoCode+')':''}</option>`
         + CODE_LIST.map(c=>`<option value="${c}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
         + `</select></td>`;
     });
