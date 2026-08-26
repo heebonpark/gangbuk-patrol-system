@@ -381,6 +381,7 @@
         </select>
         <select id="rosterMonth"></select>
         <input type="date" id="rosterRefDate" style="display:none;">
+        <button class="btn btn-outline" id="btnZoneTeamRotation" title="같은 구역/호수 직원을 3명 단위로 묶어 주주야야숙숙 / 야야숙숙주주 / 숙숙주주야야 패턴을 자동 배정합니다.">구역별 3교대 자동배정</button>
         <span class="spacer"></span>
         <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
         <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
@@ -713,6 +714,13 @@ const PRESETS = {
   standby:     ['휴','휴','주','주','주','주','주'],
   duty:        ['주','주','야','휴','숙','숙'],
 };
+/* 같은 구역/호수를 지키는 3인 1조 교대 패턴: 항상 그 자리에 주/야/숙 담당이 한 명씩만 서도록
+   6일 주기로 서로 2일씩 어긋나게 맞춤. */
+const ZONE_TEAM_PATTERNS = [
+  ['주','주','야','야','숙','숙'],
+  ['야','야','숙','숙','주','주'],
+  ['숙','숙','주','주','야','야'],
+];
 
 /* ---------- 날짜 유틸 ---------- */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
@@ -1453,7 +1461,7 @@ function renderHourMonitor(staff, coreDateList){
 function isRosterFinalized(branch, ym){ return !!(rosterFinalized[branch] && rosterFinalized[branch][ym]); }
 function applyRosterToolbarState(branch, ym, finalized, isAdmin){
   const dis = finalized && !isAdmin;
-  ['newEmpNo','newEmpName','newEmpRank','newEmpZone','newEmpShift','newEmpPreset','btnAddEmp'].forEach(id=>{
+  ['newEmpNo','newEmpName','newEmpRank','newEmpZone','newEmpShift','newEmpPreset','btnAddEmp','btnZoneTeamRotation'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.disabled = dis;
   });
   document.getElementById('rosterFinalizeBadge').style.display = finalized ? 'inline-block' : 'none';
@@ -1540,6 +1548,30 @@ function applyPreset(empId, key){
   persist(); renderRoster();
   checkAndAlertHourLimit(e, beforeViolations);
 }
+/* 구역/호수가 같은 "교대" 직원을 3명 단위로 묶어 주/야/숙 담당이 항상 한 명씩 서도록
+   자동 배정. 연차 등 예외는 그대로 두고(수동으로만 변경), 기존 예외는 초기화됨. */
+function applyZoneTeamRotation(){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const staff = getRosterStaffFiltered(branch).filter(e=>e.shift==='교대');
+  const groups = {};
+  staff.forEach(e=>{ const z = e.zone || ''; if(!z) return; (groups[z]=groups[z]||[]).push(e); });
+  const zones = Object.keys(groups);
+  if(zones.length===0){ alert('구역/호수가 등록된 "교대" 직원이 없습니다. 먼저 직원별 구역/호수를 입력해주세요.'); return; }
+  if(!confirm(`같은 구역/호수의 "교대" 직원을 3명씩 묶어 주주야야숙숙 / 야야숙숙주주 / 숙숙주주야야 패턴으로 자동 배정합니다.\n대상: ${zones.length}개 구역, ${staff.length}명\n기존 수동 예외(연차 등)는 초기화됩니다. 계속할까요?`)) return;
+  const beforeMap = new Map(staff.map(e=>[e.id, getHourViolations(e)]));
+  zones.forEach(z=>{
+    groups[z].forEach((e,i)=>{
+      e.pattern = ZONE_TEAM_PATTERNS[i%3].slice();
+      e.patternStart = ym+'-01';
+      e.overrides = {};
+    });
+  });
+  logEvent(`${branch}지사 ${ym} 구역별 3교대(주/야/숙) 자동배정: ${zones.length}개 구역 ${staff.length}명`);
+  persist(); renderRoster();
+  staff.forEach(e=>{ checkAndAlertHourLimit(e, beforeMap.get(e.id)); });
+}
+document.getElementById('btnZoneTeamRotation').addEventListener('click', applyZoneTeamRotation);
 function deleteEmp(empId){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!confirm(`${e.name} 직원의 근무표를 삭제할까요?`)) return;
