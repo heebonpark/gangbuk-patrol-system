@@ -680,23 +680,31 @@ function quarterlyAvgHoursForEmp(emp, qRange){
   return sum / 13;
 }
 /* 운영자가 근무표를 등록/수정한 직후 즉시 초과 여부를 팝업으로 알림.
-   현재 화면에 표시된 월 범위에 걸친 주들 + 그 시점의 분기를 기준으로 검사. */
-function checkAndAlertHourLimit(emp){
-  if(!emp) return;
+   단, 이미 초과 상태인 직원을 계속 편집할 때마다 매번 뜨면 편집을 방해하므로,
+   "이번 편집으로 새로 초과된 주/분기"만 골라서 알림(기존에 이미 초과였던 항목은 반복 알림하지 않음). */
+function getHourViolations(emp){
+  const map = new Map(); // key -> message
   const coreDateList = getRosterDateList();
-  if(coreDateList.length===0) return;
+  if(coreDateList.length===0) return map;
   const firstMonday = getWeekMonday(coreDateList[0]);
   const lastMonday = getWeekMonday(coreDateList[coreDateList.length-1]);
-  const msgs = [];
   for(let mo=firstMonday; mo<=lastMonday; mo=addDaysStr(mo,7)){
     const hrs = weeklyHoursForEmp(emp, mo);
-    if(hrs > WEEKLY_HOUR_LIMIT) msgs.push(`· 주 ${shortLabel(mo)}~${shortLabel(addDaysStr(mo,6))}: ${hrs}시간 (상한 ${WEEKLY_HOUR_LIMIT}시간)`);
+    if(hrs > WEEKLY_HOUR_LIMIT) map.set('week:'+mo, `· 주 ${shortLabel(mo)}~${shortLabel(addDaysStr(mo,6))}: ${hrs}시간 (상한 ${WEEKLY_HOUR_LIMIT}시간)`);
   }
   const qRange = getQuarterRange(coreDateList[Math.floor(coreDateList.length/2)]);
   const qAvg = quarterlyAvgHoursForEmp(emp, qRange);
-  if(qAvg > QUARTER_AVG_LIMIT) msgs.push(`· 분기 ${qRange.start}~${qRange.end} 평균: ${qAvg.toFixed(1)}시간 (상한 ${QUARTER_AVG_LIMIT}시간)`);
-  if(msgs.length>0){
-    alert(`⚠ 근로시간 한도 초과\n${emp.name}(${emp.empno})\n\n` + msgs.join('\n'));
+  if(qAvg > QUARTER_AVG_LIMIT) map.set('quarter:'+qRange.start, `· 분기 ${qRange.start}~${qRange.end} 평균: ${qAvg.toFixed(1)}시간 (상한 ${QUARTER_AVG_LIMIT}시간)`);
+  return map;
+}
+function checkAndAlertHourLimit(emp, beforeViolations){
+  if(!emp) return;
+  const after = getHourViolations(emp);
+  const before = beforeViolations || new Map();
+  const newMsgs = [];
+  after.forEach((msg, key)=>{ if(!before.has(key)) newMsgs.push(msg); });
+  if(newMsgs.length>0){
+    alert(`⚠ 근로시간 한도 초과\n${emp.name}(${emp.empno})\n\n` + newMsgs.join('\n'));
   }
 }
 const PRESETS = {
@@ -1516,19 +1524,21 @@ document.getElementById('btnReqSubmit').addEventListener('click', ()=>{
 function updateCode(empId, dateStr, val){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!e.overrides) e.overrides={};
+  const beforeViolations = getHourViolations(e);
   if(val==='__auto__') delete e.overrides[dateStr]; else e.overrides[dateStr]=val;
   persist(); renderRoster();
   if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
-  checkAndAlertHourLimit(e);
+  checkAndAlertHourLimit(e, beforeViolations);
 }
 function applyPreset(empId, key){
   const e = employees.find(e=>e.id===empId); if(!e) return;
+  const beforeViolations = getHourViolations(e);
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const {pattern, patternStart} = generateFromPreset(key, ym+'-01');
   e.pattern = pattern; e.patternStart = patternStart; e.overrides = {};
   logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key}`);
   persist(); renderRoster();
-  checkAndAlertHourLimit(e);
+  checkAndAlertHourLimit(e, beforeViolations);
 }
 function deleteEmp(empId){
   const e = employees.find(e=>e.id===empId); if(!e) return;
