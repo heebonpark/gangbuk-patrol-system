@@ -168,8 +168,10 @@
   .preview-approval-table th { background-color: #f1f5f9; padding: 4px; font-weight: 600; font-size: 12px; color:#0f172a; }
   .preview-approval-table td { height: 50px; }
   
-  .preview-table-toolbar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+  .preview-table-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
   .preview-sub-info { font-size: 13px; font-weight: 600; color: #334155; background-color: #f8fafc; padding: 4px 12px; border-radius: 4px; border: 1px solid #e2e8f0; }
+  .preview-search-box input{ font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-family: inherit; width: 200px; max-width: 100%; }
+  .preview-search-box input:focus{ outline: none; border-color: #2F6FED; }
 
   .preview-main-table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: center; border-style: hidden; box-shadow: 0 0 0 1px #e2e8f0; border-radius: 6px; overflow: hidden; }
   .preview-main-table th, .preview-main-table td { border: 1px solid #e2e8f0; padding: 4px 2px; white-space: nowrap; color: #334155; }
@@ -184,6 +186,28 @@
   .sig-img{max-width:56px;max-height:26px;cursor:pointer;}
   .sig-btn{padding:2px 5px !important;font-size:9px !important;}
   .hours-over{background:#fee2e2 !important;color:#b91c1c !important;font-weight:700;}
+  .preview-main-table tr.row-match td:not(.preview-name-col):not(.preview-hours-col):not(.sig-cell){background:#fef9c3 !important;transition:background 0.4s;}
+  .preview-main-table tr.row-match td.preview-name-col{font-weight:700;}
+
+  /* 모바일: 성명·합계·서명 칸을 좌우로 고정해 가로 스크롤 중에도 항상 보이게 */
+  @media screen and (max-width: 820px){
+    .preview-search-box input{width:140px;}
+    /* position:sticky는 border-collapse:collapse 테이블에서 우측 고정이 깨지므로 모바일에서만 separate로 전환 */
+    .preview-main-table{border-collapse:separate;border-spacing:0;}
+    .preview-main-table th.preview-name-col, .preview-main-table td.preview-name-col{
+      position:sticky; left:0; z-index:2; background:#fff; box-shadow:2px 0 4px rgba(15,23,42,0.08);
+    }
+    .preview-main-table tr.row-match td.preview-name-col{background:#fef9c3;}
+    .preview-main-table th.preview-hours-col, .preview-main-table td.preview-hours-col{
+      position:sticky; right:64px; z-index:2; background:#fff; box-shadow:-2px 0 4px rgba(15,23,42,0.08);
+    }
+    .preview-main-table td.hours-over{background:#fee2e2 !important;}
+    .preview-main-table th.preview-signature-col, .preview-main-table td.preview-signature-col{
+      position:sticky; right:0; z-index:2; background:#fff;
+    }
+    .sig-btn{padding:6px 10px !important;font-size:11px !important;}
+    #sigCanvas{height:190px;}
+  }
   
   .preview-row-group-0 .group-header { background-color: #fef08a; }
   .preview-row-group-1 .group-header { background-color: #fed7aa; }
@@ -1353,6 +1377,7 @@ function renderRosterPreview(){
     </div>
 
     <div class="preview-table-toolbar">
+        <div class="preview-search-box no-print"><input type="text" id="rosterPreviewSearch" placeholder="성명으로 찾기" oninput="searchPreviewName(this.value)"></div>
         <div class="preview-sub-info">${grouped ? rosterSelLabel(sel) : "지사: " + sel}</div>
     </div>
     <table class="preview-main-table">
@@ -1360,7 +1385,7 @@ function renderRosterPreview(){
             <tr>
                 <th rowspan="2">구역<br>호수</th>
                 <th rowspan="2">사번</th>
-                <th rowspan="2" style="width:40px;">성명</th>
+                <th rowspan="2" class="preview-name-col" style="width:40px;">성명</th>
                 <th rowspan="2">직급</th>
                 <th rowspan="2">근무조</th>
                 ${grouped?"<th rowspan=\"2\">지사</th>":""}
@@ -1406,13 +1431,13 @@ function renderRosterPreview(){
           groupIndex = (groupIndex + 1) % 5;
       }
 
-      html += `<tr class="preview-row-group-${groupIndex}">`;
+      html += `<tr class="preview-row-group-${groupIndex}" data-name="${esc(e.name)}">`;
       
       if(spans[i] > 0) {
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
       }
       
-      html += `<td>${e.empno}</td><td>${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
+      html += `<td>${e.empno}</td><td class="preview-name-col">${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
@@ -1436,6 +1461,23 @@ function renderRosterPreview(){
 
 function refreshRosterPreviewIfOpen(){
   if(document.getElementById('rosterPreviewContainer').style.display !== 'none') renderRosterPreview();
+}
+function searchPreviewName(q){
+  const wrap = document.getElementById('rosterPreviewWrap');
+  if(!wrap) return;
+  const rows = wrap.querySelectorAll('table.preview-main-table tbody tr[data-name]');
+  const query = q.trim();
+  let first = null;
+  rows.forEach(r=>{
+    const isMatch = query.length>0 && r.dataset.name.includes(query);
+    r.classList.toggle('row-match', isMatch);
+    if(isMatch && !first) first = r;
+  });
+  if(first){
+    first.scrollIntoView({behavior:'smooth', block:'center', inline:'nearest'});
+    const container = document.getElementById('rosterPreviewContainer');
+    if(container) setTimeout(()=>{ container.scrollLeft = container.scrollWidth; }, 350);
+  }
 }
 
 /* ---------- 근무자 확인 서명 (웹 배포용 전자서명) ---------- */
