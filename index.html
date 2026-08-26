@@ -386,7 +386,6 @@
         <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
         <button class="btn btn-outline" id="btnRosterFinalize" style="display:none;">근무표 확정</button>
         <button class="btn btn-danger" id="btnRosterRequest" style="display:none;">수정 요청</button>
-        <button class="btn btn-outline" id="btnToggleNameMask">성명 마스킹 해제</button>
         <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
@@ -413,6 +412,11 @@
           <button class="btn btn-primary" id="btnAddEmp">+ 직원 추가</button>
         </div>
       </div>
+    </div>
+    <div class="card no-print" id="rosterHourMonitorCard">
+      <h2>주당 · 분기 근로시간 모니터링</h2>
+      <p class="sub">주(월~일) 64시간 초과 금지, 분기(13주) 평균 52시간 초과 금지 기준으로 입력과 동시에 자동 계산됩니다.</p>
+      <div class="table-scroll" id="rosterHourMonitor"></div>
     </div>
     <div class="doc-wrap doc-wrap-wide" id="rosterPreviewContainer" style="display:none;">
       <div id="rosterPreviewWrap"></div>
@@ -639,14 +643,6 @@ const CORE_FIELDS = [
   {key:'manager', label:'담당자'}, {key:'remark', label:'비고'},
 ];
 const CODE_LIST = ['','주','야','숙','전일','연차','청원','공가','병가','교육','비번'];
-let namesMasked = true;
-function maskName(name){
-  if(!namesMasked || !name) return name;
-  const s = String(name);
-  if(s.length<=1) return s;
-  if(s.length===2) return s[0]+'O';
-  return s[0] + 'O'.repeat(s.length-2) + s[s.length-1];
-}
 const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
@@ -655,6 +651,34 @@ const HOUR_MAP = { '':0, '주':8, '야':14, '휴':0, '숙':0, '전일':22, '연�
 const OVERTIME_THRESHOLD_HOURS = 240;
 function codeHours(code){ return HOUR_MAP.hasOwnProperty(code) ? HOUR_MAP[code] : 0; }
 function monthlyHours(emp, dateList){ return dateList.reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
+
+/* ---------- 주당·분기 근로시간 모니터링 ----------
+   주(1주차~): 월요일~일요일, 1주 64시간 초과 금지.
+   분기: 91일(13주) 단위가 반복되는 자체 기준. 예) 3분기 2026-06-29(월)~2026-09-27(일), 4분기 2026-09-28~2026-12-27.
+   분기 평균(=총 근로시간/13주)이 52시간을 넘으면 안됨. */
+const WEEKLY_HOUR_LIMIT = 64;
+const QUARTER_AVG_LIMIT = 52;
+const QUARTER_DAYS = 91; // 13주
+const QUARTER_ANCHOR = '2026-06-29'; // 3분기 시작일(월요일) 기준점 — 91일 간격으로 앞뒤로 반복 계산됨
+function getWeekMonday(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const dow = d.getDay(); // 0=일 ... 6=토
+  const back = dow===0 ? 6 : dow-1;
+  return addDaysStr(dateStr, -back);
+}
+function weekDates(monday){ const list=[]; for(let i=0;i<7;i++) list.push(addDaysStr(monday,i)); return list; }
+function weeklyHoursForEmp(emp, monday){ return weekDates(monday).reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
+function getQuarterRange(dateStr){
+  const idx = Math.floor(daysBetween(QUARTER_ANCHOR, dateStr) / QUARTER_DAYS);
+  const start = addDaysStr(QUARTER_ANCHOR, idx*QUARTER_DAYS);
+  const end = addDaysStr(start, QUARTER_DAYS-1);
+  return { start, end };
+}
+function quarterlyAvgHoursForEmp(emp, qRange){
+  let sum = 0;
+  for(let ds=qRange.start; ds<=qRange.end; ds=addDaysStr(ds,1)) sum += codeHours(effectiveCode(emp, ds));
+  return sum / 13;
+}
 const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
@@ -1344,7 +1368,7 @@ function renderRoster(){
   const tbody = document.querySelector('#rosterTable tbody');
   let b = '';
   staff.forEach(e=>{
-    b += `<tr><td class="fixed">${e.empno} · ${esc(maskName(e.name))} · ${e.rank} · ${e.shift}
+    b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
         <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
@@ -1371,6 +1395,32 @@ function renderRoster(){
   refreshRosterPreviewIfOpen();
   applyRosterToolbarState(branch, ym, finalized, isAdmin);
   renderUnsignedInfo(ym, staff);
+  renderHourMonitor(staff, coreDateList);
+}
+function renderHourMonitor(staff, coreDateList){
+  const el = document.getElementById('rosterHourMonitor');
+  if(!el) return;
+  if(staff.length===0 || coreDateList.length===0){ el.innerHTML=''; return; }
+  const firstMonday = getWeekMonday(coreDateList[0]);
+  const lastMonday = getWeekMonday(coreDateList[coreDateList.length-1]);
+  const mondays = [];
+  for(let mo=firstMonday; mo<=lastMonday; mo=addDaysStr(mo,7)) mondays.push(mo);
+  const qRange = getQuarterRange(coreDateList[Math.floor(coreDateList.length/2)]);
+
+  let h = '<table class="grid hour-monitor-table"><thead><tr><th style="text-align:left;">성명</th>';
+  mondays.forEach(mo=>{ h += `<th>${shortLabel(mo)}~${shortLabel(addDaysStr(mo,6))}<br><span style="font-weight:400;color:var(--text-mute);">(주, ${WEEKLY_HOUR_LIMIT}h 상한)</span></th>`; });
+  h += `<th>분기 평균(주당)<br><span style="font-weight:400;color:var(--text-mute);">${qRange.start}~${qRange.end}<br>(${QUARTER_AVG_LIMIT}h 상한)</span></th></tr></thead><tbody>`;
+  staff.forEach(e=>{
+    h += `<tr><td style="text-align:left;white-space:nowrap;">${esc(e.name)}(${esc(e.empno)})</td>`;
+    mondays.forEach(mo=>{
+      const hrs = weeklyHoursForEmp(e, mo);
+      h += `<td class="${hrs>WEEKLY_HOUR_LIMIT?'hours-over':''}">${hrs}</td>`;
+    });
+    const qAvg = quarterlyAvgHoursForEmp(e, qRange);
+    h += `<td class="${qAvg>QUARTER_AVG_LIMIT?'hours-over':''}">${qAvg.toFixed(1)}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 function isRosterFinalized(branch, ym){ return !!(rosterFinalized[branch] && rosterFinalized[branch][ym]); }
 function applyRosterToolbarState(branch, ym, finalized, isAdmin){
@@ -1586,7 +1636,7 @@ function renderRosterPreview(){
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
       }
       
-      html += `<td>${e.empno}</td><td class="preview-name-col">${esc(maskName(e.name))}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
+      html += `<td>${e.empno}</td><td class="preview-name-col">${esc(e.name)}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
@@ -1687,21 +1737,6 @@ document.getElementById('btnRosterPreview').addEventListener('click', ()=>{
   const box = document.getElementById('rosterPreviewContainer');
   if(box.style.display==='none'){ renderRosterPreview(); box.style.display='block'; document.getElementById('btnRosterPreview').textContent='미리보기 닫기'; }
   else{ box.style.display='none'; document.getElementById('btnRosterPreview').textContent='미리보기'; }
-});
-document.getElementById('btnToggleNameMask').addEventListener('click', ()=>{
-  const btn = document.getElementById('btnToggleNameMask');
-  if(namesMasked){
-    const pw = prompt('성명 마스킹을 해제하려면 관리자 비밀번호를 입력하세요.');
-    if(pw===null) return;
-    if(pw !== effectiveAdminPassword()){ alert('관리자 비밀번호가 올바르지 않습니다.'); return; }
-    namesMasked = false;
-    btn.textContent = '성명 마스킹';
-  }else{
-    namesMasked = true;
-    btn.textContent = '성명 마스킹 해제';
-  }
-  renderRoster();
-  refreshRosterPreviewIfOpen();
 });
 function fitPreviewToOnePage(){
   const wrap = document.getElementById('rosterPreviewWrap');
