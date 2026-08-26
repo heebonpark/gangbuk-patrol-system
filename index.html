@@ -1941,6 +1941,7 @@ document.getElementById('lookaheadDays').addEventListener('change', renderAlerts
 
 /* ---------- 엑셀 가져오기 ---------- */
 let importedRows=[], importedHeaders=[];
+let importWorkbook=null, importSheetName=null;
 document.getElementById('fileInput').addEventListener('change', (e)=>{
   const file = e.target.files[0]; if(!file) return;
   document.getElementById('fileHint').textContent = '읽는 중: ' + file.name;
@@ -1948,29 +1949,38 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
   reader.onload = (evt)=>{
     try{
       const data = new Uint8Array(evt.target.result);
-      const wb = XLSX.read(data, {type:'array'});
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
-      let headerIdx=0, best=-1;
-      for(let i=0;i<Math.min(5,rows.length);i++){ const ne=rows[i].filter(v=>String(v).trim()!=='').length; if(ne>best){best=ne;headerIdx=i;} }
-      importedHeaders = rows[headerIdx].map((h,i)=> String(h).trim() || ('열'+(i+1)));
-      importedRows = rows.slice(headerIdx+1).filter(r=>r.some(v=>String(v).trim()!==''));
-      document.getElementById('fileHint').textContent = `${file.name} — ${importedRows.length}개 행 인식됨 (헤더: ${headerIdx+1}행)`;
-      renderMapUI(); renderPreview();
+      importWorkbook = XLSX.read(data, {type:'array'});
+      importSheetName = importWorkbook.SheetNames[0];
+      loadImportSheet();
       document.getElementById('importActions').style.display='flex';
     }catch(err){ document.getElementById('fileHint').textContent = '파일을 읽지 못했습니다: ' + err.message; }
   };
   reader.readAsArrayBuffer(file);
 });
+function loadImportSheet(){
+  const sheet = importWorkbook.Sheets[importSheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+  let headerIdx=0, best=-1;
+  for(let i=0;i<Math.min(5,rows.length);i++){ const ne=rows[i].filter(v=>String(v).trim()!=='').length; if(ne>best){best=ne;headerIdx=i;} }
+  importedHeaders = rows[headerIdx].map((h,i)=> String(h).trim() || ('열'+(i+1)));
+  importedRows = rows.slice(headerIdx+1).filter(r=>r.some(v=>String(v).trim()!==''));
+  document.getElementById('fileHint').textContent = `시트 ${importWorkbook.SheetNames.length}개 중 "${importSheetName}" 사용 — ${importedRows.length}개 행 인식됨 (헤더: ${headerIdx+1}행)`;
+  renderMapUI(); renderPreview();
+}
 function renderMapUI(){
   const area = document.getElementById('mapArea');
-  let html = '<div class="card no-print" style="background:#F8FAFD;"><h2 style="font-size:13px;">열 매핑</h2>';
+  let html = '<div class="card no-print" style="background:#F8FAFD;"><h2 style="font-size:13px;">시트 선택 · 열 매핑</h2>';
+  if(importWorkbook && importWorkbook.SheetNames.length>1){
+    html += `<div class="map-row"><label>시트 선택</label><select id="importSheetSelect">${importWorkbook.SheetNames.map(n=>`<option value="${n}" ${n===importSheetName?'selected':''}>${n}</option>`).join('')}</select></div>`;
+  }
   CORE_FIELDS.forEach(f=>{ html += `<div class="map-row"><label>${f.label}</label>
     <select id="map_${f.key}"><option value="">— 사용 안함 —</option>${importedHeaders.map((h,i)=>`<option value="${i}">${h}</option>`).join('')}</select></div>`; });
   html += `<div class="map-row"><label>공통 경비지도사</label><select id="map_default_guide">${guides.map(g=>`<option value="${g.name}">${g.name}</option>`).join('')}</select></div>`;
   html += `<div class="map-row"><label>공통 지사</label><select id="map_default_branch">${branches.map(b=>`<option value="${b}">${b}</option>`).join('')}</select></div>`;
   html += '</div>';
   area.innerHTML = html;
+  const sheetSel = document.getElementById('importSheetSelect');
+  if(sheetSel) sheetSel.addEventListener('change', (e)=>{ importSheetName = e.target.value; loadImportSheet(); });
 }
 function renderPreview(){
   const area = document.getElementById('previewArea');
