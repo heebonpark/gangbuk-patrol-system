@@ -388,6 +388,7 @@
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
       </div>
+      <div class="no-print" id="zoneFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
       <div class="sub no-print" id="unsignedInfo" style="margin:2px 0 8px;"></div>
       <div class="no-print">
         <div class="roster-scroll">
@@ -1242,6 +1243,46 @@ function getRosterContextDateList(){
   for(let i=1;i<=5;i++) list.push(addDaysStr(core[core.length-1], i));
   return list;
 }
+
+/* ---------- 통합된 지사의 하위 지역(구역) 필터 ----------
+   지사 병합 때 구역/호수 앞에 붙인 지역명과 짝이 맞아야 합니다(예: "포천 504호"). */
+const BRANCH_SUBREGIONS = {
+  '의정부': ['포천','양주','동두천'],
+  '고양': ['파주'],
+  '남양주': ['양평'],
+  '강릉': ['속초','동해'],
+  '원주': ['춘천','제천'],
+};
+let rosterZoneFilter = 'all'; // 'all' | '__main__' | 위 지역명 중 하나
+function zoneSubregionOf(zone, subregions){
+  if(!zone) return null;
+  for(const s of subregions){ if(zone.indexOf(s+' ')===0) return s; }
+  return null;
+}
+function getRosterStaffFiltered(branch){
+  let staff = employees.filter(e=>e.branch===branch);
+  const subregions = BRANCH_SUBREGIONS[branch];
+  if(subregions && rosterZoneFilter !== 'all'){
+    if(rosterZoneFilter === '__main__') staff = staff.filter(e=> !zoneSubregionOf(e.zone, subregions));
+    else staff = staff.filter(e=> zoneSubregionOf(e.zone, subregions) === rosterZoneFilter);
+  }
+  return staff;
+}
+function renderZoneFilterBar(branch){
+  const bar = document.getElementById('zoneFilterBar');
+  const subregions = BRANCH_SUBREGIONS[branch];
+  if(!subregions){ bar.innerHTML = ''; rosterZoneFilter = 'all'; return; }
+  const opts = [['all','전체'], ['__main__','본점'], ...subregions.map(s=>[s,s])];
+  if(!opts.some(([val])=>val===rosterZoneFilter)) rosterZoneFilter = 'all'; // 지사가 바뀌어 이전 필터값이 더는 유효하지 않으면 초기화
+  bar.innerHTML = opts.map(([val,label])=>
+    `<button type="button" class="btn ${rosterZoneFilter===val?'btn-primary':'btn-outline'}" style="padding:3px 10px;font-size:11.5px;" onclick="setRosterZoneFilter('${val}')">${label}</button>`
+  ).join('');
+}
+function setRosterZoneFilter(val){
+  rosterZoneFilter = val;
+  renderRoster();
+  refreshRosterPreviewIfOpen();
+}
 document.getElementById('rosterViewMode').addEventListener('change', ()=>{
   const mode = document.getElementById('rosterViewMode').value;
   document.getElementById('rosterMonth').style.display = mode==='month' ? '' : 'none';
@@ -1259,7 +1300,8 @@ function renderRoster(){
   const coreDateList = getRosterDateList();
   const coreSet = new Set(coreDateList);
   const dateList = getRosterContextDateList();
-  const staff = employees.filter(e=>e.branch===branch);
+  renderZoneFilterBar(branch);
+  const staff = getRosterStaffFiltered(branch);
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1407,7 +1449,7 @@ document.getElementById('rosterMonth').addEventListener('change', ()=>{ renderRo
 /* ---------- 근무표 미리보기 · 엑셀출력 · PDF출력 ---------- */
 
 function isGroupSel(sel){ return false; }
-function getRosterStaff(sel){ return employees.filter(e=>e.branch===sel); }
+function getRosterStaff(sel){ return getRosterStaffFiltered(sel); }
 function rosterSelLabel(sel){ return "지사: " + sel; }
 
 function renderRosterPreview(){
@@ -1463,7 +1505,7 @@ function renderRosterPreview(){
 
     <div class="preview-table-toolbar">
         <div class="preview-search-box no-print"><input type="text" id="rosterPreviewSearch" placeholder="성명으로 찾기" oninput="searchPreviewName(this.value)"></div>
-        <div class="preview-sub-info">${grouped ? rosterSelLabel(sel) : "지사: " + sel}</div>
+        <div class="preview-sub-info">${grouped ? rosterSelLabel(sel) : "지사: " + sel}${(BRANCH_SUBREGIONS[sel] && rosterZoneFilter!=='all') ? ' · ' + (rosterZoneFilter==='__main__'?'본점':rosterZoneFilter) : ''}</div>
     </div>
     <table class="preview-main-table">
         <thead>
@@ -1663,20 +1705,21 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const mode = document.getElementById('rosterViewMode').value;
   const dateList = getRosterDateList();
-  const staff = employees.filter(e=>e.branch===branch);
+  const staff = getRosterStaffFiltered(branch);
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
+  const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all') ? ('_' + (rosterZoneFilter==='__main__'?'본점':rosterZoneFilter)) : '';
   const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
   const fixedCols = ['사번','성명','직급','근무조'];
   const colCount = fixedCols.length + dateList.length + 1;
 
   const wb = new ExcelJS.Workbook();
-  const sheetName = ((branch+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
+  const sheetName = ((branch+zoneSuffix+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
   const ws = wb.addWorksheet(sheetName);
 
   ws.mergeCells(1,1,1,colCount);
   const titleCell = ws.getCell(1,1);
-  titleCell.value = `${branch}지사 ${titleRange} 근무계획표`;
+  titleCell.value = `${branch}지사${zoneSuffix?' ('+zoneSuffix.slice(1)+')':''} ${titleRange} 근무계획표`;
   titleCell.font = { bold:true, size:13 };
   titleCell.alignment = { horizontal:'center', vertical:'middle' };
   ws.getRow(1).height = 22;
@@ -1716,7 +1759,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `${branch}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`;
+  a.href = url; a.download = `${branch}${zoneSuffix}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
