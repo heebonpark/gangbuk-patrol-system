@@ -2092,7 +2092,7 @@ function updateEmpZone(empId, val){
   if(old === val) return;
   e.zone = val;
   logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
-  persist(); renderRoster(); refreshRosterPreviewIfOpen();
+  persist(); renderRoster();
 }
 function renderAdmin(){
   renderStorageAdmin();
