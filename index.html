@@ -532,6 +532,17 @@
     </div>
 
     <div class="card">
+      <h2>직원 구역/호수 관리</h2>
+      <p class="sub">근무표 미리보기에서 직원을 묶어 보여주는 "구역/호수" 값을 지사·직원별로 확인하고 바로 수정합니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:10px;">
+        <select id="zoneAdminBranch"><option value="all">전체 지사</option></select>
+      </div>
+      <div class="table-scroll" style="max-height:420px;">
+        <table class="grid" id="zoneAdminTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>변경 이력 로그</h2>
       <p class="sub">지도사/지사 변경, 인계, 월 롤오버 등 관리자 이벤트가 자동 기록됩니다.</p>
       <div id="changeLogList" style="max-height:260px;overflow-y:auto;"></div>
@@ -2059,9 +2070,34 @@ document.getElementById('btnPwAdminReset').addEventListener('click', ()=>{
   logEvent('관리자 비밀번호 기본값으로 초기화');
   renderPasswordAdmin();
 });
+function renderZoneAdmin(){
+  const sel = document.getElementById('zoneAdminBranch');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">전체 지사</option>' + branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+  const filterBranch = sel.value || 'all';
+  const list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch)
+    .slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
+  const thead = document.querySelector('#zoneAdminTable thead');
+  thead.innerHTML = '<tr><th>지사</th><th>사번</th><th>성명</th><th>직급</th><th>구역/호수</th></tr>';
+  const tbody = document.querySelector('#zoneAdminTable tbody');
+  if(list.length===0){ tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-mute);padding:14px;">표시할 직원이 없습니다.</td></tr>`; return; }
+  tbody.innerHTML = list.map(e=>`<tr><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(e.rank)}</td>
+    <td><input type="text" value="${esc(e.zone||'')}" placeholder="예: 401호" onchange="updateEmpZone('${e.id}', this.value)"></td></tr>`).join('');
+}
+document.getElementById('zoneAdminBranch').addEventListener('change', renderZoneAdmin);
+function updateEmpZone(empId, val){
+  const e = employees.find(x=>x.id===empId); if(!e) return;
+  const old = e.zone || '';
+  if(old === val) return;
+  e.zone = val;
+  logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
+  persist(); renderRoster(); refreshRosterPreviewIfOpen();
+}
 function renderAdmin(){
   renderStorageAdmin();
   renderPasswordAdmin();
+  renderZoneAdmin();
   const gArea = document.getElementById('guideAdminList');
   gArea.innerHTML = guides.map(g=>{
     const used = records.filter(r=>r.guide_name===g.name).length;
