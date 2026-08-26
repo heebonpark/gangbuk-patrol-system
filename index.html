@@ -2377,12 +2377,17 @@ document.getElementById('restoreInput').addEventListener('change', (e)=>{
   reader.readAsText(file);
 });
 document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
-  if(!confirm('정말로 초기화할까요?\n\n이 브라우저(exe 포함)에 저장된 근무표·서명·비밀번호 변경 내역이 모두 사라지고, 시스템이 원래 갖고 있는 최신 시드 데이터로 되돌아갑니다.\n계속하기 전에 "전체 백업 다운로드"로 먼저 저장해두는 걸 권장합니다.')) return;
+  const auth = currentAuth();
+  if(!auth || !auth.isAdmin){ alert('관리자만 초기화할 수 있습니다.'); return; }
+  if(!confirm('정말로 초기화할까요?\n\n이 브라우저(exe 포함)에 저장된 근무표·서명·비밀번호 변경 내역이 모두 사라지고, 시스템이 원래 갖고 있는 최신 시드 데이터로 되돌아갑니다. GitHub 연동이 설정되어 있었다면 그것도 해제됩니다(안 그러면 초기화해도 GitHub에 남아있는 예전 데이터를 다시 불러오게 됩니다).\n계속하기 전에 "전체 백업 다운로드"로 먼저 저장해두는 걸 권장합니다.')) return;
+  let ok = true;
   try{
     localStorage.removeItem('patrol_state_v1');
     localStorage.removeItem('patrol_pw_overrides');
     localStorage.removeItem('patrol_login_fails');
-  }catch(e){}
+    localStorage.removeItem('patrol_gh_config');
+  }catch(e){ ok = false; }
+  if(!ok){ alert('초기화에 실패했습니다(이 브라우저가 저장소 접근을 막고 있는 것 같습니다). 시크릿/사생활 보호 모드가 아닌 창에서 다시 시도해주세요.'); return; }
   alert('초기화되었습니다. 페이지를 다시 불러옵니다.');
   location.reload();
 });
