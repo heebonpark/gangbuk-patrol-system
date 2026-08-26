@@ -1337,7 +1337,7 @@ function renderZoneFilterBar(branch){
   const bar = document.getElementById('zoneFilterBar');
   const subregions = BRANCH_SUBREGIONS[branch];
   if(!subregions){ bar.innerHTML = ''; rosterZoneFilter = 'all'; return; }
-  const opts = [['all','전체'], ['__main__','본점'], ...subregions.map(s=>[s,s])];
+  const opts = [['all','전체'], ['__main__','지사'], ...subregions.map(s=>[s,s])];
   if(!opts.some(([val])=>val===rosterZoneFilter)) rosterZoneFilter = 'all'; // 지사가 바뀌어 이전 필터값이 더는 유효하지 않으면 초기화
   bar.innerHTML = opts.map(([val,label])=>
     `<button type="button" class="btn ${rosterZoneFilter===val?'btn-primary':'btn-outline'}" style="padding:3px 10px;font-size:11.5px;" onclick="setRosterZoneFilter('${val}')">${label}</button>`
@@ -1599,7 +1599,7 @@ function renderRosterPreview(){
 
     <div class="preview-table-toolbar">
         <div class="preview-search-box no-print"><input type="text" id="rosterPreviewSearch" placeholder="성명으로 찾기" oninput="searchPreviewName(this.value)"></div>
-        <div class="preview-sub-info">${grouped ? rosterSelLabel(sel) : "지사: " + sel}${(BRANCH_SUBREGIONS[sel] && rosterZoneFilter!=='all') ? ' · ' + (rosterZoneFilter==='__main__'?'본점':rosterZoneFilter) : ''}</div>
+        <div class="preview-sub-info">${grouped ? rosterSelLabel(sel) : "지사: " + sel}${(BRANCH_SUBREGIONS[sel] && rosterZoneFilter!=='all' && rosterZoneFilter!=='__main__') ? ' · ' + rosterZoneFilter : ''}</div>
     </div>
     <table class="preview-main-table">
         <thead>
@@ -1802,7 +1802,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const staff = getRosterStaffFiltered(branch);
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
-  const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all') ? ('_' + (rosterZoneFilter==='__main__'?'본점':rosterZoneFilter)) : '';
+  const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all' && rosterZoneFilter!=='__main__') ? ('_' + rosterZoneFilter) : '';
   const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
   const fixedCols = ['사번','성명','직급','근무조'];
   const colCount = fixedCols.length + dateList.length + 1;
