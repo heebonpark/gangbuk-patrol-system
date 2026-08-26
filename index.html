@@ -1410,7 +1410,7 @@ function renderRoster(){
       const autoCode = autoCodeFor(e, ds);
       const ctxCls = coreSet.has(ds) ? '' : ' ctx';
       b += `<td class="${isOverride?'is-override':''}${ctxCls}"><select class="codecell code-${code}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
-        + `<option value="__auto__" ${!isOverride?'selected':''}>자동${autoCode?'('+autoCode+')':''}</option>`
+        + `<option value="__auto__" ${!isOverride?'selected':''}>${autoCode || '·'}</option>`
         + CODE_LIST.map(c=>`<option value="${c}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
         + `</select></td>`;
     });
