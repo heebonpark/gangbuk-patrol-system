@@ -386,6 +386,7 @@
         <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
         <button class="btn btn-outline" id="btnRosterFinalize" style="display:none;">근무표 확정</button>
         <button class="btn btn-danger" id="btnRosterRequest" style="display:none;">수정 요청</button>
+        <button class="btn btn-outline" id="btnToggleNameMask">성명 마스킹 해제</button>
         <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
@@ -465,7 +466,8 @@
 
   <!-- IMPORT PANEL -->
   <section class="panel" id="panel-import">
-    <div class="card">
+    <p class="sub login-hidden" id="importBranchNotice" style="margin:0 0 14px;">지사 로그인 상태에서는 <strong>② 근무표(근태) 엑셀 가져오기</strong>만 이용할 수 있습니다.</p>
+    <div class="card" id="importCard1">
       <h2>① 순회 일정 엑셀 가져오기</h2>
       <p class="sub">지사마다 양식이 달라도 됩니다 — 열 매핑만 지정하면 통합 일정표에 추가됩니다.</p>
       <div class="drop no-print">
@@ -483,6 +485,10 @@
     <div class="card">
       <h2>② 근무표(근태) 엑셀 가져오기 — 지사 1곳씩</h2>
       <p class="sub">실제 지사 근무계획표는 시트가 여러 개거나 상단에 범례·제목이 있어 헤더 행이 다 다릅니다. 시트와 헤더 행 번호, 열 번호를 직접 지정하면 그대로 인식합니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:10px;">
+        <button class="btn btn-outline" id="btnRosterTemplate">업로드 예시 양식 다운로드</button>
+        <span style="font-size:11.5px;color:var(--text-mute);">이 양식대로 채운 뒤 저장해서 아래에 업로드하면 자동으로 인식됩니다.</span>
+      </div>
       <div class="drop no-print">
         <input type="file" id="rosterFileInput" accept=".xlsx,.xls,.csv">
         <div id="rosterFileHint" style="margin-top:8px;">근무계획표 엑셀 파일을 선택하세요 (열려있는 파일을 저장 후 선택).</div>
@@ -495,7 +501,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="importCard3">
       <h2>③ 전 지사 취합본 일괄 업로드</h2>
       <p class="sub">"근무표_취합.xlsx"처럼 모든 지사가 한 시트에 합쳐진 파일 전용입니다. 행마다 있는 "구분(지사)" 열 값을 그대로 지사명으로 써서, 한 번에 전 지사를 갱신합니다. 목록에 없는 지사명이면 자동으로 새 지사가 추가됩니다.</p>
       <div class="drop no-print">
@@ -633,6 +639,14 @@ const CORE_FIELDS = [
   {key:'manager', label:'담당자'}, {key:'remark', label:'비고'},
 ];
 const CODE_LIST = ['','주','야','숙','전일','연차','청원','공가','병가','교육','비번'];
+let namesMasked = true;
+function maskName(name){
+  if(!namesMasked || !name) return name;
+  const s = String(name);
+  if(s.length<=1) return s;
+  if(s.length===2) return s[0]+'O';
+  return s[0] + 'O'.repeat(s.length-2) + s[s.length-1];
+}
 const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
@@ -806,12 +820,16 @@ function updateLoginStatusPill(){
 function applyTabRestriction(){
   const a = currentAuth();
   if(!a || a.isAdmin) return;
+  const allowed = new Set(['roster','import']);
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
-    const isRoster = btn.dataset.tab === 'roster';
-    btn.classList.toggle('login-hidden', !isRoster);
-    btn.classList.toggle('active', isRoster);
+    const isAllowed = allowed.has(btn.dataset.tab);
+    btn.classList.toggle('login-hidden', !isAllowed);
+    btn.classList.toggle('active', btn.dataset.tab === 'roster');
   });
   document.querySelectorAll('.panel').forEach(p=>{ p.classList.toggle('active', p.id === 'panel-roster'); });
+  document.getElementById('importCard1').classList.add('login-hidden');
+  document.getElementById('importCard3').classList.add('login-hidden');
+  document.getElementById('importBranchNotice').classList.remove('login-hidden');
   renderRoster();
 }
 function initLoginGate(){
@@ -1326,7 +1344,7 @@ function renderRoster(){
   const tbody = document.querySelector('#rosterTable tbody');
   let b = '';
   staff.forEach(e=>{
-    b += `<tr><td class="fixed">${e.empno} · ${e.name} · ${e.rank} · ${e.shift}
+    b += `<tr><td class="fixed">${e.empno} · ${esc(maskName(e.name))} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
         <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
@@ -1568,7 +1586,7 @@ function renderRosterPreview(){
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
       }
       
-      html += `<td>${e.empno}</td><td class="preview-name-col">${e.name}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
+      html += `<td>${e.empno}</td><td class="preview-name-col">${esc(maskName(e.name))}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
@@ -1669,6 +1687,21 @@ document.getElementById('btnRosterPreview').addEventListener('click', ()=>{
   const box = document.getElementById('rosterPreviewContainer');
   if(box.style.display==='none'){ renderRosterPreview(); box.style.display='block'; document.getElementById('btnRosterPreview').textContent='미리보기 닫기'; }
   else{ box.style.display='none'; document.getElementById('btnRosterPreview').textContent='미리보기'; }
+});
+document.getElementById('btnToggleNameMask').addEventListener('click', ()=>{
+  const btn = document.getElementById('btnToggleNameMask');
+  if(namesMasked){
+    const pw = prompt('성명 마스킹을 해제하려면 관리자 비밀번호를 입력하세요.');
+    if(pw===null) return;
+    if(pw !== effectiveAdminPassword()){ alert('관리자 비밀번호가 올바르지 않습니다.'); return; }
+    namesMasked = false;
+    btn.textContent = '성명 마스킹';
+  }else{
+    namesMasked = true;
+    btn.textContent = '성명 마스킹 해제';
+  }
+  renderRoster();
+  refreshRosterPreviewIfOpen();
 });
 function fitPreviewToOnePage(){
   const wrap = document.getElementById('rosterPreviewWrap');
@@ -1973,6 +2006,27 @@ document.getElementById('btnImport').addEventListener('click', ()=>{
 });
 
 /* ---------- 근무표 엑셀 가져오기 (시트/헤더 행 지정) ---------- */
+document.getElementById('btnRosterTemplate').addEventListener('click', ()=>{
+  const header = ['사번','성명','직급','근무조'];
+  for(let d=1; d<=31; d++) header.push(d);
+  const sampleCodes = ['주','주','야','야','숙','비번','휴'];
+  const rows = [header];
+  const samples = [
+    {empno:'10001', name:'홍길동', rank:'G4', shift:'교대'},
+    {empno:'10002', name:'김철수', rank:'G4', shift:'교대'},
+    {empno:'10003', name:'이영희', rank:'G3', shift:'상시'},
+  ];
+  samples.forEach((s,si)=>{
+    const row = [s.empno, s.name, s.rank, s.shift];
+    for(let d=1; d<=31; d++) row.push(sampleCodes[(d+si)%sampleCodes.length]);
+    rows.push(row);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:8},{wch:10},{wch:6},{wch:8}].concat(Array(31).fill({wch:4}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '근무표');
+  XLSX.writeFile(wb, '근무표_업로드_예시양식.xlsx');
+});
 let rosterWorkbook=null, rosterSheetName=null, rosterRawRows=[];
 document.getElementById('rosterFileInput').addEventListener('change', (e)=>{
   const file = e.target.files[0]; if(!file) return;
@@ -2031,7 +2085,10 @@ function renderRosterMapUI(){
   html += `<div class="map-row"><label>직급 열</label><input type="number" id="rosterColRank" min="0" value="${rankGuess}"></div>`;
   html += `<div class="map-row"><label>근무조 열</label><input type="number" id="rosterColShift" min="0" value="${shiftGuess}"></div>`;
   html += `<div class="map-row"><label>1일(첫 날짜) 열</label><input type="number" id="rosterColFirstDate" min="0" value="${dateColGuess}"></div>`;
-  html += `<div class="map-row"><label>귀속 지사</label><select id="rosterImportBranch">${branches.map(b=>`<option value="${b}">${b}</option>`).join('')}</select></div>`;
+  const importAuth = currentAuth();
+  const importIsBranchLogin = !!(importAuth && !importAuth.isAdmin && importAuth.branch);
+  const branchOptions = importIsBranchLogin ? [importAuth.branch] : branches;
+  html += `<div class="map-row"><label>귀속 지사</label><select id="rosterImportBranch" ${importIsBranchLogin?'disabled':''}>${branchOptions.map(b=>`<option value="${b}">${b}</option>`).join('')}</select></div>`;
   html += `<div class="map-row"><label>귀속 월(YYYY-MM)</label><input type="text" id="rosterImportMonth" value="${currentMonth}"></div>`;
   html += `<div style="margin-top:8px;"><button class="btn btn-outline" type="button" id="btnRosterReparse">위 설정으로 미리보기 갱신</button></div>`;
   html += '</div>';
