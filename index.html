@@ -139,8 +139,10 @@
   .code-병가{color:#B4790C;}
   .code-교육{color:#227A5A;}
   .code-비번{color:#8A94A6;}
-  .add-emp-row{display:grid;grid-template-columns:110px 1fr 90px 90px 110px 150px;gap:8px;align-items:center;margin-top:10px;}
+  .add-emp-row{display:grid;grid-template-columns:100px 1fr 80px 130px 90px 130px 150px;gap:8px;align-items:center;margin-top:10px;}
   .add-emp-row input, .add-emp-row select{padding:7px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);}
+  input.zone-inline{width:74px;padding:2px 5px;font-size:10px;border:1px solid var(--border);border-radius:4px;font-family:var(--sans);vertical-align:middle;}
+  input.zone-inline:disabled{background:#F6F8FB;color:var(--text-mute);}
 
   /* alerts */
   .alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #EEF1F6;}
@@ -398,6 +400,7 @@
           <input type="text" id="newEmpNo" placeholder="사번">
           <input type="text" id="newEmpName" placeholder="성명">
           <input type="text" id="newEmpRank" placeholder="직급(G4 등)">
+          <input type="text" id="newEmpZone" placeholder="구역/호수(예: 401호)">
           <select id="newEmpShift"><option value="교대">교대</option><option value="상시">상시</option><option value="계약직">계약직</option></select>
           <select id="newEmpPreset">
             <option value="">패턴 선택 안함</option>
@@ -1325,6 +1328,7 @@ function renderRoster(){
   staff.forEach(e=>{
     b += `<tr><td class="fixed">${e.empno} · ${e.name} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
+        <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
@@ -1353,7 +1357,7 @@ function renderRoster(){
 function isRosterFinalized(branch, ym){ return !!(rosterFinalized[branch] && rosterFinalized[branch][ym]); }
 function applyRosterToolbarState(branch, ym, finalized, isAdmin){
   const dis = finalized && !isAdmin;
-  ['newEmpNo','newEmpName','newEmpRank','newEmpShift','newEmpPreset','btnAddEmp'].forEach(id=>{
+  ['newEmpNo','newEmpName','newEmpRank','newEmpZone','newEmpShift','newEmpPreset','btnAddEmp'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.disabled = dis;
   });
   document.getElementById('rosterFinalizeBadge').style.display = finalized ? 'inline-block' : 'none';
@@ -1768,15 +1772,16 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   const empno = document.getElementById('newEmpNo').value.trim();
   const name = document.getElementById('newEmpName').value.trim();
   const rank = document.getElementById('newEmpRank').value.trim();
+  const zone = document.getElementById('newEmpZone').value.trim();
   const shift = document.getElementById('newEmpShift').value;
   const preset = document.getElementById('newEmpPreset').value;
   if(!name){ alert('성명을 입력하세요.'); return; }
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const gen = preset ? generateFromPreset(preset, ym+'-01') : {pattern:[], patternStart: ym+'-01'};
-  employees.push({ id:'emp_'+Date.now(), branch, zone:'', empno: empno||'-', name, rank: rank||'-', shift,
+  employees.push({ id:'emp_'+Date.now(), branch, zone, empno: empno||'-', name, rank: rank||'-', shift,
     pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} });
   logEvent(`직원 추가: ${name} (${branch})`);
-  document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpRank').value='';
+  document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
   persist(); renderRoster();
 });
 
