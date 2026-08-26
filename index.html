@@ -849,7 +849,7 @@ function initLoginGate(){
       } else {
         sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value}));
       }
-      gate.classList.add('login-hidden'); updateLoginStatusPill(); applyLoginBranchDefault(); applyTabRestriction();
+      gate.classList.add('login-hidden'); updateLoginStatusPill(); refreshSelects(); applyLoginBranchDefault(); applyTabRestriction();
     } else {
       const st = getLoginFailState();
       st.count = (st.count||0) + 1;
@@ -1089,7 +1089,10 @@ function refreshSelects(){
   document.getElementById('filterBranch').options[0].textContent='전체 지사';
   fillSel(document.getElementById('calGuide'), guideNames, false);
   fillSel(document.getElementById('docGuide'), guideNames, false);
-  fillSel(document.getElementById('rosterBranch'), branches, false);
+  const auth = currentAuth();
+  const isBranchLogin = !!(auth && !auth.isAdmin && auth.branch);
+  fillSel(document.getElementById('rosterBranch'), isBranchLogin ? [auth.branch] : branches, false);
+  document.getElementById('rosterBranch').disabled = isBranchLogin;
   fillSel(document.getElementById('handoverOld'), guideNames, false);
   fillSel(document.getElementById('handoverNew'), guideNames, false);
 
