@@ -679,6 +679,26 @@ function quarterlyAvgHoursForEmp(emp, qRange){
   for(let ds=qRange.start; ds<=qRange.end; ds=addDaysStr(ds,1)) sum += codeHours(effectiveCode(emp, ds));
   return sum / 13;
 }
+/* 운영자가 근무표를 등록/수정한 직후 즉시 초과 여부를 팝업으로 알림.
+   현재 화면에 표시된 월 범위에 걸친 주들 + 그 시점의 분기를 기준으로 검사. */
+function checkAndAlertHourLimit(emp){
+  if(!emp) return;
+  const coreDateList = getRosterDateList();
+  if(coreDateList.length===0) return;
+  const firstMonday = getWeekMonday(coreDateList[0]);
+  const lastMonday = getWeekMonday(coreDateList[coreDateList.length-1]);
+  const msgs = [];
+  for(let mo=firstMonday; mo<=lastMonday; mo=addDaysStr(mo,7)){
+    const hrs = weeklyHoursForEmp(emp, mo);
+    if(hrs > WEEKLY_HOUR_LIMIT) msgs.push(`· 주 ${shortLabel(mo)}~${shortLabel(addDaysStr(mo,6))}: ${hrs}시간 (상한 ${WEEKLY_HOUR_LIMIT}시간)`);
+  }
+  const qRange = getQuarterRange(coreDateList[Math.floor(coreDateList.length/2)]);
+  const qAvg = quarterlyAvgHoursForEmp(emp, qRange);
+  if(qAvg > QUARTER_AVG_LIMIT) msgs.push(`· 분기 ${qRange.start}~${qRange.end} 평균: ${qAvg.toFixed(1)}시간 (상한 ${QUARTER_AVG_LIMIT}시간)`);
+  if(msgs.length>0){
+    alert(`⚠ 근로시간 한도 초과\n${emp.name}(${emp.empno})\n\n` + msgs.join('\n'));
+  }
+}
 const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
@@ -1499,6 +1519,7 @@ function updateCode(empId, dateStr, val){
   if(val==='__auto__') delete e.overrides[dateStr]; else e.overrides[dateStr]=val;
   persist(); renderRoster();
   if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
+  checkAndAlertHourLimit(e);
 }
 function applyPreset(empId, key){
   const e = employees.find(e=>e.id===empId); if(!e) return;
@@ -1507,6 +1528,7 @@ function applyPreset(empId, key){
   e.pattern = pattern; e.patternStart = patternStart; e.overrides = {};
   logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key}`);
   persist(); renderRoster();
+  checkAndAlertHourLimit(e);
 }
 function deleteEmp(empId){
   const e = employees.find(e=>e.id===empId); if(!e) return;
@@ -1846,11 +1868,13 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   if(!name){ alert('성명을 입력하세요.'); return; }
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const gen = preset ? generateFromPreset(preset, ym+'-01') : {pattern:[], patternStart: ym+'-01'};
-  employees.push({ id:'emp_'+Date.now(), branch, zone, empno: empno||'-', name, rank: rank||'-', shift,
-    pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} });
+  const newEmp = { id:'emp_'+Date.now(), branch, zone, empno: empno||'-', name, rank: rank||'-', shift,
+    pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} };
+  employees.push(newEmp);
   logEvent(`직원 추가: ${name} (${branch})`);
   document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
   persist(); renderRoster();
+  checkAndAlertHourLimit(newEmp);
 });
 
 /* ---------- 캘린더 ---------- */
