@@ -770,6 +770,36 @@ function checkAndAlertHourLimit(emp, beforeViolations){
     alert(`⚠ 근로시간 한도 초과\n${emp.name}(${emp.empno})\n\n` + newMsgs.join('\n'));
   }
 }
+/* 같은 구역/호수·같은 날짜에는 주/야 담당이 각각 한 명씩만 서야 함(3인 1조: 주/야/숙(휴)).
+   예) 5일에 A=주, B=주처럼 같은 유형이 겹치면 안 됨 — 겹치는 유형(주 또는 야)의 집합을 반환.
+   숙/휴는 잔여 인원이 몰려도 무방한 슬롯이라 검사 대상에서 제외. */
+function getZoneDuplicateCodes(branch, zone, dateStr){
+  const dup = new Set();
+  if(!zone) return dup;
+  const staff = employees.filter(e=>e.branch===branch && e.zone===zone);
+  const counts = {};
+  staff.forEach(e=>{
+    const c = baseCodeOf(effectiveCode(e, dateStr));
+    if(c==='주' || c==='야') counts[c] = (counts[c]||0) + 1;
+  });
+  Object.keys(counts).forEach(c=>{ if(counts[c]>=2) dup.add(c); });
+  return dup;
+}
+/* updateCode() 편집 직전/직후의 중복 배정 집합을 비교해, "이번 편집으로 새로 생긴 중복"만 알림
+   (이미 있던 중복을 매번 다시 알리면 편집을 방해하므로 — 근로시간 초과 알림과 동일한 방식). */
+function checkAndAlertZoneDuplicate(emp, dateStr, beforeDup){
+  if(!emp || !emp.zone) return;
+  const after = getZoneDuplicateCodes(emp.branch, emp.zone, dateStr);
+  const before = beforeDup || new Set();
+  const newDup = [...after].filter(c=>!before.has(c));
+  if(newDup.length===0) return;
+  const staff = employees.filter(e=>e.branch===emp.branch && e.zone===emp.zone);
+  const lines = newDup.map(c=>{
+    const who = staff.filter(e=>baseCodeOf(effectiveCode(e, dateStr))===c).map(e=>e.name).join(', ');
+    return `· "${c}" 담당이 겹침: ${who}`;
+  });
+  alert(`⚠ 같은 구역/날짜에 근무 유형이 중복 배정됨\n구역: ${emp.zone} · ${dateStr}\n\n${lines.join('\n')}\n\n한 명은 다른 근무(주/야/숙 등)로 조정해 주세요.`);
+}
 const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
@@ -1772,6 +1802,7 @@ function updateCode(empId, dateStr, val){
     val = trimmed;
   }
   const beforeViolations = getHourViolations(e);
+  const beforeDup = getZoneDuplicateCodes(e.branch, e.zone, dateStr);
   const isFreshShiftPattern = e.shift==='교대' && (!e.pattern || e.pattern.length===0);
   if(isFreshShiftPattern && val==='주'){
     // 아직 패턴이 없는 "교대" 직원이 날짜 셀에 처음 "주"를 직접 등록하면, 기본 교대(주주야야숙휴)
@@ -1787,6 +1818,7 @@ function updateCode(empId, dateStr, val){
   persist(); renderRoster();
   if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
   checkAndAlertHourLimit(e, beforeViolations);
+  checkAndAlertZoneDuplicate(e, dateStr, beforeDup);
 }
 function applyPreset(empId, key){
   const e = employees.find(e=>e.id===empId); if(!e) return;
