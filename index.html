@@ -428,6 +428,25 @@
         </div>
       </div>
     </div>
+    <div class="card no-print" id="bulkLeaveCard">
+      <h2>연차 · 교육 · 청원 등 사전 등록</h2>
+      <p class="sub">앞으로 예정된 연차·교육·청원 등을 미리 등록해두면, 나중에 그 달을 조회할 때 자동으로 근무표에 반영됩니다(다음 달로 넘어가도 예외로 계속 유지되며 패턴 자동연장과 함께 적용됩니다).</p>
+      <div class="toolbar no-print">
+        <select id="bulkLeaveEmp"></select>
+        <select id="bulkLeaveCode">
+          <option value="연차">연차</option>
+          <option value="교육">교육</option>
+          <option value="청원">청원</option>
+          <option value="공가">공가</option>
+          <option value="병가">병가</option>
+          <option value="비번">비번</option>
+        </select>
+        <input type="date" id="bulkLeaveStart" title="시작일">
+        <span style="color:var(--text-mute);">~</span>
+        <input type="date" id="bulkLeaveEnd" title="종료일">
+        <button class="btn btn-primary" id="btnBulkLeaveApply">일괄 등록</button>
+      </div>
+    </div>
     <div class="card no-print" id="rosterZoneAdminCard">
       <h2>구역/호수 관리</h2>
       <p class="sub">위쪽 근무표 편집표는 열이 많아 구역/호수만 훑어보기 어려우니, 목록형으로 한눈에 보고 바로 수정할 수 있습니다. 지사/구역선택/검색 필터가 그대로 적용됩니다.</p>
@@ -672,9 +691,21 @@ const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번',''
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
 const HOUR_MAP = { '':0, '주':8, '야':14, '휴':0, '숙':0, '전일':22, '연차':0, '청원':0, '공가':0, '병가':0, '교육':8, '비번':0 };
+/* "도봉주"/"강북야"처럼 지역명을 붙인 직접입력 코드를 지원하기 위한 처리.
+   HOUR_MAP에 정확히 없는 코드는 끝부분이 어떤 기본 코드로 끝나는지 찾아 그 기본 코드
+   기준으로 시간·공백확인·색상 등을 그대로 적용한다(예: "도봉주" → "주"로 취급). */
+const LOCATION_TAGGABLE_CODES = ['전일','주','야','숙','휴'];
+function baseCodeOf(code){
+  if(!code) return code;
+  if(HOUR_MAP.hasOwnProperty(code)) return code;
+  for(const suf of LOCATION_TAGGABLE_CODES){
+    if(code.length>suf.length && code.endsWith(suf)) return suf;
+  }
+  return code;
+}
 /* 초과근무 경고 기준(시간). 사업장 실제 기준에 맞게 조정하세요. */
 const OVERTIME_THRESHOLD_HOURS = 240;
-function codeHours(code){ return HOUR_MAP.hasOwnProperty(code) ? HOUR_MAP[code] : 0; }
+function codeHours(code){ const b=baseCodeOf(code); return HOUR_MAP.hasOwnProperty(b) ? HOUR_MAP[b] : 0; }
 function monthlyHours(emp, dateList){ return dateList.reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
 
 /* ---------- 주당·분기 근로시간 모니터링 ----------
@@ -803,7 +834,7 @@ function onDutyCount(branch, dateStr){
   if(!dateStr) return {count:0,total:0};
   const staff = employees.filter(e=>e.branch===branch);
   let count=0;
-  staff.forEach(e=>{ if(!OFF_CODES.has(effectiveCode(e,dateStr))) count++; });
+  staff.forEach(e=>{ if(!OFF_CODES.has(baseCodeOf(effectiveCode(e,dateStr)))) count++; });
   return {count, total:staff.length};
 }
 function generateFromPreset(key, monthStartStr){
@@ -1525,9 +1556,12 @@ function renderRoster(){
       const code = effectiveCode(e, ds);
       const autoCode = autoCodeFor(e, ds);
       const ctxCls = coreSet.has(ds) ? '' : ' ctx';
-      b += `<td class="${isOverride?'is-override':''}${ctxCls}"><select class="codecell code-${code}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
+      const isCustomCode = isOverride && !CODE_LIST.includes(code);
+      b += `<td class="${isOverride?'is-override':''}${ctxCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${baseCodeOf(code)}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
         + `<option value="__auto__" ${!isOverride?'selected':''}>${autoCode || '·'}</option>`
-        + CODE_LIST.map(c=>`<option value="${c}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
+        + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
+        + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(code)}</option>` : '')
+        + `<option value="__custom__">직접입력(지역+코드)...</option>`
         + `</select></td>`;
     });
     b += `<td class="no-print"><button class="btn btn-danger" ${dis} style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
@@ -1543,7 +1577,33 @@ function renderRoster(){
   renderHourMonitor(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
   renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin);
+  renderBulkLeaveEmpOptions(staff);
 }
+/* 연차/교육/청원 등 사전 등록용 직원 선택 옵션(현재 필터에 맞춘 목록으로 갱신). */
+function renderBulkLeaveEmpOptions(staff){
+  const sel = document.getElementById('bulkLeaveEmp');
+  if(!sel) return;
+  const cur = sel.value;
+  const sorted = staff.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  sel.innerHTML = sorted.map(e=>`<option value="${e.id}">${esc(e.name)}(${esc(e.empno)})</option>`).join('');
+  if([...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
+document.getElementById('btnBulkLeaveApply').addEventListener('click', ()=>{
+  const empId = document.getElementById('bulkLeaveEmp').value;
+  const e = employees.find(x=>x.id===empId);
+  if(!e){ alert('등록할 직원을 선택하세요.'); return; }
+  const code = document.getElementById('bulkLeaveCode').value;
+  const start = document.getElementById('bulkLeaveStart').value;
+  const end = document.getElementById('bulkLeaveEnd').value;
+  if(!start || !end){ alert('시작일과 종료일을 모두 입력하세요.'); return; }
+  if(end < start){ alert('종료일이 시작일보다 빠릅니다.'); return; }
+  if(!e.overrides) e.overrides = {};
+  let count = 0;
+  for(let ds=start; ds<=end; ds=addDaysStr(ds,1)){ e.overrides[ds] = code; count++; }
+  logEvent(`${e.name}(${e.empno}) "${code}" 사전 등록: ${start}~${end} (${count}일)`);
+  persist(); renderRoster();
+  alert(`${e.name} 직원의 ${start}~${end}(${count}일)에 "${code}"를 등록했습니다.\n해당 월을 조회하면 자동으로 반영됩니다.`);
+});
 /* 근무표 편집표(가로로 긴 표)와 별도로, 구역/호수만 목록형으로 빠르게 보고 고칠 수 있는
    보조 표. 지사 로그인도 여기서 자기 지사 직원의 구역/호수를 편하게 관리할 수 있음
    (전용 "관리자 설정 > 구역별 관리" 화면은 admin 전용이라 지사 로그인은 접근 불가하므로). */
@@ -1581,7 +1641,7 @@ function renderZoneCoverageCheck(staff, coreDateList){
     const standbyCount = list.filter(e=>e.shift==='상시').length;
     const gaps = [];
     coreDateList.forEach(ds=>{
-      const codes = list.map(e=>effectiveCode(e, ds));
+      const codes = list.map(e=>baseCodeOf(effectiveCode(e, ds)));
       const missing = REQUIRED.filter(r=>!codes.includes(r));
       if(missing.length>0) gaps.push(`${shortLabel(ds)}(${missing.join('·')} 없음)`);
     });
@@ -1690,6 +1750,13 @@ document.getElementById('btnReqSubmit').addEventListener('click', ()=>{
 function updateCode(empId, dateStr, val){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!e.overrides) e.overrides={};
+  if(val==='__custom__'){
+    const input = prompt('지역+근무유형을 직접 입력하세요 (예: 도봉주, 도봉야, 강북숙).\n"주"/"야"/"숙"/"전일"/"휴"로 끝나야 근로시간 계산·근무 공백 확인에 정상 반영됩니다.', '');
+    if(input===null){ renderRoster(); return; }
+    const trimmed = input.trim();
+    if(!trimmed){ renderRoster(); return; }
+    val = trimmed;
+  }
   const beforeViolations = getHourViolations(e);
   const isFreshShiftPattern = e.shift==='교대' && (!e.pattern || e.pattern.length===0);
   if(isFreshShiftPattern && val==='주'){
