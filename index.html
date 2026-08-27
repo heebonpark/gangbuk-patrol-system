@@ -77,6 +77,8 @@
   table.grid tr:hover td{background:#FAFBFD;}
   table.grid input, table.grid select{width:100%;border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:5px;font-size:12.3px;font-family:var(--sans);}
   table.grid input:hover, table.grid select:hover{border-color:var(--border);background:#fff;}
+  table.zone-quick-preview-table td{text-align:center;font-weight:600;white-space:nowrap;min-width:26px;}
+  table.zone-quick-preview-table th{text-align:center;}
   table.grid input:focus, table.grid select:focus{border-color:var(--accent);background:#fff;outline:none;}
   .num{font-family:var(--mono);text-align:right;}
   .table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px;max-height:70vh;box-shadow:var(--shadow-sm);}
@@ -434,6 +436,16 @@
         </div>
       </div>
     </div>
+    <div class="card no-print" id="rosterHourMonitorCard">
+      <h2>주당 · 분기 근로시간 모니터링</h2>
+      <p class="sub">주(월~일) 64시간 초과 금지, 분기(13주) 평균 52시간 초과 금지 기준으로 입력과 동시에 자동 계산됩니다.</p>
+      <div class="table-scroll" id="rosterHourMonitor"></div>
+    </div>
+    <div class="card no-print" id="zoneQuickPreviewCard" style="display:none;">
+      <h2>빠른 미리보기<span id="zoneQuickPreviewZoneLabel" style="color:var(--text-mute);font-weight:400;"></span></h2>
+      <p class="sub">위에서 구역을 선택하면 그 구역만 간단히 색으로 구분해서 바로 확인할 수 있습니다(공식 제출용 PDF/엑셀 출력은 아래 "미리보기" 버튼을 이용하세요).</p>
+      <div class="table-scroll" id="zoneQuickPreview"></div>
+    </div>
     <div class="card no-print" id="bulkLeaveCard">
       <h2>연차 · 교육 · 청원 등 사전 등록</h2>
       <p class="sub">앞으로 예정된 연차·교육·청원 등을 미리 등록해두면, 나중에 그 달을 조회할 때 자동으로 근무표에 반영됩니다(다음 달로 넘어가도 예외로 계속 유지되며 패턴 자동연장과 함께 적용됩니다).</p>
@@ -462,11 +474,6 @@
       <h2>구역별 근무 공백 확인</h2>
       <p class="sub">구역/호수별로 "교대" 직원의 주 · 야 · 숙 담당이 하루도 빠짐없이 채워져 있는지 자동으로 확인합니다. 근무표 편집(위 표)은 구역/호수순으로 정렬되어 있습니다.</p>
       <div class="table-scroll" id="zoneCoverageCheck"></div>
-    </div>
-    <div class="card no-print" id="rosterHourMonitorCard">
-      <h2>주당 · 분기 근로시간 모니터링</h2>
-      <p class="sub">주(월~일) 64시간 초과 금지, 분기(13주) 평균 52시간 초과 금지 기준으로 입력과 동시에 자동 계산됩니다.</p>
-      <div class="table-scroll" id="rosterHourMonitor"></div>
     </div>
     <div class="doc-wrap doc-wrap-wide" id="rosterPreviewContainer" style="display:none;">
       <div id="rosterPreviewWrap"></div>
@@ -817,6 +824,22 @@ const ZONE_TEAM_PATTERNS = [
   ['야','야','숙','숙','주','주'],
   ['숙','숙','주','주','야','야'],
 ];
+/* 구역 패턴 자동 추천(규칙 기반): 딥러닝/머신러닝 모델을 두기엔 이 앱이 서버·학습 데이터가
+   없는 순수 브라우저 앱이라 적합하지 않아, 대신 "이미 그 구역에서 쓰이고 있는 패턴을 보고
+   비어있는 자리(주/야/숙 중 아직 없는 phase)를 자동으로 채워주는" 규칙 기반 추천으로 구현.
+   추천 결과는 항상 프리셋 버튼/개별 셀 수정으로 그대로 덮어쓸 수 있음(수동 조정 항상 가능). */
+function suggestZonePattern(branch, zone){
+  if(!zone) return ZONE_TEAM_PATTERNS[0].slice();
+  const staff = employees.filter(e=>e.branch===branch && e.zone===zone && e.shift==='교대' && e.pattern && e.pattern.length===6);
+  const usedPhases = new Set();
+  staff.forEach(e=>{
+    const idx = ZONE_TEAM_PATTERNS.findIndex(p=> p.join('')===e.pattern.join(''));
+    if(idx>=0) usedPhases.add(idx);
+  });
+  for(let i=0;i<ZONE_TEAM_PATTERNS.length;i++){ if(!usedPhases.has(i)) return ZONE_TEAM_PATTERNS[i].slice(); }
+  // 이미 3개 phase가 다 쓰이고 있으면(4번째 이상 인원) 순환해서 이어붙임
+  return ZONE_TEAM_PATTERNS[staff.length % ZONE_TEAM_PATTERNS.length].slice();
+}
 
 /* ---------- 날짜 유틸 ---------- */
 function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
@@ -1612,9 +1635,36 @@ function renderRoster(){
   applyRosterToolbarState(branch, ym, finalized, isAdmin);
   renderUnsignedInfo(ym, staff);
   renderHourMonitor(staff, coreDateList);
+  renderZoneQuickPreview(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
   renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin);
   renderBulkLeaveEmpOptions(staff);
+}
+/* 구역을 선택했을 때만 나타나는 화면 확인용 빠른 미리보기(공식 PDF/엑셀 출력과는 무관 —
+   그쪽은 항상 지사 전체 인원 기준을 그대로 유지). 근로시간 모니터링 바로 아래, 편집표에서
+   멀리 스크롤하지 않고도 색으로 구분된 근무표를 바로 확인할 수 있게 함. */
+function renderZoneQuickPreview(staff, coreDateList){
+  const card = document.getElementById('zoneQuickPreviewCard');
+  const el = document.getElementById('zoneQuickPreview');
+  const labelEl = document.getElementById('zoneQuickPreviewZoneLabel');
+  if(!card || !el) return;
+  const zonePick = document.getElementById('rosterZonePick').value || 'all';
+  if(zonePick==='all' || staff.length===0 || coreDateList.length===0){ card.style.display='none'; return; }
+  card.style.display = '';
+  labelEl.textContent = ` — ${zonePick}`;
+  let h = '<table class="grid zone-quick-preview-table"><thead><tr><th style="text-align:left;">성명</th>';
+  coreDateList.forEach(ds=>{ h += `<th>${shortLabel(ds)}</th>`; });
+  h += '</tr></thead><tbody>';
+  staff.forEach(e=>{
+    h += `<tr><td style="text-align:left;white-space:nowrap;">${esc(e.name)}</td>`;
+    coreDateList.forEach(ds=>{
+      const code = effectiveCode(e, ds);
+      h += `<td class="code-${baseCodeOf(code)}" title="${esc(code)}">${esc(code)||'·'}</td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 /* 연차/교육/청원 등 사전 등록용 직원 선택 옵션(현재 필터에 맞춘 목록으로 갱신). */
 function renderBulkLeaveEmpOptions(staff){
@@ -2192,11 +2242,21 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   const preset = document.getElementById('newEmpPreset').value;
   if(!name){ alert('성명을 입력하세요.'); return; }
   const ym = document.getElementById('rosterMonth').value || currentMonth;
-  const gen = preset ? generateFromPreset(preset, ym+'-01') : {pattern:[], patternStart: ym+'-01'};
+  let gen, autoSuggested = false;
+  if(preset){
+    gen = generateFromPreset(preset, ym+'-01');
+  } else if(shift==='교대' && zone){
+    // 프리셋을 고르지 않았어도 구역/호수가 있는 "교대" 직원이면, 그 구역에서 이미 쓰이고
+    // 있는 패턴을 보고 비어있는 자리(주/야/숙)를 자동으로 추천해 채워줌(규칙 기반 자동 추천).
+    gen = { pattern: suggestZonePattern(branch, zone), patternStart: ym+'-01' };
+    autoSuggested = true;
+  } else {
+    gen = { pattern:[], patternStart: ym+'-01' };
+  }
   const newEmp = { id:'emp_'+Date.now(), branch, zone, duty, empno: empno||'-', name, rank: rank||'-', shift,
     pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} };
   employees.push(newEmp);
-  logEvent(`직원 추가: ${name} (${branch})`);
+  logEvent(`직원 추가: ${name} (${branch})${autoSuggested?` — 구역 "${zone}" 기존 패턴 기반 자동추천 적용(${gen.pattern.join('')})`:''}`);
   document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpDuty').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
   persist(); renderRoster();
   checkAndAlertHourLimit(newEmp);
@@ -2776,7 +2836,15 @@ function updateEmpZone(empId, val){
   const old = e.zone || '';
   if(old === val) return;
   e.zone = val;
-  logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
+  let autoNote = '';
+  if(val && e.shift==='교대' && (!e.pattern || e.pattern.length===0)){
+    // 패턴이 아직 없던 "교대" 직원에게 구역/호수가 새로 지정되면, 그 구역의 기존 패턴을 보고
+    // 비어있는 자리를 자동 추천해 채워줌(규칙 기반 자동 추천 — 수동으로 언제든 다시 조정 가능).
+    e.pattern = suggestZonePattern(e.branch, val);
+    e.patternStart = (document.getElementById('rosterMonth').value || currentMonth) + '-01';
+    autoNote = ` — 구역 기존 패턴 기반 자동추천 적용(${e.pattern.join('')})`;
+  }
+  logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}${autoNote}`);
   persist(); renderRoster();
 }
 function updateEmpDuty(empId, val){
