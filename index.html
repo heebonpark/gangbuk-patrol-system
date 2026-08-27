@@ -1476,27 +1476,33 @@ function renderRoster(){
   renderHourMonitor(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
 }
-/* 구역/호수별로 "교대" 직원의 주/야/숙 담당이 하루도 빠짐없이 채워져 있는지 확인.
-   같은 구역에 셋 중 하나라도 그 날 담당자가 없으면(근무 공백) 빨간색으로 표시. */
+/* 구역/호수별로 주/야/숙 담당이 하루도 빠짐없이 채워져 있는지 확인.
+   3교대 체제가 있는 구역(=그 구역에 "교대" 직원이 1명 이상)만 검사 대상으로 삼되,
+   실제 커버 여부는 그 구역의 전체 인원(교대+상시 등)을 기준으로 판단한다 — 연차 등으로
+   교대 인원이 빠지고 상시 근무자가 그 날만 주/야/숙으로 대체근무(수동 예외)를 서는
+   경우도 정상적으로 "공백 없음"으로 인정하기 위함. */
 function renderZoneCoverageCheck(staff, coreDateList){
   const el = document.getElementById('zoneCoverageCheck');
   if(!el) return;
-  const shiftStaff = staff.filter(e=>e.shift==='교대' && e.zone);
-  if(shiftStaff.length===0 || coreDateList.length===0){ el.innerHTML = '<p class="sub" style="margin:0;">구역/호수가 등록된 "교대" 직원이 없습니다.</p>'; return; }
+  if(staff.length===0 || coreDateList.length===0){ el.innerHTML = ''; return; }
   const REQUIRED = ['주','야','숙'];
   const zones = {};
-  shiftStaff.forEach(e=>{ (zones[e.zone]=zones[e.zone]||[]).push(e); });
-  const zoneNames = Object.keys(zones).sort((a,b)=>a.localeCompare(b));
+  staff.forEach(e=>{ if(!e.zone) return; (zones[e.zone]=zones[e.zone]||[]).push(e); });
+  const zoneNames = Object.keys(zones).filter(z=> zones[z].some(e=>e.shift==='교대')).sort((a,b)=>a.localeCompare(b));
+  if(zoneNames.length===0){ el.innerHTML = '<p class="sub" style="margin:0;">구역/호수가 등록된 "교대" 직원이 없습니다.</p>'; return; }
   let h = '<table class="grid zone-coverage-table"><thead><tr><th style="text-align:left;">구역/호수</th><th>인원</th><th style="text-align:left;">근무 공백(담당자 없는 날)</th></tr></thead><tbody>';
   zoneNames.forEach(z=>{
-    const list = zones[z];
+    const list = zones[z]; // 교대 + 상시 등 이 구역의 전체 인원 — 대체근무 반영
+    const shiftCount = list.filter(e=>e.shift==='교대').length;
+    const standbyCount = list.filter(e=>e.shift==='상시').length;
     const gaps = [];
     coreDateList.forEach(ds=>{
       const codes = list.map(e=>effectiveCode(e, ds));
       const missing = REQUIRED.filter(r=>!codes.includes(r));
       if(missing.length>0) gaps.push(`${shortLabel(ds)}(${missing.join('·')} 없음)`);
     });
-    h += `<tr><td style="text-align:left;">${esc(z)}</td><td>${list.length}명</td><td class="${gaps.length?'hours-over':''}" style="text-align:left;">${gaps.length ? gaps.join(', ') : '공백 없음'}</td></tr>`;
+    const countLabel = `교대 ${shiftCount}명` + (standbyCount ? ` + 상시 ${standbyCount}명(대체가능)` : '');
+    h += `<tr><td style="text-align:left;">${esc(z)}</td><td>${countLabel}</td><td class="${gaps.length?'hours-over':''}" style="text-align:left;">${gaps.length ? gaps.join(', ') : '공백 없음'}</td></tr>`;
   });
   h += '</tbody></table>';
   el.innerHTML = h;
