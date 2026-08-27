@@ -428,6 +428,11 @@
         </div>
       </div>
     </div>
+    <div class="card no-print" id="rosterZoneAdminCard">
+      <h2>구역/호수 관리</h2>
+      <p class="sub">위쪽 근무표 편집표는 열이 많아 구역/호수만 훑어보기 어려우니, 목록형으로 한눈에 보고 바로 수정할 수 있습니다. 지사/구역선택/검색 필터가 그대로 적용됩니다.</p>
+      <div class="table-scroll" id="rosterZoneAdminTable"></div>
+    </div>
     <div class="card no-print" id="zoneCoverageCard">
       <h2>구역별 근무 공백 확인</h2>
       <p class="sub">구역/호수별로 "교대" 직원의 주 · 야 · 숙 담당이 하루도 빠짐없이 채워져 있는지 자동으로 확인합니다. 근무표 편집(위 표)은 구역/호수순으로 정렬되어 있습니다.</p>
@@ -1537,6 +1542,23 @@ function renderRoster(){
   renderUnsignedInfo(ym, staff);
   renderHourMonitor(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
+  renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin);
+}
+/* 근무표 편집표(가로로 긴 표)와 별도로, 구역/호수만 목록형으로 빠르게 보고 고칠 수 있는
+   보조 표. 지사 로그인도 여기서 자기 지사 직원의 구역/호수를 편하게 관리할 수 있음
+   (전용 "관리자 설정 > 구역별 관리" 화면은 admin 전용이라 지사 로그인은 접근 불가하므로). */
+function renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin){
+  const el = document.getElementById('rosterZoneAdminTable');
+  if(!el) return;
+  if(staff.length===0){ el.innerHTML = ''; return; }
+  const dis = (finalized && !isAdmin) ? 'disabled' : '';
+  let h = '<table class="grid"><thead><tr><th>사번</th><th>성명</th><th>직급</th><th>근무조</th><th style="text-align:left;">구역/호수</th></tr></thead><tbody>';
+  staff.forEach(e=>{
+    h += `<tr><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(e.rank)}</td><td>${esc(e.shift)}</td>
+      <td style="text-align:left;"><input type="text" ${dis} value="${esc(e.zone||'')}" placeholder="예: 401호" onchange="updateEmpZone('${e.id}', this.value)"></td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
 }
 /* 구역/호수별로 주/야/숙 담당이 하루도 빠짐없이 채워져 있는지 확인.
    3교대 체제가 있는 구역(=그 구역에 "교대" 직원이 1명 이상)만 검사 대상으로 삼되,
