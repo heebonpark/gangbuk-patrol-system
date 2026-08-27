@@ -27,6 +27,8 @@
     --shadow-lg: 0 14px 32px rgba(16,24,40,0.10), 0 2px 6px rgba(16,24,40,0.06);
   }
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;scroll-padding-top:16px;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} }
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
   body{min-height:100vh;-webkit-font-smoothing:antialiased;}
   ::selection{background:var(--accent-warm-soft);}
@@ -55,6 +57,25 @@
   .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:19px 21px;margin-bottom:16px;box-shadow:var(--shadow-sm);transition:box-shadow 0.2s ease;}
   .card h2{font-family:var(--display);font-size:15.5px;font-weight:700;margin:0 0 3px;letter-spacing:-0.1px;}
   .card .sub{font-size:12px;color:var(--text-mute);margin:0 0 14px;}
+  .card h2 .tag-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:middle;position:relative;top:-1px;}
+  .tag-dot.primary{background:var(--accent);}
+  .tag-dot.safety{background:var(--danger);}
+  .tag-dot.tool{background:var(--text-mute);}
+
+  /* 자주 안 쓰는 보조 카드는 details/summary로 접었다 펼 수 있게 — 스크롤 피로 줄이기 */
+  details.card{padding:0;}
+  details.card > summary{list-style:none;cursor:pointer;padding:19px 21px;display:flex;align-items:center;justify-content:space-between;gap:12px;user-select:none;border-radius:12px;transition:background 0.15s ease;}
+  details.card > summary::-webkit-details-marker{display:none;}
+  details.card > summary:hover{background:var(--surface-2,#F8FAFD);}
+  details.card > summary .summary-head h2{margin-bottom:2px;}
+  details.card > summary .summary-head .sub{margin:0;}
+  details.card > summary .chev{flex:none;color:var(--text-mute);transition:transform 0.2s ease;width:18px;height:18px;}
+  details.card[open] > summary .chev{transform:rotate(90deg);}
+  details.card[open] > summary{border-radius:12px 12px 0 0;box-shadow:inset 0 -1px 0 var(--border);}
+  details.card > .details-body{padding:16px 21px 21px;}
+
+  .callout-warn{color:var(--warn);background:var(--warn-bg);padding:9px 12px;border-radius:9px;font-weight:600;font-size:12px;display:flex;align-items:flex-start;gap:7px;margin:0 0 14px;line-height:1.55;}
+  .callout-warn::before{content:"⚠";flex:none;}
 
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
   .toolbar select, .toolbar input[type=text], .toolbar input[type=date], .toolbar input[type=number]{padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:var(--sans);background:#fff;transition:border-color 0.15s ease;}
@@ -374,7 +395,7 @@
   <!-- ROSTER PANEL -->
   <section class="panel" id="panel-roster">
     <div class="card">
-      <h2>지사별 근무표 (근태 로스터)</h2>
+      <h2><span class="tag-dot primary"></span>지사별 근무표 (근태 로스터)</h2>
       <p class="sub">각 직원은 "반복 패턴 + 예외(연차 등)"로 관리됩니다. 다음 달로 넘어가도 패턴이 자동으로 이어지며, 예외만 새로 입력하면 됩니다.</p>
       <div class="toolbar no-print">
         <select id="rosterBranch"></select>
@@ -437,44 +458,58 @@
       </div>
     </div>
     <div class="card no-print" id="rosterHourMonitorCard">
-      <h2>주당 · 분기 근로시간 모니터링</h2>
+      <h2><span class="tag-dot safety"></span>주당 · 분기 근로시간 모니터링</h2>
       <p class="sub">주(월~일) 64시간 초과 금지, 분기(13주) 평균 52시간 초과 금지 기준으로 입력과 동시에 자동 계산됩니다.</p>
-      <p class="sub login-hidden" id="hourMonitorFilterWarning" style="color:var(--warn);background:var(--warn-bg);padding:8px 10px;border-radius:8px;font-weight:600;">⚠ 구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
+      <p class="callout-warn login-hidden" id="hourMonitorFilterWarning">구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
       <div class="table-scroll" id="rosterHourMonitor"></div>
     </div>
     <div class="card no-print" id="zoneQuickPreviewCard" style="display:none;">
-      <h2>빠른 미리보기<span id="zoneQuickPreviewZoneLabel" style="color:var(--text-mute);font-weight:400;"></span></h2>
+      <h2><span class="tag-dot tool"></span>빠른 미리보기<span id="zoneQuickPreviewZoneLabel" style="color:var(--text-mute);font-weight:400;"></span></h2>
       <p class="sub">위에서 구역을 선택하면 그 구역만 간단히 색으로 구분해서 바로 확인할 수 있습니다(공식 제출용 PDF/엑셀 출력은 아래 "미리보기" 버튼을 이용하세요).</p>
       <div class="table-scroll" id="zoneQuickPreview"></div>
     </div>
-    <div class="card no-print" id="bulkLeaveCard">
-      <h2>연차 · 교육 · 청원 등 사전 등록</h2>
-      <p class="sub">앞으로 예정된 연차·교육·청원 등을 미리 등록해두면, 나중에 그 달을 조회할 때 자동으로 근무표에 반영됩니다(다음 달로 넘어가도 예외로 계속 유지되며 패턴 자동연장과 함께 적용됩니다).</p>
-      <div class="toolbar no-print">
-        <select id="bulkLeaveEmp"></select>
-        <select id="bulkLeaveCode">
-          <option value="연차">연차</option>
-          <option value="교육">교육</option>
-          <option value="청원">청원</option>
-          <option value="공가">공가</option>
-          <option value="병가">병가</option>
-          <option value="비번">비번</option>
-        </select>
-        <input type="date" id="bulkLeaveStart" title="시작일">
-        <span style="color:var(--text-mute);">~</span>
-        <input type="date" id="bulkLeaveEnd" title="종료일">
-        <button class="btn btn-primary" id="btnBulkLeaveApply">일괄 등록</button>
+    <details class="card no-print" id="bulkLeaveCard">
+      <summary>
+        <div class="summary-head">
+          <h2><span class="tag-dot tool"></span>연차 · 교육 · 청원 등 사전 등록</h2>
+          <p class="sub">앞으로 예정된 연차·교육·청원 등을 미리 등록해두면, 나중에 그 달을 조회할 때 자동으로 근무표에 반영됩니다.</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+      </summary>
+      <div class="details-body">
+        <div class="toolbar no-print" style="margin-bottom:0;">
+          <select id="bulkLeaveEmp"></select>
+          <select id="bulkLeaveCode">
+            <option value="연차">연차</option>
+            <option value="교육">교육</option>
+            <option value="청원">청원</option>
+            <option value="공가">공가</option>
+            <option value="병가">병가</option>
+            <option value="비번">비번</option>
+          </select>
+          <input type="date" id="bulkLeaveStart" title="시작일">
+          <span style="color:var(--text-mute);">~</span>
+          <input type="date" id="bulkLeaveEnd" title="종료일">
+          <button class="btn btn-primary" id="btnBulkLeaveApply">일괄 등록</button>
+        </div>
       </div>
-    </div>
-    <div class="card no-print" id="rosterZoneAdminCard">
-      <h2>구역/호수 관리</h2>
-      <p class="sub">위쪽 근무표 편집표는 열이 많아 구역/호수만 훑어보기 어려우니, 목록형으로 한눈에 보고 바로 수정할 수 있습니다. 지사/구역선택/검색 필터가 그대로 적용됩니다.</p>
-      <div class="table-scroll" id="rosterZoneAdminTable"></div>
-    </div>
+    </details>
+    <details class="card no-print" id="rosterZoneAdminCard">
+      <summary>
+        <div class="summary-head">
+          <h2><span class="tag-dot tool"></span>구역/호수 관리</h2>
+          <p class="sub">사번·성명·직무·구역/호수를 목록형으로 한눈에 보고 바로 수정합니다.</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+      </summary>
+      <div class="details-body">
+        <div class="table-scroll" id="rosterZoneAdminTable"></div>
+      </div>
+    </details>
     <div class="card no-print" id="zoneCoverageCard">
-      <h2>구역별 근무 공백 확인</h2>
+      <h2><span class="tag-dot safety"></span>구역별 근무 공백 확인</h2>
       <p class="sub">구역/호수별로 "교대" 직원의 주 · 야 · 숙 담당이 하루도 빠짐없이 채워져 있는지 자동으로 확인합니다. 근무표 편집(위 표)은 구역/호수순으로 정렬되어 있습니다.</p>
-      <p class="sub login-hidden" id="zoneCoverageFilterWarning" style="color:var(--warn);background:var(--warn-bg);padding:8px 10px;border-radius:8px;font-weight:600;">⚠ 구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 다른 구역의 공백은 여기 표시되지 않을 수 있으니, 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
+      <p class="callout-warn login-hidden" id="zoneCoverageFilterWarning">구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 다른 구역의 공백은 여기 표시되지 않을 수 있으니, 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
       <div class="table-scroll" id="zoneCoverageCheck"></div>
     </div>
     <div class="doc-wrap doc-wrap-wide" id="rosterPreviewContainer" style="display:none;">
