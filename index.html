@@ -439,6 +439,7 @@
     <div class="card no-print" id="rosterHourMonitorCard">
       <h2>주당 · 분기 근로시간 모니터링</h2>
       <p class="sub">주(월~일) 64시간 초과 금지, 분기(13주) 평균 52시간 초과 금지 기준으로 입력과 동시에 자동 계산됩니다.</p>
+      <p class="sub login-hidden" id="hourMonitorFilterWarning" style="color:var(--warn);background:var(--warn-bg);padding:8px 10px;border-radius:8px;font-weight:600;">⚠ 구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
       <div class="table-scroll" id="rosterHourMonitor"></div>
     </div>
     <div class="card no-print" id="zoneQuickPreviewCard" style="display:none;">
@@ -473,6 +474,7 @@
     <div class="card no-print" id="zoneCoverageCard">
       <h2>구역별 근무 공백 확인</h2>
       <p class="sub">구역/호수별로 "교대" 직원의 주 · 야 · 숙 담당이 하루도 빠짐없이 채워져 있는지 자동으로 확인합니다. 근무표 편집(위 표)은 구역/호수순으로 정렬되어 있습니다.</p>
+      <p class="sub login-hidden" id="zoneCoverageFilterWarning" style="color:var(--warn);background:var(--warn-bg);padding:8px 10px;border-radius:8px;font-weight:600;">⚠ 구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 다른 구역의 공백은 여기 표시되지 않을 수 있으니, 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
       <div class="table-scroll" id="zoneCoverageCheck"></div>
     </div>
     <div class="doc-wrap doc-wrap-wide" id="rosterPreviewContainer" style="display:none;">
@@ -701,6 +703,10 @@ const CORE_FIELDS = [
 ];
 const CODE_LIST = ['','주','야','휴','숙','전일','연차','청원','공가','병가','교육','비번'];
 const DUTY_LIST = ['','기술점검','출동지원','기계경비·출동'];
+// "+ 직원 추가" 폼의 직무 드롭다운도 DUTY_LIST에서 한 번 더 채워, 목록형 관리표의
+// 드롭다운(DUTY_LIST 기반)과 항상 같은 선택지를 갖도록 한다(값이 두 곳에 따로 있으면
+// 하나만 고치고 잊어버리기 쉬움).
+document.getElementById('newEmpDuty').innerHTML = DUTY_LIST.map(d=>`<option value="${d}">${d||'직무 선택 안함'}</option>`).join('');
 const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
@@ -795,17 +801,33 @@ function getZoneDuplicateCodes(branch, zone, dateStr){
 /* updateCode() 편집 직전/직후의 중복 배정 집합을 비교해, "이번 편집으로 새로 생긴 중복"만 알림
    (이미 있던 중복을 매번 다시 알리면 편집을 방해하므로 — 근로시간 초과 알림과 동일한 방식). */
 function checkAndAlertZoneDuplicate(emp, dateStr, beforeDup){
-  if(!emp || !emp.zone) return;
-  const after = getZoneDuplicateCodes(emp.branch, emp.zone, dateStr);
-  const before = beforeDup || new Set();
-  const newDup = [...after].filter(c=>!before.has(c));
-  if(newDup.length===0) return;
+  checkAndAlertZoneDuplicateForDates(emp, [dateStr], {[dateStr]: beforeDup});
+}
+/* 여러 날짜(프리셋 적용·구역 자동추천 등으로 한 번에 바뀌는 범위)에 걸쳐 새로 생긴 구역
+   중복 배정을 한꺼번에 검사해 알림. dates별 "편집 전" 중복 집합(beforeMap)과 비교해
+   새로 생긴 것만 골라낸다 — 단일 날짜용 checkAndAlertZoneDuplicate()도 이 함수를 재사용. */
+function checkAndAlertZoneDuplicateForDates(emp, dates, beforeMap){
+  if(!emp || !emp.zone || !dates || dates.length===0) return;
   const staff = employees.filter(e=>e.branch===emp.branch && e.zone===emp.zone);
-  const lines = newDup.map(c=>{
-    const who = staff.filter(e=>baseCodeOf(effectiveCode(e, dateStr))===c).map(e=>e.name).join(', ');
-    return `· "${c}" 담당이 겹침: ${who}`;
+  const lines = [];
+  dates.forEach(ds=>{
+    const before = (beforeMap && beforeMap[ds]) || new Set();
+    const after = getZoneDuplicateCodes(emp.branch, emp.zone, ds);
+    [...after].filter(c=>!before.has(c)).forEach(c=>{
+      const who = staff.filter(e=>baseCodeOf(effectiveCode(e, ds))===c).map(e=>e.name).join(', ');
+      lines.push(`· ${ds} "${c}" 담당이 겹침: ${who}`);
+    });
   });
-  alert(`⚠ 같은 구역/날짜에 근무 유형이 중복 배정됨\n구역: ${emp.zone} · ${dateStr}\n\n${lines.join('\n')}\n\n한 명은 다른 근무(주/야/숙 등)로 조정해 주세요.`);
+  if(lines.length===0) return;
+  const shown = lines.slice(0,12).join('\n') + (lines.length>12 ? `\n...외 ${lines.length-12}건` : '');
+  alert(`⚠ 같은 구역/날짜에 근무 유형이 중복 배정됨\n구역: ${emp.zone}\n\n${shown}\n\n한 명은 다른 근무(주/야/숙 등)로 조정해 주세요.`);
+}
+/* 여러 날짜에 걸친 "편집 전" 구역 중복 집합 스냅샷(전/후 비교용). */
+function getZoneDupSnapshot(emp, dates){
+  const map = {};
+  if(!emp || !emp.zone) return map;
+  dates.forEach(ds=>{ map[ds] = getZoneDuplicateCodes(emp.branch, emp.zone, ds); });
+  return map;
 }
 const PRESETS = {
   shift_night: ['야','휴','휴','주','주','야','야','휴'],
@@ -828,17 +850,22 @@ const ZONE_TEAM_PATTERNS = [
    없는 순수 브라우저 앱이라 적합하지 않아, 대신 "이미 그 구역에서 쓰이고 있는 패턴을 보고
    비어있는 자리(주/야/숙 중 아직 없는 phase)를 자동으로 채워주는" 규칙 기반 추천으로 구현.
    추천 결과는 항상 프리셋 버튼/개별 셀 수정으로 그대로 덮어쓸 수 있음(수동 조정 항상 가능). */
+/* 추천이 애매한 경우(이미 개인용 패턴이 섞여있거나, 3자리가 이미 다 채워짐)는 확신 없이
+   자동 적용하지 않고 null을 반환한다 — 사람이 실수로 겹치는 패턴을 자동 적용받는 것보다,
+   추천 없이 수동으로 정하게 하는 편이 안전하다(구역 중복배정 알림과 같은 원칙). */
 function suggestZonePattern(branch, zone){
   if(!zone) return ZONE_TEAM_PATTERNS[0].slice();
-  const staff = employees.filter(e=>e.branch===branch && e.zone===zone && e.shift==='교대' && e.pattern && e.pattern.length===6);
+  const staff = employees.filter(e=>e.branch===branch && e.zone===zone && e.shift==='교대' && e.pattern && e.pattern.length>0);
+  if(staff.length===0) return ZONE_TEAM_PATTERNS[0].slice();
   const usedPhases = new Set();
+  let hasOtherStylePattern = false;
   staff.forEach(e=>{
     const idx = ZONE_TEAM_PATTERNS.findIndex(p=> p.join('')===e.pattern.join(''));
-    if(idx>=0) usedPhases.add(idx);
+    if(idx>=0) usedPhases.add(idx); else hasOtherStylePattern = true;
   });
+  if(hasOtherStylePattern) return null; // 이미 개인용(주주야야숙휴 등) 등 다른 스타일이 섞여있어 추천 보류
   for(let i=0;i<ZONE_TEAM_PATTERNS.length;i++){ if(!usedPhases.has(i)) return ZONE_TEAM_PATTERNS[i].slice(); }
-  // 이미 3개 phase가 다 쓰이고 있으면(4번째 이상 인원) 순환해서 이어붙임
-  return ZONE_TEAM_PATTERNS[staff.length % ZONE_TEAM_PATTERNS.length].slice();
+  return null; // 3자리가 이미 다 채워짐(4번째 이상 인원) -> 겹치는 패턴을 자동 적용하지 않고 수동 결정에 맡김
 }
 /* "주야야숙숙"(5일 주기) — 첫 이틀이 주,야로 시작하는 경우의 기본 패턴. */
 const ALT_START_PATTERN_JUYA = ['주','야','야','숙','숙'];
@@ -857,14 +884,16 @@ function zoneHasTeamPattern(branch, zone){
    아직 하루치만 입력된 상태라 이틀치가 안 모이면 null을 반환해 판단을 보류한다(그 사이엔
    단순 개별 예외로만 저장됨). */
 function detectStartPattern(e, dateStr, val){
-  if(val!=='주' && val!=='야') return null;
+  const base = baseCodeOf(val);
+  if(base!=='주' && base!=='야') return null;
   const prevDs = addDaysStr(dateStr, -1), nextDs = addDaysStr(dateStr, 1);
   const ov = e.overrides || {};
+  const nextBase = baseCodeOf(ov[nextDs]), prevBase = baseCodeOf(ov[prevDs]);
   let day1Ds, day1Val, day2Ds, day2Val;
-  if(ov[nextDs]==='주' || ov[nextDs]==='야'){
-    day1Ds = dateStr; day1Val = val; day2Ds = nextDs; day2Val = ov[nextDs];
-  } else if(ov[prevDs]==='주' || ov[prevDs]==='야'){
-    day1Ds = prevDs; day1Val = ov[prevDs]; day2Ds = dateStr; day2Val = val;
+  if(nextBase==='주' || nextBase==='야'){
+    day1Ds = dateStr; day1Val = base; day2Ds = nextDs; day2Val = nextBase;
+  } else if(prevBase==='주' || prevBase==='야'){
+    day1Ds = prevDs; day1Val = prevBase; day2Ds = dateStr; day2Val = base;
   } else {
     return null;
   }
@@ -1530,8 +1559,8 @@ document.getElementById('rosterViewMode').addEventListener('change', ()=>{
   }
   renderRoster();
 });
-document.getElementById('rosterRefDate').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
-document.getElementById('rosterSortBy').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterRefDate').addEventListener('change', ()=>{ renderRoster(); });
+document.getElementById('rosterSortBy').addEventListener('change', ()=>{ renderRoster(); });
 /* 근무표 목록 정렬: 사용자가 구역/호수순, 상시근무자 우선, 사번순, 성명순 중 자유롭게 선택 가능. */
 function shiftRank(s){ return s==='상시' ? 0 : s==='교대' ? 1 : 2; }
 function sortRosterStaff(staff){
@@ -1552,6 +1581,9 @@ function sortRosterStaff(staff){
    순서를 그대로 가져와 인접한 같은 구역 직원과 order 값을 맞바꾼다. */
 function moveEmpInZone(empId, dir){
   const branch = document.getElementById('rosterBranch').value || branches[0];
+  // 구역선택/검색 필터가 걸려있으면 부분집합만으로 order가 매겨져 필터 해제 후 순서가
+  // 꼬일 수 있으므로, 버튼 자체를 숨기는 것과 별개로 여기서도 한 번 더 막는다(방어적 처리).
+  if((document.getElementById('rosterZonePick').value||'all')!=='all' || (document.getElementById('rosterStaffSearch').value||'').trim()) return;
   const staff = getFilteredRosterStaff(branch);
   const idx = staff.findIndex(e=>e.id===empId);
   if(idx<0) return;
@@ -1579,12 +1611,18 @@ function renderZonePickOptions(fullStaff){
   sel.innerHTML = '<option value="all">전체 구역</option>' + zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('');
   if([...sel.options].some(o=>o.value===cur)) sel.value = cur;
 }
-document.getElementById('rosterZonePick').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
-document.getElementById('rosterStaffSearch').addEventListener('input', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterZonePick').addEventListener('change', ()=>{ renderRoster(); });
+let rosterStaffSearchDebounce = null;
+document.getElementById('rosterStaffSearch').addEventListener('input', ()=>{
+  // 타이핑할 때마다 편집표+근로시간+공백확인+구역관리표까지 전부 다시 그리면 무거우니,
+  // 입력이 잠깐 멈췄을 때만 한 번 갱신한다.
+  clearTimeout(rosterStaffSearchDebounce);
+  rosterStaffSearchDebounce = setTimeout(renderRoster, 250);
+});
 document.getElementById('btnRosterFilterReset').addEventListener('click', ()=>{
   document.getElementById('rosterZonePick').value = 'all';
   document.getElementById('rosterStaffSearch').value = '';
-  renderRoster(); refreshRosterPreviewIfOpen();
+  renderRoster();
 });
 
 /* 현재 화면(지사/부지사/구역선택/검색어/정렬기준)에 맞춰 걸러진 근무표 대상 직원 목록을 반환.
@@ -1607,6 +1645,10 @@ function renderRoster(){
   const dateList = getRosterContextDateList();
   renderZoneFilterBar(branch);
   const staff = getFilteredRosterStaff(branch);
+  // 구역선택/개인검색으로 좁혀진 상태인지 — 이 상태에서는 구역 내 순서 조정(▲▼)을 막고
+  // (좁혀진 부분집합만 놓고 order를 새로 매기면 필터 해제 후 전체 순서가 꼬임), 근로시간·
+  // 근무공백 점검 카드에도 경고 배너를 띄운다(지사 전체가 아닌 일부만 보고 있다는 걸 놓치지 않게).
+  const isNarrowed = (document.getElementById('rosterZonePick').value||'all')!=='all' || !!(document.getElementById('rosterStaffSearch').value||'').trim();
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1635,9 +1677,12 @@ function renderRoster(){
       b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(groupLabel)}</td></tr>`;
       lastGroup = groupLabel;
     }
-    const prevSameZone = sortMode==='zone' && idx>0 && (staff[idx-1].zone||'')===(e.zone||'');
-    const nextSameZone = sortMode==='zone' && idx<staff.length-1 && (staff[idx+1].zone||'')===(e.zone||'');
-    const reorderBtns = sortMode==='zone' ? `
+    // 구역선택/검색으로 좁혀진 상태에서는 순서 조정을 막음(부분집합만 놓고 순서를 매기면
+    // 필터를 껐을 때 전체 구역의 순서가 예기치 않게 섞이므로 — 필터 없는 전체 보기에서만 허용).
+    const canReorder = sortMode==='zone' && !isNarrowed;
+    const prevSameZone = canReorder && idx>0 && (staff[idx-1].zone||'')===(e.zone||'');
+    const nextSameZone = canReorder && idx<staff.length-1 && (staff[idx+1].zone||'')===(e.zone||'');
+    const reorderBtns = canReorder ? `
         <button class="btn btn-outline" ${dis||!prevSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 위로" onclick="moveEmpInZone('${e.id}',-1)">▲</button>
         <button class="btn btn-outline" ${dis||!nextSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 아래로" onclick="moveEmpInZone('${e.id}',1)">▼</button>` : '';
     b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}
@@ -1655,7 +1700,7 @@ function renderRoster(){
       const autoCode = autoCodeFor(e, ds);
       const ctxCls = coreSet.has(ds) ? '' : ' ctx';
       const isCustomCode = isOverride && !CODE_LIST.includes(code);
-      b += `<td class="${isOverride?'is-override':''}${ctxCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${baseCodeOf(code)}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
+      b += `<td class="${isOverride?'is-override':''}${ctxCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${esc(baseCodeOf(code))}" ${dis} onchange="updateCode('${e.id}','${ds}',this.value)">`
         + `<option value="__auto__" ${!isOverride?'selected':''}>${autoCode || '·'}</option>`
         + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
         + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(code)}</option>` : '')
@@ -1672,6 +1717,8 @@ function renderRoster(){
   refreshRosterPreviewIfOpen();
   applyRosterToolbarState(branch, ym, finalized, isAdmin);
   renderUnsignedInfo(ym, staff);
+  document.getElementById('hourMonitorFilterWarning').classList.toggle('login-hidden', !isNarrowed);
+  document.getElementById('zoneCoverageFilterWarning').classList.toggle('login-hidden', !isNarrowed);
   renderHourMonitor(staff, coreDateList);
   renderZoneQuickPreview(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
@@ -1697,7 +1744,7 @@ function renderZoneQuickPreview(staff, coreDateList){
     h += `<tr><td style="text-align:left;white-space:nowrap;">${esc(e.name)}</td>`;
     coreDateList.forEach(ds=>{
       const code = effectiveCode(e, ds);
-      h += `<td class="code-${baseCodeOf(code)}" title="${esc(code)}">${esc(code)||'·'}</td>`;
+      h += `<td class="code-${esc(baseCodeOf(code))}" title="${esc(code)}">${esc(code)||'·'}</td>`;
     });
     h += '</tr>';
   });
@@ -1890,13 +1937,17 @@ function updateCode(empId, dateStr, val){
     val = trimmed;
   }
   const beforeViolations = getHourViolations(e);
-  const beforeDup = getZoneDuplicateCodes(e.branch, e.zone, dateStr);
+  // detectStartPattern이 전날(prevDs)까지 끌어와 패턴을 확정할 수 있어, 그 경우도 놓치지
+  // 않도록 전날/당일/다음날 세 날짜의 "편집 전" 중복 상태를 미리 스냅샷해둔다.
+  const prevDs = addDaysStr(dateStr,-1), nextDs = addDaysStr(dateStr,1);
+  const beforeDupMap = getZoneDupSnapshot(e, [prevDs, dateStr, nextDs]);
   const isFreshShiftPattern = e.shift==='교대' && (!e.pattern || e.pattern.length===0);
   if(val==='__auto__'){
     delete e.overrides[dateStr];
   } else {
     e.overrides[dateStr]=val;
   }
+  let affectedDates = [dateStr];
   if(isFreshShiftPattern && val!=='__auto__'){
     // 아직 패턴이 없는 "교대" 직원이 날짜 셀을 직접 입력하기 시작하면, 처음 이틀치 조합을 보고
     // 반복 패턴을 자동 인식한다(주,주→주주야야숙휴 또는 구역이 숙숙 스타일이면 주주야야숙숙 /
@@ -1906,23 +1957,27 @@ function updateCode(empId, dateStr, val){
       e.pattern = det.pattern;
       e.patternStart = det.patternStart;
       det.clearDates.forEach(d=>{ delete e.overrides[d]; });
+      affectedDates = det.clearDates.slice();
       logEvent(`${e.name}(${e.empno}) 근무 시작 패턴 자동 인식: ${det.patternStart}부터 ${det.pattern.join('')} 적용`);
     }
   }
   persist(); renderRoster();
   if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
   checkAndAlertHourLimit(e, beforeViolations);
-  checkAndAlertZoneDuplicate(e, dateStr, beforeDup);
+  checkAndAlertZoneDuplicateForDates(e, affectedDates, beforeDupMap);
 }
 function applyPreset(empId, key){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   const beforeViolations = getHourViolations(e);
+  const coreDateList = getRosterDateList();
+  const beforeDupMap = getZoneDupSnapshot(e, coreDateList);
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const {pattern, patternStart} = generateFromPreset(key, ym+'-01');
   e.pattern = pattern; e.patternStart = patternStart; e.overrides = {};
   logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key}`);
   persist(); renderRoster();
   checkAndAlertHourLimit(e, beforeViolations);
+  checkAndAlertZoneDuplicateForDates(e, coreDateList, beforeDupMap);
 }
 /* 구역/호수가 같은 "교대" 직원을 3명 단위로 묶어 주/야/숙 담당이 항상 한 명씩 서도록
    자동 배정. 연차 등 예외는 그대로 두고(수동으로만 변경), 기존 예외는 초기화됨. */
@@ -1955,8 +2010,8 @@ function deleteEmp(empId){
   logEvent(`직원 삭제: ${e.name}(${e.empno})`);
   persist(); renderRoster();
 }
-document.getElementById('rosterBranch').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
-document.getElementById('rosterMonth').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterBranch').addEventListener('change', ()=>{ renderRoster(); });
+document.getElementById('rosterMonth').addEventListener('change', ()=>{ renderRoster(); });
 
 /* ---------- 근무표 미리보기 · 엑셀출력 · PDF출력 ---------- */
 
@@ -2025,6 +2080,7 @@ function renderRosterPreview(){
                 <th rowspan="2">구역<br>호수</th>
                 <th rowspan="2">사번</th>
                 <th rowspan="2" class="preview-name-col" style="width:40px;">성명</th>
+                <th rowspan="2">직무</th>
                 <th rowspan="2">직급</th>
                 <th rowspan="2">근무조</th>
                 ${grouped?"<th rowspan=\"2\">지사</th>":""}
@@ -2041,7 +2097,7 @@ function renderRosterPreview(){
         <tbody>`;
 
   if(staff.length===0){
-    html += `<tr><td colspan="${dateList.length+(grouped?9:8)}" style="padding:20px;color:#888;">등록된 직원이 없습니다.</td></tr>`;
+    html += `<tr><td colspan="${dateList.length+(grouped?10:9)}" style="padding:20px;color:#888;">등록된 직원이 없습니다.</td></tr>`;
   }else{
     let currentGroup = "";
     let groupIndex = -1;
@@ -2076,7 +2132,7 @@ function renderRosterPreview(){
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
       }
       
-      html += `<td>${e.empno}</td><td class="preview-name-col">${esc(e.name)}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
+      html += `<td>${e.empno}</td><td class="preview-name-col">${esc(e.name)}</td><td>${esc(e.duty||'')}</td><td>${e.rank}</td><td>${e.shift}</td>${grouped?`<td>${e.branch}</td>`:""}`;
       
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
@@ -2222,7 +2278,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
   const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all' && rosterZoneFilter!=='__main__') ? ('_' + rosterZoneFilter) : '';
   const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
-  const fixedCols = ['사번','성명','직급','근무조'];
+  const fixedCols = ['사번','성명','직무','직급','근무조'];
   const colCount = fixedCols.length + dateList.length + 1;
 
   const wb = new ExcelJS.Workbook();
@@ -2239,7 +2295,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   ws.getRow(2).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
   ws.getRow(3).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
   staff.forEach(e=>{
-    ws.addRow([e.empno, e.name, e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
+    ws.addRow([e.empno, e.name, e.duty||'', e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
   });
 
   const thin = { style:'thin', color:{argb:'FF94A3B8'} };
@@ -2289,9 +2345,11 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   let gen, autoSuggested = false;
   if(preset){
     gen = generateFromPreset(preset, ym+'-01');
-  } else if(shift==='교대' && zone){
+  } else if(shift==='교대' && zone && suggestZonePattern(branch, zone)){
     // 프리셋을 고르지 않았어도 구역/호수가 있는 "교대" 직원이면, 그 구역에서 이미 쓰이고
     // 있는 패턴을 보고 비어있는 자리(주/야/숙)를 자동으로 추천해 채워줌(규칙 기반 자동 추천).
+    // 이미 다른 스타일이 섞여있거나 3자리가 다 찬 경우(추천 확신 없음)는 아래 else로 빠져
+    // 빈 패턴으로 두고 수동 결정에 맡김.
     gen = { pattern: suggestZonePattern(branch, zone), patternStart: ym+'-01' };
     autoSuggested = true;
   } else {
@@ -2304,6 +2362,7 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpDuty').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
   persist(); renderRoster();
   checkAndAlertHourLimit(newEmp);
+  checkAndAlertZoneDuplicateForDates(newEmp, getRosterDateList());
 });
 
 /* ---------- 캘린더 ---------- */
@@ -2565,6 +2624,11 @@ function guessColAny(headerArr, keywords){
   for(const k of keywords){ const idx = guessCol(headerArr, k); if(idx!=='') return idx; }
   return '';
 }
+/* 엑셀 헤더에서 구역/직무 열을 찾을 때 쓰는 키워드 후보. ②근무표 가져오기·③전지사 취합
+   업로드 두 곳에서 똑같이 재사용해, 한쪽만 새 표현을 인식하고 다른 쪽은 놓치는 일이
+   없게 한다. */
+const ZONE_COL_KEYWORDS = ['구역/호수','구역호수','구역','호수','배치구역'];
+const DUTY_COL_KEYWORDS = ['직무','업무'];
 function guessFirstDateCol(headerArr){
   for(let i=0;i<headerArr.length;i++){ if(String(headerArr[i]).trim()==='1') return i; }
   return '';
@@ -2575,8 +2639,8 @@ function renderRosterMapUI(){
   const headerArr = rosterRawRows[headerRowGuess-1] || [];
   const empnoGuess = guessCol(headerArr,'사번');
   const nameGuess = guessCol(headerArr,'성명');
-  const zoneGuess = guessColAny(headerArr,['구역/호수','구역','호수','배치구역']);
-  const dutyGuess = guessColAny(headerArr,['직무','업무']);
+  const zoneGuess = guessColAny(headerArr, ZONE_COL_KEYWORDS);
+  const dutyGuess = guessColAny(headerArr, DUTY_COL_KEYWORDS);
   const rankGuess = guessCol(headerArr,'직급');
   const shiftGuess = guessCol(headerArr,'근무조');
   const dateColGuess = guessFirstDateCol(headerArr);
@@ -2710,8 +2774,8 @@ function renderBatchMapUI(){
   const headerRowGuess = guessBatchHeaderRow();
   const headerArr = batchRawRows[headerRowGuess-1] || [];
   const gubunGuess = guessCol(headerArr,'구분');
-  const zoneGuess = guessColAny(headerArr,['구역호수','구역/호수','구역','호수']);
-  const dutyGuess = guessColAny(headerArr,['직무','업무']);
+  const zoneGuess = guessColAny(headerArr, ZONE_COL_KEYWORDS);
+  const dutyGuess = guessColAny(headerArr, DUTY_COL_KEYWORDS);
   const empnoGuess = guessCol(headerArr,'사번');
   const nameGuess = guessCol(headerArr,'성명');
   const rankGuess = guessCol(headerArr,'직급');
@@ -2880,16 +2944,23 @@ function updateEmpZone(empId, val){
   const old = e.zone || '';
   if(old === val) return;
   e.zone = val;
+  const coreDateList = getRosterDateList();
+  const beforeDupMap = getZoneDupSnapshot(e, coreDateList); // 새 구역 배정 직전(패턴 아직 미적용) 기준 스냅샷
   let autoNote = '';
   if(val && e.shift==='교대' && (!e.pattern || e.pattern.length===0)){
     // 패턴이 아직 없던 "교대" 직원에게 구역/호수가 새로 지정되면, 그 구역의 기존 패턴을 보고
     // 비어있는 자리를 자동 추천해 채워줌(규칙 기반 자동 추천 — 수동으로 언제든 다시 조정 가능).
-    e.pattern = suggestZonePattern(e.branch, val);
-    e.patternStart = (document.getElementById('rosterMonth').value || currentMonth) + '-01';
-    autoNote = ` — 구역 기존 패턴 기반 자동추천 적용(${e.pattern.join('')})`;
+    // 이미 다른 스타일이 섞여있거나 3자리가 다 찬 경우는 추천하지 않고 그대로 둠.
+    const suggested = suggestZonePattern(e.branch, val);
+    if(suggested){
+      e.pattern = suggested;
+      e.patternStart = (document.getElementById('rosterMonth').value || currentMonth) + '-01';
+      autoNote = ` — 구역 기존 패턴 기반 자동추천 적용(${e.pattern.join('')})`;
+    }
   }
   logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}${autoNote}`);
   persist(); renderRoster();
+  checkAndAlertZoneDuplicateForDates(e, coreDateList, beforeDupMap);
 }
 function updateEmpDuty(empId, val){
   const e = employees.find(x=>x.id===empId); if(!e) return;
