@@ -382,6 +382,12 @@
         </select>
         <select id="rosterMonth"></select>
         <input type="date" id="rosterRefDate" style="display:none;">
+        <select id="rosterSortBy" title="근무표 목록 정렬 기준">
+          <option value="zone">정렬: 구역/호수순</option>
+          <option value="standby_first">정렬: 상시 근무자 우선</option>
+          <option value="empno">정렬: 사번순</option>
+          <option value="name">정렬: 성명순</option>
+        </select>
         <button class="btn btn-outline" id="btnZoneTeamRotation" title="같은 구역/호수 직원을 3명 단위로 묶어 주주야야숙숙 / 야야숙숙주주 / 숙숙주주야야 패턴을 자동 배정합니다.">구역별 3교대 자동배정</button>
         <span class="spacer"></span>
         <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
@@ -649,7 +655,7 @@ const CORE_FIELDS = [
   {key:'visit_date', label:'순회일자'}, {key:'visit_time', label:'순회시간'}, {key:'headcount', label:'배치인원'},
   {key:'manager', label:'담당자'}, {key:'remark', label:'비고'},
 ];
-const CODE_LIST = ['','주','야','숙','전일','연차','청원','공가','병가','교육','비번'];
+const CODE_LIST = ['','주','야','휴','숙','전일','연차','청원','공가','병가','교육','비번'];
 const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
@@ -1380,6 +1386,30 @@ document.getElementById('rosterViewMode').addEventListener('change', ()=>{
   renderRoster();
 });
 document.getElementById('rosterRefDate').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterSortBy').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+/* 근무표 목록 정렬: 사용자가 구역/호수순, 상시근무자 우선, 사번순, 성명순 중 자유롭게 선택 가능. */
+function shiftRank(s){ return s==='상시' ? 0 : s==='교대' ? 1 : 2; }
+function sortRosterStaff(staff){
+  const mode = document.getElementById('rosterSortBy').value || 'zone';
+  const arr = staff.slice();
+  if(mode==='standby_first'){
+    arr.sort((a,b)=> (shiftRank(a.shift)-shiftRank(b.shift)) || (a.zone||'').localeCompare(b.zone||'') || a.empno.localeCompare(b.empno));
+  } else if(mode==='empno'){
+    arr.sort((a,b)=> a.empno.localeCompare(b.empno));
+  } else if(mode==='name'){
+    arr.sort((a,b)=> a.name.localeCompare(b.name));
+  } else { // zone (기본값)
+    arr.sort((a,b)=> (a.zone||'').localeCompare(b.zone||'') || a.empno.localeCompare(b.empno));
+  }
+  return arr;
+}
+/* 정렬 기준에 맞춰 편집 화면에 넣을 구분행 라벨(구역명 / 근무조명)을 반환. 사번·성명순일 때는 구분행 없음. */
+function rosterGroupLabel(e){
+  const mode = document.getElementById('rosterSortBy').value || 'zone';
+  if(mode==='zone') return e.zone || '(구역 미지정)';
+  if(mode==='standby_first') return e.shift || '(근무조 미지정)';
+  return null;
+}
 
 function renderRoster(){
   if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
@@ -1388,7 +1418,7 @@ function renderRoster(){
   const coreSet = new Set(coreDateList);
   const dateList = getRosterContextDateList();
   renderZoneFilterBar(branch);
-  const staff = getRosterStaffFiltered(branch).slice().sort((a,b)=> (a.zone||'').localeCompare(b.zone||'') || a.empno.localeCompare(b.empno));
+  const staff = sortRosterStaff(getRosterStaffFiltered(branch));
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1409,12 +1439,12 @@ function renderRoster(){
 
   const tbody = document.querySelector('#rosterTable tbody');
   let b = '';
-  let lastZone = null;
+  let lastGroup = undefined;
   staff.forEach(e=>{
-    const zoneLabel = e.zone || '(구역 미지정)';
-    if(zoneLabel !== lastZone){
-      b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(zoneLabel)}</td></tr>`;
-      lastZone = zoneLabel;
+    const groupLabel = rosterGroupLabel(e);
+    if(groupLabel !== null && groupLabel !== lastGroup){
+      b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(groupLabel)}</td></tr>`;
+      lastGroup = groupLabel;
     }
     b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
