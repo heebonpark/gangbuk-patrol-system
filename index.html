@@ -732,7 +732,11 @@ const PRESETS = {
   shift_day:   ['주','야','야','휴','휴','주','주','야'],
   standby:     ['휴','휴','주','주','주','주','주'],
   duty:        ['주','주','야','휴','숙','숙'],
+  basic6:      ['주','주','야','야','숙','휴'],
 };
+/* 기본 교대 패턴(주주야야숙휴). 패턴이 아직 없는 직원의 날짜 셀에 처음 "주"를 직접
+   입력하면, 그 날부터 이 6일 주기를 자동으로 적용해 나머지 날짜도 이어서 채운다. */
+const BASIC6_PATTERN = PRESETS.basic6;
 /* 같은 구역/호수를 지키는 3인 1조 교대 패턴: 항상 그 자리에 주/야/숙 담당이 한 명씩만 서도록
    6일 주기로 서로 2일씩 어긋나게 맞춤. */
 const ZONE_TEAM_PATTERNS = [
@@ -1405,10 +1409,26 @@ function sortRosterStaff(staff){
     arr.sort((a,b)=> a.empno.localeCompare(b.empno));
   } else if(mode==='name'){
     arr.sort((a,b)=> a.name.localeCompare(b.name));
-  } else { // zone (기본값)
-    arr.sort((a,b)=> (a.zone||'').localeCompare(b.zone||'') || a.empno.localeCompare(b.empno));
+  } else { // zone (기본값) — 구역 내에서는 사용자가 정한 순서(order, ▲▼로 조정) 우선, 없으면 사번순
+    arr.sort((a,b)=> (a.zone||'').localeCompare(b.zone||'') || ((a.order||0)-(b.order||0)) || a.empno.localeCompare(b.empno));
   }
   return arr;
+}
+/* 구역 내에서 직원 순서를 사용자가 직접 바꿀 수 있게 함(▲▼ 버튼). 화면에 지금 보이는
+   순서를 그대로 가져와 인접한 같은 구역 직원과 order 값을 맞바꾼다. */
+function moveEmpInZone(empId, dir){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const staff = getFilteredRosterStaff(branch);
+  const idx = staff.findIndex(e=>e.id===empId);
+  if(idx<0) return;
+  const target = idx + dir;
+  if(target<0 || target>=staff.length) return;
+  const a = staff[idx], b = staff[target];
+  if((a.zone||'') !== (b.zone||'')) return; // 다른 구역과는 순서를 섞지 않음
+  // order가 아직 없으면(기본 0) 현재 화면 순서를 기준으로 먼저 채워 넣어 이후 이동이 안정적으로 동작하게 함
+  staff.forEach((e,i)=>{ if(!e.order) e.order = i+1; });
+  const tmp = a.order; a.order = b.order; b.order = tmp;
+  persist(); renderRoster();
 }
 /* 정렬 기준에 맞춰 편집 화면에 넣을 구분행 라벨(구역명 / 근무조명)을 반환. 사번·성명순일 때는 구분행 없음. */
 function rosterGroupLabel(e){
@@ -1433,13 +1453,9 @@ document.getElementById('btnRosterFilterReset').addEventListener('click', ()=>{
   renderRoster(); refreshRosterPreviewIfOpen();
 });
 
-function renderRoster(){
-  if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
-  const branch = document.getElementById('rosterBranch').value || branches[0];
-  const coreDateList = getRosterDateList();
-  const coreSet = new Set(coreDateList);
-  const dateList = getRosterContextDateList();
-  renderZoneFilterBar(branch);
+/* 현재 화면(지사/부지사/구역선택/검색어/정렬기준)에 맞춰 걸러진 근무표 대상 직원 목록을 반환.
+   renderRoster()와 moveEmpInZone() 등에서 "지금 화면에 보이는 순서"를 동일하게 재현할 때 사용. */
+function getFilteredRosterStaff(branch){
   const fullStaff = sortRosterStaff(getRosterStaffFiltered(branch));
   renderZonePickOptions(fullStaff);
   const zonePick = document.getElementById('rosterZonePick').value || 'all';
@@ -1447,6 +1463,16 @@ function renderRoster(){
   let staff = fullStaff;
   if(zonePick !== 'all') staff = staff.filter(e=> (e.zone || '(구역 미지정)') === zonePick);
   if(staffSearchQ) staff = staff.filter(e=> e.name.includes(staffSearchQ) || e.empno.includes(staffSearchQ));
+  return staff;
+}
+function renderRoster(){
+  if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const coreDateList = getRosterDateList();
+  const coreSet = new Set(coreDateList);
+  const dateList = getRosterContextDateList();
+  renderZoneFilterBar(branch);
+  const staff = getFilteredRosterStaff(branch);
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1468,19 +1494,26 @@ function renderRoster(){
   const tbody = document.querySelector('#rosterTable tbody');
   let b = '';
   let lastGroup = undefined;
-  staff.forEach(e=>{
+  const sortMode = document.getElementById('rosterSortBy').value || 'zone';
+  staff.forEach((e,idx)=>{
     const groupLabel = rosterGroupLabel(e);
     if(groupLabel !== null && groupLabel !== lastGroup){
       b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(groupLabel)}</td></tr>`;
       lastGroup = groupLabel;
     }
+    const prevSameZone = sortMode==='zone' && idx>0 && (staff[idx-1].zone||'')===(e.zone||'');
+    const nextSameZone = sortMode==='zone' && idx<staff.length-1 && (staff[idx+1].zone||'')===(e.zone||'');
+    const reorderBtns = sortMode==='zone' ? `
+        <button class="btn btn-outline" ${dis||!prevSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 위로" onclick="moveEmpInZone('${e.id}',-1)">▲</button>
+        <button class="btn btn-outline" ${dis||!nextSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 아래로" onclick="moveEmpInZone('${e.id}',1)">▼</button>` : '';
     b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}
       <div class="no-print" style="margin-top:3px;">
-        <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">
+        <input type="text" class="zone-inline" ${dis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">${reorderBtns}
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_night')">야시작</button>
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','shift_day')">주시작</button>
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','standby')">상시</button>
         <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','duty')">주주야휴숙숙</button>
+        <button class="btn btn-outline" ${dis} style="padding:2px 6px;font-size:10px;" onclick="applyPreset('${e.id}','basic6')">기본교대(주주야야숙휴)</button>
       </div></td>`;
     dateList.forEach(ds=>{
       const isOverride = e.overrides && Object.prototype.hasOwnProperty.call(e.overrides, ds);
@@ -1495,7 +1528,7 @@ function renderRoster(){
     b += `<td class="no-print"><button class="btn btn-danger" ${dis} style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
   });
   if(staff.length===0){
-    const emptyMsg = fullStaff.length===0 ? '이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.' : '구역별/개인별 조회 조건에 맞는 직원이 없습니다. 위의 "필터 초기화"를 눌러보세요.';
+    const emptyMsg = getRosterStaffFiltered(branch).length===0 ? '이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.' : '구역별/개인별 조회 조건에 맞는 직원이 없습니다. 위의 "필터 초기화"를 눌러보세요.';
     b = `<tr><td class="fixed" colspan="${dateList.length+2}" style="color:var(--text-mute);padding:14px;">${emptyMsg}</td></tr>`;
   }
   tbody.innerHTML = b;
@@ -1636,7 +1669,18 @@ function updateCode(empId, dateStr, val){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!e.overrides) e.overrides={};
   const beforeViolations = getHourViolations(e);
-  if(val==='__auto__') delete e.overrides[dateStr]; else e.overrides[dateStr]=val;
+  const isFreshShiftPattern = e.shift==='교대' && (!e.pattern || e.pattern.length===0);
+  if(isFreshShiftPattern && val==='주'){
+    // 아직 패턴이 없는 "교대" 직원이 날짜 셀에 처음 "주"를 직접 등록하면, 기본 교대(주주야야숙휴)
+    // 6일 주기를 그 날부터 자동 적용해 나머지 날짜도 이어서 채운다.
+    e.pattern = BASIC6_PATTERN.slice();
+    e.patternStart = dateStr;
+    logEvent(`${e.name}(${e.empno}) 첫 근무 등록 인식: ${dateStr}부터 기본교대(주주야야숙휴) 자동 적용`);
+  } else if(val==='__auto__'){
+    delete e.overrides[dateStr];
+  } else {
+    e.overrides[dateStr]=val;
+  }
   persist(); renderRoster();
   if(document.getElementById('panel-table').classList.contains('active')) renderTableBody();
   checkAndAlertHourLimit(e, beforeViolations);
