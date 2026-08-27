@@ -399,6 +399,13 @@
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
       </div>
       <div class="no-print" id="zoneFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
+      <div class="toolbar no-print" style="margin-bottom:8px;">
+        <label style="font-size:11.5px;color:var(--text-mute);">구역별 조회</label>
+        <select id="rosterZonePick"><option value="all">전체 구역</option></select>
+        <label style="font-size:11.5px;color:var(--text-mute);margin-left:6px;">개인별 조회</label>
+        <input type="text" id="rosterStaffSearch" placeholder="성명 또는 사번으로 검색" style="min-width:180px;">
+        <button class="btn btn-outline" id="btnRosterFilterReset" style="padding:4px 10px;font-size:11.5px;">필터 초기화</button>
+      </div>
       <div class="sub no-print" id="unsignedInfo" style="margin:2px 0 8px;"></div>
       <div class="no-print">
         <div class="roster-scroll">
@@ -1410,6 +1417,21 @@ function rosterGroupLabel(e){
   if(mode==='standby_first') return e.shift || '(근무조 미지정)';
   return null;
 }
+/* 구역별/개인별 조회 편의 필터: 근무표를 작성할 때 해당 구역 또는 특정 직원만 좁혀서 볼 수 있게 함. */
+function renderZonePickOptions(fullStaff){
+  const sel = document.getElementById('rosterZonePick');
+  const cur = sel.value || 'all';
+  const zones = [...new Set(fullStaff.map(e=> e.zone || '(구역 미지정)'))].sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML = '<option value="all">전체 구역</option>' + zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('');
+  if([...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
+document.getElementById('rosterZonePick').addEventListener('change', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('rosterStaffSearch').addEventListener('input', ()=>{ renderRoster(); refreshRosterPreviewIfOpen(); });
+document.getElementById('btnRosterFilterReset').addEventListener('click', ()=>{
+  document.getElementById('rosterZonePick').value = 'all';
+  document.getElementById('rosterStaffSearch').value = '';
+  renderRoster(); refreshRosterPreviewIfOpen();
+});
 
 function renderRoster(){
   if(!currentMonth) return; // loadState() 완료 전(예: 로그인 게이트의 이른 호출)에는 아직 그릴 데이터가 없음
@@ -1418,7 +1440,13 @@ function renderRoster(){
   const coreSet = new Set(coreDateList);
   const dateList = getRosterContextDateList();
   renderZoneFilterBar(branch);
-  const staff = sortRosterStaff(getRosterStaffFiltered(branch));
+  const fullStaff = sortRosterStaff(getRosterStaffFiltered(branch));
+  renderZonePickOptions(fullStaff);
+  const zonePick = document.getElementById('rosterZonePick').value || 'all';
+  const staffSearchQ = (document.getElementById('rosterStaffSearch').value || '').trim();
+  let staff = fullStaff;
+  if(zonePick !== 'all') staff = staff.filter(e=> (e.zone || '(구역 미지정)') === zonePick);
+  if(staffSearchQ) staff = staff.filter(e=> e.name.includes(staffSearchQ) || e.empno.includes(staffSearchQ));
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const auth = currentAuth();
   const isAdmin = !!(auth && auth.isAdmin);
@@ -1467,7 +1495,8 @@ function renderRoster(){
     b += `<td class="no-print"><button class="btn btn-danger" ${dis} style="padding:3px 6px;font-size:10px;" onclick="deleteEmp('${e.id}')">✕</button></td></tr>`;
   });
   if(staff.length===0){
-    b = `<tr><td class="fixed" colspan="${dateList.length+2}" style="color:var(--text-mute);padding:14px;">이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.</td></tr>`;
+    const emptyMsg = fullStaff.length===0 ? '이 지사에는 등록된 근무표가 없습니다. 아래에서 직원을 추가하세요.' : '구역별/개인별 조회 조건에 맞는 직원이 없습니다. 위의 "필터 초기화"를 눌러보세요.';
+    b = `<tr><td class="fixed" colspan="${dateList.length+2}" style="color:var(--text-mute);padding:14px;">${emptyMsg}</td></tr>`;
   }
   tbody.innerHTML = b;
   refreshRosterPreviewIfOpen();
