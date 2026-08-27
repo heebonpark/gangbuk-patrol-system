@@ -414,6 +414,7 @@
         <div class="add-emp-row">
           <input type="text" id="newEmpNo" placeholder="사번">
           <input type="text" id="newEmpName" placeholder="성명">
+          <input type="text" id="newEmpDuty" placeholder="직무(예: 순찰조장)">
           <input type="text" id="newEmpRank" placeholder="직급(G4 등)">
           <input type="text" id="newEmpZone" placeholder="구역/호수(예: 401호)">
           <select id="newEmpShift"><option value="교대">교대</option><option value="상시">상시</option><option value="계약직">계약직</option></select>
@@ -1612,9 +1613,11 @@ function renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin){
   if(!el) return;
   if(staff.length===0){ el.innerHTML = ''; return; }
   const dis = (finalized && !isAdmin) ? 'disabled' : '';
-  let h = '<table class="grid"><thead><tr><th>사번</th><th>성명</th><th>직급</th><th>근무조</th><th style="text-align:left;">구역/호수</th></tr></thead><tbody>';
+  let h = '<table class="grid"><thead><tr><th>사번</th><th>성명</th><th style="text-align:left;">직무</th><th>직급</th><th>근무조</th><th style="text-align:left;">구역/호수</th></tr></thead><tbody>';
   staff.forEach(e=>{
-    h += `<tr><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(e.rank)}</td><td>${esc(e.shift)}</td>
+    h += `<tr><td>${esc(e.empno)}</td><td>${esc(e.name)}</td>
+      <td style="text-align:left;"><input type="text" ${dis} value="${esc(e.duty||'')}" placeholder="예: 순찰조장" onchange="updateEmpDuty('${e.id}', this.value)"></td>
+      <td>${esc(e.rank)}</td><td>${esc(e.shift)}</td>
       <td style="text-align:left;"><input type="text" ${dis} value="${esc(e.zone||'')}" placeholder="예: 401호" onchange="updateEmpZone('${e.id}', this.value)"></td></tr>`;
   });
   h += '</tbody></table>';
@@ -1679,7 +1682,7 @@ function renderHourMonitor(staff, coreDateList){
 function isRosterFinalized(branch, ym){ return !!(rosterFinalized[branch] && rosterFinalized[branch][ym]); }
 function applyRosterToolbarState(branch, ym, finalized, isAdmin){
   const dis = finalized && !isAdmin;
-  ['newEmpNo','newEmpName','newEmpRank','newEmpZone','newEmpShift','newEmpPreset','btnAddEmp','btnZoneTeamRotation'].forEach(id=>{
+  ['newEmpNo','newEmpName','newEmpDuty','newEmpRank','newEmpZone','newEmpShift','newEmpPreset','btnAddEmp','btnZoneTeamRotation'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.disabled = dis;
   });
   document.getElementById('rosterFinalizeBadge').style.display = finalized ? 'inline-block' : 'none';
@@ -2139,6 +2142,7 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const empno = document.getElementById('newEmpNo').value.trim();
   const name = document.getElementById('newEmpName').value.trim();
+  const duty = document.getElementById('newEmpDuty').value.trim();
   const rank = document.getElementById('newEmpRank').value.trim();
   const zone = document.getElementById('newEmpZone').value.trim();
   const shift = document.getElementById('newEmpShift').value;
@@ -2146,11 +2150,11 @@ document.getElementById('btnAddEmp').addEventListener('click', ()=>{
   if(!name){ alert('성명을 입력하세요.'); return; }
   const ym = document.getElementById('rosterMonth').value || currentMonth;
   const gen = preset ? generateFromPreset(preset, ym+'-01') : {pattern:[], patternStart: ym+'-01'};
-  const newEmp = { id:'emp_'+Date.now(), branch, zone, empno: empno||'-', name, rank: rank||'-', shift,
+  const newEmp = { id:'emp_'+Date.now(), branch, zone, duty, empno: empno||'-', name, rank: rank||'-', shift,
     pattern: gen.pattern, patternStart: gen.patternStart, overrides:{} };
   employees.push(newEmp);
   logEvent(`직원 추가: ${name} (${branch})`);
-  document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
+  document.getElementById('newEmpNo').value=''; document.getElementById('newEmpName').value=''; document.getElementById('newEmpDuty').value=''; document.getElementById('newEmpRank').value=''; document.getElementById('newEmpZone').value='';
   persist(); renderRoster();
   checkAndAlertHourLimit(newEmp);
 });
@@ -2354,22 +2358,22 @@ document.getElementById('btnImport').addEventListener('click', ()=>{
 
 /* ---------- 근무표 엑셀 가져오기 (시트/헤더 행 지정) ---------- */
 document.getElementById('btnRosterTemplate').addEventListener('click', ()=>{
-  const header = ['사번','성명','직급','근무조'];
+  const header = ['사번','성명','구역/호수','직무','직급','근무조'];
   for(let d=1; d<=31; d++) header.push(d);
   const sampleCodes = ['주','주','야','야','숙','비번','휴'];
   const rows = [header];
   const samples = [
-    {empno:'10001', name:'홍길동', rank:'G4', shift:'교대'},
-    {empno:'10002', name:'김철수', rank:'G4', shift:'교대'},
-    {empno:'10003', name:'이영희', rank:'G3', shift:'상시'},
+    {empno:'10001', name:'홍길동', zone:'401호', duty:'순찰조장', rank:'G4', shift:'교대'},
+    {empno:'10002', name:'김철수', zone:'401호', duty:'경비', rank:'G4', shift:'교대'},
+    {empno:'10003', name:'이영희', zone:'402호', duty:'경비', rank:'G3', shift:'상시'},
   ];
   samples.forEach((s,si)=>{
-    const row = [s.empno, s.name, s.rank, s.shift];
+    const row = [s.empno, s.name, s.zone, s.duty, s.rank, s.shift];
     for(let d=1; d<=31; d++) row.push(sampleCodes[(d+si)%sampleCodes.length]);
     rows.push(row);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:8},{wch:10},{wch:6},{wch:8}].concat(Array(31).fill({wch:4}));
+  ws['!cols'] = [{wch:8},{wch:10},{wch:10},{wch:10},{wch:6},{wch:8}].concat(Array(31).fill({wch:4}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '근무표');
   XLSX.writeFile(wb, '근무표_업로드_예시양식.xlsx');
@@ -2410,6 +2414,10 @@ function guessHeaderRow(){
   return bi;
 }
 function guessCol(headerArr, keyword){ const idx = headerArr.findIndex(v=>String(v).trim()===keyword); return idx>=0?idx:''; }
+function guessColAny(headerArr, keywords){
+  for(const k of keywords){ const idx = guessCol(headerArr, k); if(idx!=='') return idx; }
+  return '';
+}
 function guessFirstDateCol(headerArr){
   for(let i=0;i<headerArr.length;i++){ if(String(headerArr[i]).trim()==='1') return i; }
   return '';
@@ -2420,6 +2428,8 @@ function renderRosterMapUI(){
   const headerArr = rosterRawRows[headerRowGuess-1] || [];
   const empnoGuess = guessCol(headerArr,'사번');
   const nameGuess = guessCol(headerArr,'성명');
+  const zoneGuess = guessColAny(headerArr,['구역/호수','구역','호수','배치구역']);
+  const dutyGuess = guessColAny(headerArr,['직무','업무']);
   const rankGuess = guessCol(headerArr,'직급');
   const shiftGuess = guessCol(headerArr,'근무조');
   const dateColGuess = guessFirstDateCol(headerArr);
@@ -2429,6 +2439,8 @@ function renderRosterMapUI(){
   html += `<div class="map-row"><label>헤더 행 번호</label><input type="number" id="rosterHeaderRow" min="1" value="${headerRowGuess}"></div>`;
   html += `<div class="map-row"><label>사번 열(0=A열)</label><input type="number" id="rosterColEmpno" min="0" value="${empnoGuess}"></div>`;
   html += `<div class="map-row"><label>성명 열</label><input type="number" id="rosterColName" min="0" value="${nameGuess}"></div>`;
+  html += `<div class="map-row"><label>구역/호수 열</label><input type="number" id="rosterColZone" min="0" value="${zoneGuess}"></div>`;
+  html += `<div class="map-row"><label>직무 열</label><input type="number" id="rosterColDuty" min="0" value="${dutyGuess}"></div>`;
   html += `<div class="map-row"><label>직급 열</label><input type="number" id="rosterColRank" min="0" value="${rankGuess}"></div>`;
   html += `<div class="map-row"><label>근무조 열</label><input type="number" id="rosterColShift" min="0" value="${shiftGuess}"></div>`;
   html += `<div class="map-row"><label>1일(첫 날짜) 열</label><input type="number" id="rosterColFirstDate" min="0" value="${dateColGuess}"></div>`;
@@ -2447,6 +2459,8 @@ function getRosterMappedRows(){
   const headerRow = parseInt(document.getElementById('rosterHeaderRow').value)||1;
   const colEmpno = parseInt(document.getElementById('rosterColEmpno').value);
   const colName = parseInt(document.getElementById('rosterColName').value);
+  const colZone = parseInt(document.getElementById('rosterColZone').value);
+  const colDuty = parseInt(document.getElementById('rosterColDuty').value);
   const colRank = parseInt(document.getElementById('rosterColRank').value);
   const colShift = parseInt(document.getElementById('rosterColShift').value);
   const colFirstDate = parseInt(document.getElementById('rosterColFirstDate').value);
@@ -2456,11 +2470,13 @@ function getRosterMappedRows(){
     const name = !isNaN(colName) ? String(r[colName]||'').trim() : '';
     if(!name) return;
     const empno = !isNaN(colEmpno) ? String(r[colEmpno]||'').trim() : '';
+    const zone = !isNaN(colZone) ? String(r[colZone]||'').trim() : '';
+    const duty = !isNaN(colDuty) ? String(r[colDuty]||'').trim() : '';
     const rank = !isNaN(colRank) ? String(r[colRank]||'').trim() : '';
     const shift = !isNaN(colShift) ? String(r[colShift]||'').trim() : '교대';
     const codes = [];
     if(!isNaN(colFirstDate)){ for(let i=colFirstDate; i<r.length; i++){ codes.push(String(r[i]||'').trim()); } }
-    out.push({empno, name, rank, shift, codes});
+    out.push({empno, name, zone, duty, rank, shift, codes});
   });
   return out;
 }
@@ -2468,8 +2484,8 @@ function renderRosterImportPreview(){
   const rows = getRosterMappedRows();
   const area = document.getElementById('rosterImportPreview');
   if(rows.length===0){ area.innerHTML = '<p style="color:var(--text-mute);font-size:12.5px;">인식된 직원 행이 없습니다. 헤더 행 번호와 열 번호를 확인하세요.</p>'; return; }
-  let html = '<table class="grid"><thead><tr><th>사번</th><th>성명</th><th>직급</th><th>근무조</th><th>날짜 코드(앞 10일)</th></tr></thead><tbody>';
-  rows.slice(0,15).forEach(r=>{ html += `<tr><td>${r.empno}</td><td>${r.name}</td><td>${r.rank}</td><td>${r.shift}</td><td>${r.codes.slice(0,10).join(' ')}</td></tr>`; });
+  let html = '<table class="grid"><thead><tr><th>사번</th><th>성명</th><th>구역/호수</th><th>직무</th><th>직급</th><th>근무조</th><th>날짜 코드(앞 10일)</th></tr></thead><tbody>';
+  rows.slice(0,15).forEach(r=>{ html += `<tr><td>${r.empno}</td><td>${r.name}</td><td>${r.zone}</td><td>${r.duty}</td><td>${r.rank}</td><td>${r.shift}</td><td>${r.codes.slice(0,10).join(' ')}</td></tr>`; });
   html += `</tbody></table><p style="color:var(--text-mute);font-size:11.5px;margin-top:6px;">총 ${rows.length}명 인식됨 (최대 15명까지 미리보기)</p>`;
   area.innerHTML = html;
 }
@@ -2493,10 +2509,11 @@ document.getElementById('btnRosterImport').addEventListener('click', ()=>{
     if(!emp) emp = employees.find(e=>e.branch===branch && e.name===r.name && (!r.empno || e.empno===r.empno));
     if(emp){
       emp.name=r.name||emp.name; emp.rank=r.rank||emp.rank; emp.shift=r.shift||emp.shift;
+      emp.zone=r.zone||emp.zone; emp.duty=r.duty||emp.duty;
       emp.overrides = Object.assign({}, emp.overrides||{}, overrides);
       updated++;
     } else {
-      employees.push({ id:'emp_imp_'+Date.now()+'_'+ri, branch, zone:'', empno:r.empno||('imp'+ri), name:r.name, rank:r.rank||'-', shift:r.shift||'교대', pattern:[], patternStart: ym+'-01', overrides });
+      employees.push({ id:'emp_imp_'+Date.now()+'_'+ri, branch, zone:r.zone||'', duty:r.duty||'', empno:r.empno||('imp'+ri), name:r.name, rank:r.rank||'-', shift:r.shift||'교대', pattern:[], patternStart: ym+'-01', overrides });
       added++;
     }
   });
@@ -2546,7 +2563,8 @@ function renderBatchMapUI(){
   const headerRowGuess = guessBatchHeaderRow();
   const headerArr = batchRawRows[headerRowGuess-1] || [];
   const gubunGuess = guessCol(headerArr,'구분');
-  const zoneGuess = guessCol(headerArr,'구역호수');
+  const zoneGuess = guessColAny(headerArr,['구역호수','구역/호수','구역','호수']);
+  const dutyGuess = guessColAny(headerArr,['직무','업무']);
   const empnoGuess = guessCol(headerArr,'사번');
   const nameGuess = guessCol(headerArr,'성명');
   const rankGuess = guessCol(headerArr,'직급');
@@ -2561,6 +2579,7 @@ function renderBatchMapUI(){
   html += `<div class="map-row"><label>헤더 행 번호</label><input type="number" id="batchHeaderRow" min="1" value="${headerRowGuess}"></div>`;
   html += `<div class="map-row"><label>구분(지사) 열</label><input type="number" id="batchColGubun" min="0" value="${gubunGuess}"></div>`;
   html += `<div class="map-row"><label>구역호수 열</label><input type="number" id="batchColZone" min="0" value="${zoneGuess}"></div>`;
+  html += `<div class="map-row"><label>직무 열</label><input type="number" id="batchColDuty" min="0" value="${dutyGuess}"></div>`;
   html += `<div class="map-row"><label>사번 열</label><input type="number" id="batchColEmpno" min="0" value="${empnoGuess}"></div>`;
   html += `<div class="map-row"><label>성명 열</label><input type="number" id="batchColName" min="0" value="${nameGuess}"></div>`;
   html += `<div class="map-row"><label>직급 열</label><input type="number" id="batchColRank" min="0" value="${rankGuess}"></div>`;
@@ -2577,6 +2596,7 @@ function getBatchMappedRows(){
   const headerRow = parseInt(document.getElementById('batchHeaderRow').value)||1;
   const colGubun = parseInt(document.getElementById('batchColGubun').value);
   const colZone = parseInt(document.getElementById('batchColZone').value);
+  const colDuty = parseInt(document.getElementById('batchColDuty').value);
   const colEmpno = parseInt(document.getElementById('batchColEmpno').value);
   const colName = parseInt(document.getElementById('batchColName').value);
   const colRank = parseInt(document.getElementById('batchColRank').value);
@@ -2590,12 +2610,13 @@ function getBatchMappedRows(){
     const gubun = !isNaN(colGubun) ? String(r[colGubun]||'').trim() : '';
     if(!gubun) return;
     const zone = !isNaN(colZone) ? String(r[colZone]||'').trim() : '';
+    const duty = !isNaN(colDuty) ? String(r[colDuty]||'').trim() : '';
     const empno = !isNaN(colEmpno) ? String(r[colEmpno]||'').trim() : '';
     const rank = !isNaN(colRank) ? String(r[colRank]||'').trim() : '';
     const shift = !isNaN(colShift) ? String(r[colShift]||'').trim() : '교대';
     const codes = [];
     if(!isNaN(colFirstDate)){ for(let i=colFirstDate; i<r.length; i++){ codes.push(String(r[i]||'').trim()); } }
-    out.push({branch:gubun, zone, empno, name, rank, shift, codes});
+    out.push({branch:gubun, zone, duty, empno, name, rank, shift, codes});
   });
   return out;
 }
@@ -2606,8 +2627,8 @@ function renderBatchImportPreview(){
   const branchSet = [...new Set(rows.map(r=>r.branch))];
   const newBranches = branchSet.filter(b=>!branches.includes(b));
   let html = `<p style="font-size:12px;color:var(--text-mute);">인식된 지사 ${branchSet.length}곳: ${branchSet.join(', ')}${newBranches.length?` <span style="color:var(--danger);">(신규 ${newBranches.length}곳: ${newBranches.join(', ')})</span>`:''}</p>`;
-  html += '<table class="grid"><thead><tr><th>구분(지사)</th><th>구역</th><th>사번</th><th>성명</th><th>직급</th><th>근무조</th><th>날짜 코드(앞 8일)</th></tr></thead><tbody>';
-  rows.slice(0,15).forEach(r=>{ html += `<tr><td>${r.branch}</td><td>${r.zone}</td><td>${r.empno}</td><td>${r.name}</td><td>${r.rank}</td><td>${r.shift}</td><td>${r.codes.slice(0,8).join(' ')}</td></tr>`; });
+  html += '<table class="grid"><thead><tr><th>구분(지사)</th><th>구역</th><th>직무</th><th>사번</th><th>성명</th><th>직급</th><th>근무조</th><th>날짜 코드(앞 8일)</th></tr></thead><tbody>';
+  rows.slice(0,15).forEach(r=>{ html += `<tr><td>${r.branch}</td><td>${r.zone}</td><td>${r.duty}</td><td>${r.empno}</td><td>${r.name}</td><td>${r.rank}</td><td>${r.shift}</td><td>${r.codes.slice(0,8).join(' ')}</td></tr>`; });
   html += `</tbody></table><p style="color:var(--text-mute);font-size:11.5px;margin-top:6px;">총 ${rows.length}명 인식됨 (최대 15명까지 미리보기)</p>`;
   area.innerHTML = html;
 }
@@ -2630,11 +2651,11 @@ document.getElementById('btnBatchImport').addEventListener('click', ()=>{
     if(r.empno) emp = employees.find(e=>e.branch===r.branch && e.empno===r.empno);
     if(!emp) emp = employees.find(e=>e.branch===r.branch && e.name===r.name && (!r.empno || e.empno===r.empno));
     if(emp){
-      emp.name=r.name||emp.name; emp.rank=r.rank||emp.rank; emp.shift=r.shift||emp.shift; emp.zone=r.zone||emp.zone;
+      emp.name=r.name||emp.name; emp.rank=r.rank||emp.rank; emp.shift=r.shift||emp.shift; emp.zone=r.zone||emp.zone; emp.duty=r.duty||emp.duty;
       emp.overrides = Object.assign({}, emp.overrides||{}, overrides);
       updated++;
     } else {
-      employees.push({ id:'emp_batch_'+Date.now()+'_'+ri, branch:r.branch, zone:r.zone, empno:r.empno||('batch'+ri), name:r.name, rank:r.rank||'-', shift:r.shift||'교대', pattern:[], patternStart: ym+'-01', overrides });
+      employees.push({ id:'emp_batch_'+Date.now()+'_'+ri, branch:r.branch, zone:r.zone, duty:r.duty||'', empno:r.empno||('batch'+ri), name:r.name, rank:r.rank||'-', shift:r.shift||'교대', pattern:[], patternStart: ym+'-01', overrides });
       added++;
     }
   });
@@ -2713,6 +2734,14 @@ function updateEmpZone(empId, val){
   if(old === val) return;
   e.zone = val;
   logEvent(`${e.name}(${e.empno}) 구역/호수 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
+  persist(); renderRoster();
+}
+function updateEmpDuty(empId, val){
+  const e = employees.find(x=>x.id===empId); if(!e) return;
+  const old = e.duty || '';
+  if(old === val) return;
+  e.duty = val;
+  logEvent(`${e.name}(${e.empno}) 직무 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
   persist(); renderRoster();
 }
 function renderAdmin(){
