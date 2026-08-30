@@ -230,22 +230,10 @@
 
   .preview-main-table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: center; border: 1px solid #94a3b8; }
   .preview-main-table th, .preview-main-table td { border: 1px solid #94a3b8; padding: 4px 2px; white-space: nowrap; color: #334155; }
-  /* A4 한 장에 맞출 때만 행 높이를 살짝 더 줄여 확대 배율을 덜 희생하고 보기 좋게 맞춘다. */
-  #rosterPreviewWrap.print-fit-page .preview-main-table th, #rosterPreviewWrap.print-fit-page .preview-main-table td{ padding: 2px 2px; line-height: 1.15; }
-  #rosterPreviewWrap.print-fit-page .preview-approval-table td{ height: 42px; }
-  /* CSS zoom으로 축소하면 1px 테두리가 라운딩되어 화면 미리보기보다 굵게 찍히므로,
-     PDF/인쇄용 축소 상태에서만 테두리를 얇게 낮춰 미리보기와 같은 인상을 유지한다. */
-  #rosterPreviewWrap.print-fit-page .preview-legend-table,
-  #rosterPreviewWrap.print-fit-page .preview-legend-table th,
-  #rosterPreviewWrap.print-fit-page .preview-legend-table td,
-  #rosterPreviewWrap.print-fit-page .preview-approval-table,
-  #rosterPreviewWrap.print-fit-page .preview-approval-table th,
-  #rosterPreviewWrap.print-fit-page .preview-approval-table td,
-  #rosterPreviewWrap.print-fit-page .preview-main-table,
-  #rosterPreviewWrap.print-fit-page .preview-main-table th,
-  #rosterPreviewWrap.print-fit-page .preview-main-table td,
-  #rosterPreviewWrap.print-fit-page .preview-date-box,
-  #rosterPreviewWrap.print-fit-page .preview-date-box .date-val { border-width: 0.5px; }
+  /* PDF/인쇄는 이 아래 zoom 배율로만 축소한다. 패딩·테두리 두께·행 높이를 화면 미리보기와
+     동일하게 유지해야 확대비율만 다를 뿐 테두리 굵기·행 높이가 미리보기 그대로 보인다.
+     (이전에는 인쇄 모드에서 패딩/높이를 추가로 더 줄이고 테두리도 별도로 얇게 낮췄었는데,
+     zoom 축소와 중첩되어 미리보기보다 훨씬 좁고 빽빽하게 찍히는 문제가 있어 제거함) */
   .preview-main-table th { background-color: #f1f5f9; font-weight: 600; color:#0f172a; }
   .preview-main-table th.sun, .preview-main-table td.sun { color: #dc2626; background-color: #fef2f2; }
   .preview-main-table th.sat, .preview-main-table td.sat { color: #2563eb; background-color: #eff6ff; }
