@@ -194,7 +194,9 @@
   }
 
   /* Print Layout for Roster */
-  #rosterPreviewWrap { font-family: "Pretendard", sans-serif; color: #334155; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* 범례/결재란 등 위쪽·오른쪽 표가 여백 없이 인쇄영역 경계에 딱 붙어있으면 PDF로 뽑을 때
+     위/오른쪽 테두리 선이 미세하게 잘려나가는 경우가 있어, 안전 여백을 살짝 둔다. */
+  #rosterPreviewWrap { font-family: "Pretendard", sans-serif; color: #334155; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 4px 4px 0 3px; }
   .preview-header-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
   .preview-legend-table { border-collapse: collapse; font-size: 10px; background: white; border: 1px solid #94a3b8; }
   .preview-legend-table th, .preview-legend-table td { border: 1px solid #94a3b8; padding: 3px 6px; text-align: center; }
