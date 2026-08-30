@@ -270,11 +270,15 @@
     #sigCanvas{height:190px;}
   }
   
-  .preview-row-group-0 .group-header { background-color: #fef08a; }
-  .preview-row-group-1 .group-header { background-color: #fed7aa; }
-  .preview-row-group-2 .group-header { background-color: #93c5fd; }
-  .preview-row-group-3 .group-header { background-color: #86efac; }
-  .preview-row-group-4 .group-header { background-color: #cbd5e1; }
+  /* 구역 구간 색상 — 채도를 낮춘 톤으로 통일하고 글자색을 함께 짙게 줘서 깔끔하게 보이도록 함 */
+  .group-header { font-weight: 700; }
+  .preview-row-group-0 .group-header { background-color: #FBE8C6; color: #8A5A12; }
+  .preview-row-group-1 .group-header { background-color: #F7D9CE; color: #9A4A2E; }
+  .preview-row-group-2 .group-header { background-color: #D6E4F6; color: #2C5282; }
+  .preview-row-group-3 .group-header { background-color: #D6EEDD; color: #276749; }
+  .preview-row-group-4 .group-header { background-color: #E1E5EC; color: #3F4A5E; }
+  /* 구역이 바뀌는 경계는 살짝 더 진한 선으로 구분해서 표에서 구간이 눈에 띄게 함 */
+  .preview-main-table tr.zone-start td { border-top: 2px solid #64748b; }
 
   /* ---------- 로그인 게이트 ---------- */
   .login-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(150deg,var(--navy) 0%,var(--navy-dark) 100%);display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -2344,7 +2348,8 @@ function renderRosterPreview(){
           groupIndex = (groupIndex + 1) % 5;
       }
 
-      html += `<tr class="preview-row-group-${groupIndex}" data-name="${esc(e.name)}">`;
+      const zoneStartCls = (spans[i] > 0 && i > 0) ? ' zone-start' : '';
+      html += `<tr class="preview-row-group-${groupIndex}${zoneStartCls}" data-name="${esc(e.name)}">`;
       
       if(spans[i] > 0) {
           html += `<td class="group-header" rowspan="${spans[i]}">${e.zone||"-"}</td>`;
