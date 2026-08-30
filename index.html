@@ -143,6 +143,8 @@
   table.roster th.dcol{min-width:40px;background:#F6F8FB;color:var(--text-mute);position:sticky;top:0;z-index:2;line-height:1.5;padding:4px 2px;}
   table.roster th.dcol.sun{color:#C0392B;}
   table.roster th.dcol.sat{color:#2F6FED;}
+  table.roster th.dcol.holiday{background:var(--warn-bg);color:var(--warn);}
+  table.roster td.holiday{background:var(--warn-bg);}
   table.roster th.head-fixed{position:sticky;left:0;background:#F6F8FB;z-index:3;text-align:left;padding:6px 8px;min-width:190px;}
   table.roster td.fixed{position:sticky;left:0;background:#fff;text-align:left;padding:4px 8px;z-index:1;white-space:nowrap;font-size:11.5px;}
   table.roster select.codecell{width:44px;border:none;background:transparent;font-size:10.3px;text-align:center;padding:3px 0;font-family:var(--sans);border-radius:4px;}
@@ -230,11 +232,26 @@
   .preview-main-table th, .preview-main-table td { border: 1px solid #94a3b8; padding: 4px 2px; white-space: nowrap; color: #334155; }
   /* A4 한 장에 맞출 때만 행 높이를 살짝 더 줄여 확대 배율을 덜 희생하고 보기 좋게 맞춘다. */
   #rosterPreviewWrap.print-fit-page .preview-main-table th, #rosterPreviewWrap.print-fit-page .preview-main-table td{ padding: 2px 2px; line-height: 1.15; }
-  #rosterPreviewWrap.print-fit-page .preview-approval-table td{ height: 34px; }
+  #rosterPreviewWrap.print-fit-page .preview-approval-table td{ height: 42px; }
+  /* CSS zoom으로 축소하면 1px 테두리가 라운딩되어 화면 미리보기보다 굵게 찍히므로,
+     PDF/인쇄용 축소 상태에서만 테두리를 얇게 낮춰 미리보기와 같은 인상을 유지한다. */
+  #rosterPreviewWrap.print-fit-page .preview-legend-table,
+  #rosterPreviewWrap.print-fit-page .preview-legend-table th,
+  #rosterPreviewWrap.print-fit-page .preview-legend-table td,
+  #rosterPreviewWrap.print-fit-page .preview-approval-table,
+  #rosterPreviewWrap.print-fit-page .preview-approval-table th,
+  #rosterPreviewWrap.print-fit-page .preview-approval-table td,
+  #rosterPreviewWrap.print-fit-page .preview-main-table,
+  #rosterPreviewWrap.print-fit-page .preview-main-table th,
+  #rosterPreviewWrap.print-fit-page .preview-main-table td,
+  #rosterPreviewWrap.print-fit-page .preview-date-box,
+  #rosterPreviewWrap.print-fit-page .preview-date-box .date-val { border-width: 0.5px; }
   .preview-main-table th { background-color: #f1f5f9; font-weight: 600; color:#0f172a; }
   .preview-main-table th.sun, .preview-main-table td.sun { color: #dc2626; background-color: #fef2f2; }
   .preview-main-table th.sat, .preview-main-table td.sat { color: #2563eb; background-color: #eff6ff; }
-  
+  /* 법정공휴일 강조 — 평일 중 공휴일도 눈에 띄게(주말과 겹치면 공휴일 색이 우선). */
+  .preview-main-table th.holiday, .preview-main-table td.holiday { color: #b4790c; background-color: #fdf3d8; }
+
   .preview-hours-col { width: 44px; }
   .preview-signature-col { width: 64px; }
   .preview-contact-col { width: 60px; }
@@ -1740,7 +1757,7 @@ function renderRoster(){
   let h = '<tr><th class="head-fixed">사번 / 성명 / 직급 / 근무조</th>';
   dateList.forEach(ds=>{
     const wd = new Date(ds+'T00:00:00').getDay();
-    const cls = ['dcol', wd===0?'sun':wd===6?'sat':'', coreSet.has(ds)?'':'ctx'].filter(Boolean).join(' ');
+    const cls = ['dcol', wd===0?'sun':wd===6?'sat':'', isHoliday(ds)?'holiday':'', coreSet.has(ds)?'':'ctx'].filter(Boolean).join(' ');
     h += `<th class="${cls}">${shortLabel(ds)}<br>${dowNamesRoster[wd]}</th>`;
   });
   h += '<th class="dcol no-print">삭제</th></tr>';
@@ -1789,8 +1806,9 @@ function renderRoster(){
       const code = effectiveCode(e, ds);
       const autoCode = autoCodeFor(e, ds);
       const ctxCls = coreSet.has(ds) ? '' : ' ctx';
+      const holidayCls = isHoliday(ds) ? ' holiday' : '';
       const isCustomCode = isOverride && !CODE_LIST.includes(code);
-      b += `<td class="${isOverride?'is-override':''}${ctxCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${esc(baseCodeOf(code))}" ${empDis} onchange="updateCode('${e.id}','${ds}',this.value)">`
+      b += `<td class="${isOverride?'is-override':''}${ctxCls}${holidayCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${esc(baseCodeOf(code))}" ${empDis} onchange="updateCode('${e.id}','${ds}',this.value)">`
         + `<option value="__auto__" ${!isOverride?'selected':''}>${autoCode || '·'}</option>`
         + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
         + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(code)}</option>` : '')
@@ -2297,13 +2315,13 @@ function renderRosterPreview(){
                 <th rowspan="2">근무조</th>
                 ${grouped?"<th rowspan=\"2\">지사</th>":""}
 `;
-  dateList.forEach(ds=>{ html += `<th>${shortLabel(ds)}</th>`; });
+  dateList.forEach(ds=>{ const wd=new Date(ds+"T00:00:00").getDay(); const cls=[wd===0?"sun":wd===6?"sat":"", isHoliday(ds)?"holiday":""].filter(Boolean).join(" "); html += `<th class="${cls}">${shortLabel(ds)}</th>`; });
   html += `     <th rowspan="2" class="preview-hours-col">합계<br>(시간)</th>
                 <th rowspan="2" class="preview-signature-col">근무자<br>확인 서명</th>
                 <th rowspan="2" class="preview-contact-col">연락처<br>/ 비고</th>
             </tr>
             <tr>`;
-  dateList.forEach(ds=>{ const wd=new Date(ds+"T00:00:00").getDay(); html += `<th class="${wd===0?"sun":wd===6?"sat":""}">${dowNames[wd]}</th>`; });
+  dateList.forEach(ds=>{ const wd=new Date(ds+"T00:00:00").getDay(); const cls=[wd===0?"sun":wd===6?"sat":"", isHoliday(ds)?"holiday":""].filter(Boolean).join(" "); html += `<th class="${cls}">${dowNames[wd]}</th>`; });
   html += `       </tr>
         </thead>
         <tbody>`;
@@ -2349,7 +2367,8 @@ function renderRosterPreview(){
       dateList.forEach(ds=>{
           const wd=new Date(ds+"T00:00:00").getDay();
           const code = effectiveCode(e, ds);
-          html += `<td class="${wd===0?"sun":wd===6?"sat":""}">${code||"·"}</td>`;
+          const cls = [wd===0?"sun":wd===6?"sat":"", isHoliday(ds)?"holiday":""].filter(Boolean).join(" ");
+          html += `<td class="${cls}">${code||"·"}</td>`;
       });
       const sig = e.signatures && e.signatures[sigYM];
       const sigCell = sig
