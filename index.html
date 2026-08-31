@@ -323,11 +323,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .preview-hours-col { width: 44px; }
   .preview-signature-col { width: 64px; }
   .preview-contact-col { width: 60px; }
-  /* 연락처/비고를 미리보기 표 안에서 바로 고칠 수 있도록 하는 인라인 입력칸 — 평소엔
-     테두리 없이 텍스트처럼 보이다가 포커스를 주면 그때만 살짝 테두리가 보인다. */
-  .preview-inline-input{width:100%;border:1px solid transparent;background:transparent;font:inherit;font-size:9.5px;padding:0;margin:1px 0;display:block;color:inherit;text-align:left;border-radius:3px;}
-  .preview-inline-input:hover{border-color:#cbd5e1;}
-  .preview-inline-input:focus{outline:none;border-color:var(--accent);background:#fff;}
+  /* 연락처/비고 "클릭해서 수정" — 평소엔 순수 텍스트라 원래 행 높이에 전혀 영향이 없고,
+     클릭한 칸만 그 순간 입력칸으로 바뀐다(<input>/contenteditable을 항상 깔아두면
+     브라우저 기본 여백 때문에 행이 높아져 PDF가 한 장에 안 맞는 문제가 있었음). */
+  /* 연락처/비고 칸: 클릭 영역은 셀 전체(td)가 담당해서 비어있어도 항상 클릭할 수 있게
+     하고(위쪽 절반=연락처, 아래쪽 절반=비고), 텍스트 자체(span)는 아무 스타일도 더하지
+     않는다 — inline-block/padding 등을 span에 주면 빈 상태에서도 줄 높이 계산에 끼어들어
+     모든 행이 한 줄 더 높아져 PDF가 A4 한 장에 안 맞게 됨. */
+  .preview-contact-td{cursor:text;}
+  .preview-contact-td:hover{background:#f8fafc;}
+  .preview-contact-field input{width:100%;border:none;background:#fff;box-shadow:inset 0 -1px 0 var(--accent);font:inherit;padding:0;margin:0;color:inherit;}
+  .preview-inline-editable:empty::before{content:attr(data-placeholder);color:#94a3b8;}
   .sig-cell{padding:2px !important;}
   .sig-img{max-width:56px;max-height:26px;cursor:pointer;}
   .sig-btn{padding:2px 5px !important;font-size:9px !important;}
@@ -2657,10 +2663,15 @@ function renderRosterPreview(){
         ? `<td class="sig-cell"><img src="${sig}" alt="서명" class="sig-img" onclick="openSignaturePad('${e.id}','${sigYM}')"></td>`
         : `<td class="sig-cell"><button class="btn btn-outline sig-btn no-print" onclick="openSignaturePad('${e.id}','${sigYM}')">서명하기</button></td>`;
       const hrs = monthlyHours(e, dateList);
-      const contactCell = `<td style="text-align:left;line-height:1.3;">
-        <input type="text" class="preview-inline-input" value="${esc(e.phone||"")}" placeholder="연락처" title="연락처 수정(구역/호수관리 표·직원 추가와 값을 공유)" onchange="updateEmpPhone('${e.id}', this.value)">
-        <input type="text" class="preview-inline-input" value="${esc(e.note||"")}" placeholder="비고" title="비고 수정" onchange="updateEmpNote('${e.id}', this.value)">
-      </td>`;
+      // <input>/contenteditable을 항상 깔아두거나 빈 칸에 안내 문구를 텍스트로 채워두면
+      // 그 자체로 모든 행이 한 줄 더 높아져(빈 셀은 원래 <br>만 있는 한 줄 높이) PDF가
+      // A4 한 장에 안 맞게 되므로, 평소엔 원래와 완전히 동일한 정적 텍스트로 두고 클릭한
+      // 순간에만 그 자리에 입력칸을 끼워 넣는다. 클릭 영역은 span이 아니라 td 전체가
+      // 담당해(위쪽 절반=연락처, 아래쪽 절반=비고) 값이 비어 있어도 항상 클릭할 수 있다.
+      const contactCell = `<td class="preview-contact-td" style="text-align:left;line-height:1.2;font-size:9.5px;" onclick="handleContactCellClick(event,'${e.id}')" title="클릭해서 연락처/비고 수정(위=연락처, 아래=비고)">`
+        + `<span class="preview-contact-field" data-field="phone">${esc(e.phone||"")}</span><br>`
+        + `<span class="preview-contact-field" data-field="note">${esc(e.note||"")}</span>`
+        + `</td>`;
       html += `<td class="${hrs>OVERTIME_THRESHOLD_HOURS?'hours-over':''}">${hrs}</td>${sigCell}${contactCell}</tr>`;
     });
   }
@@ -2763,7 +2774,11 @@ function fitPreviewToOnePage(){
   }
   pageStyle.textContent = '@page{ size: A4 landscape; margin: 6mm; }';
   const contentWidth = wrap.scrollWidth, contentHeight = wrap.scrollHeight;
-  const PAGE_W_PX = 1090, PAGE_H_PX = 750; // A4 가로, 여백 6mm 기준 대략치(96dpi) - 여유 확보를 위해 보수적으로 산정
+  // A4 가로(297mm)·여백 6mm 기준 실제 인쇄 가능 영역은 96dpi에서 약 1077x748px인데,
+  // 기존 값(1090x750)은 실측 인쇄 가능 영역보다 오히려 살짝 크게 잡혀 있어 폰트 렌더링
+  // 차이 등 미세한 오차만 생겨도 두 번째 페이지로 넘어가는 문제가 있었다(실제 PDF 생성
+  // 후 페이지 수를 세어 확인). 실제 인쇄 가능 영역보다 확실히 작게 여유를 두어 산정.
+  const PAGE_W_PX = 1040, PAGE_H_PX = 705;
   const scale = Math.min(PAGE_W_PX/contentWidth, PAGE_H_PX/contentHeight, 1);
   wrap.style.zoom = scale;
 }
@@ -3505,6 +3520,40 @@ function updateEmpNote(empId, val){
   e.note = val;
   logEvent(`${e.name}(${e.empno}) 비고 변경: ${old||'(없음)'} → ${val||'(없음)'}`);
   persist(); renderRoster();
+}
+/* 연락처/비고 칸 클릭 처리 — td 전체 어디를 클릭해도(값이 비어 있어도) 클릭한 y좌표가
+   위쪽 절반이면 연락처, 아래쪽 절반이면 비고로 판단해 그 span에서 편집을 시작한다. */
+function handleContactCellClick(evt, empId){
+  if(evt.target.tagName==='INPUT') return; // 이미 편집 중인 입력칸을 클릭한 경우는 무시
+  const td = evt.currentTarget;
+  const rect = td.getBoundingClientRect();
+  const field = (evt.clientY - rect.top) < rect.height/2 ? 'phone' : 'note';
+  const span = td.querySelector(`.preview-contact-field[data-field="${field}"]`);
+  if(span) startEditContact(span, empId, field);
+}
+/* 미리보기 근무표의 연락처/비고 칸 "클릭해서 수정" — 클릭한 순간에만 그 자리에 입력칸을
+   끼워 넣고, 포커스를 잃으면 저장 후 다시 원래 텍스트 표시로 되돌린다. 값이 안 바뀌면
+   updateEmpPhone/Note가 리렌더를 하지 않으므로, 텍스트 되돌리기는 여기서 직접 처리한다. */
+function startEditContact(span, empId, field){
+  if(span.querySelector('input')) return;
+  const e = employees.find(x=>x.id===empId); if(!e) return;
+  const current = e[field] || '';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = current;
+  input.onkeydown = (ev)=>{
+    if(ev.key==='Enter'){ ev.preventDefault(); input.blur(); }
+    else if(ev.key==='Escape'){ ev.preventDefault(); input.value = current; input.blur(); }
+  };
+  input.onblur = ()=>{
+    const val = input.value.trim();
+    if(field==='phone') updateEmpPhone(empId, val); else updateEmpNote(empId, val);
+    span.innerHTML = esc(val); // 비어있으면 원래처럼 그냥 빈 채로 둔다(안내문구를 텍스트로
+    // 채우면 모든 행이 2줄 높이를 차지해 PDF가 A4 한 장에 안 맞게 됨 — 위 렌더링 쪽 주석 참고)
+  };
+  span.innerHTML = '';
+  span.appendChild(input);
+  input.focus();
 }
 function renderAdmin(){
   renderStorageAdmin();
