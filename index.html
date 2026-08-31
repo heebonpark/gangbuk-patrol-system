@@ -1735,7 +1735,7 @@ function moveEmpInZone(empId, dir){
   const tmp = a.order; a.order = b.order; b.order = tmp;
   persist(); renderRoster();
 }
-/* 구역 내 순서를 마우스 드래그로 바꾸는 기능(▲▼ 버튼과 order 필드를 그대로 공유).
+/* 마우스 드래그로 순서를 바꾸거나(order 필드는 ▲▼ 버튼과 공유) 다른 구역으로 옮기는 기능.
    행의 ⠿ 핸들을 누른 순간에만 그 tr의 draggable을 켜서(dragEnd에서 다시 끔), 코드
    드롭다운·입력칸을 클릭할 때 실수로 행 전체가 끌리지 않게 한다. */
 let dragEmpId = null;
@@ -1751,7 +1751,7 @@ function rosterRowDragStart(evt, empId){
 function rosterRowDragOver(evt, empId){
   if(!dragEmpId || dragEmpId===empId) return;
   const dragEmp = employees.find(x=>x.id===dragEmpId), overEmp = employees.find(x=>x.id===empId);
-  if(!dragEmp || !overEmp || (dragEmp.zone||'')!==(overEmp.zone||'')) return; // 다른 구역엔 드롭 불가
+  if(!dragEmp || !overEmp) return;
   evt.preventDefault();
   evt.dataTransfer.dropEffect = 'move';
   const row = evt.currentTarget;
@@ -1771,7 +1771,7 @@ function rosterRowDrop(evt, targetEmpId){
   const draggedId = dragEmpId;
   dragEmpId = null;
   if(!draggedId || draggedId===targetEmpId) return;
-  reorderEmpInZone(draggedId, targetEmpId, !before);
+  moveEmpByDrag(draggedId, targetEmpId, !before);
 }
 function rosterRowDragEnd(evt){
   evt.currentTarget.classList.remove('row-dragging');
@@ -1779,24 +1779,33 @@ function rosterRowDragEnd(evt){
   document.querySelectorAll('table.roster tr.drop-before, table.roster tr.drop-after').forEach(r=>r.classList.remove('drop-before','drop-after'));
   dragEmpId = null;
 }
-/* 드래그로 넘겨받은 두 직원의 구역이 같을 때만, 그 구역 안 순서를 통째로 다시 매겨 드롭한
-   자리로 옮긴다(인접 칸만 맞바꾸는 ▲▼와 달리 여러 칸을 한 번에 이동 가능). */
-function reorderEmpInZone(draggedEmpId, targetEmpId, insertAfter){
+/* 드래그로 순서 이동. 같은 구역 안이면 그 구역 순서만 다시 매기고, 다른 구역 직원 위에
+   놓으면 그 구역으로 소속(zone)까지 함께 옮긴다(구역 간 이동도 드래그 하나로 가능하게 —
+   zone-inline 입력칸을 거치지 않아도 됨). 인접 칸만 맞바꾸는 ▲▼와 달리 여러 칸을 한 번에
+   이동할 수 있다. */
+function moveEmpByDrag(draggedEmpId, targetEmpId, insertAfter){
   const branch = document.getElementById('rosterBranch').value || branches[0];
   if((document.getElementById('rosterZonePick').value||'all')!=='all' || (document.getElementById('rosterStaffSearch').value||'').trim()) return;
   const staff = getFilteredRosterStaff(branch);
   const dragged = staff.find(x=>x.id===draggedEmpId);
   const target = staff.find(x=>x.id===targetEmpId);
-  if(!dragged || !target || (dragged.zone||'')!==(target.zone||'')) return;
-  const zoneList = staff.filter(x=>(x.zone||'')===(dragged.zone||''));
-  const fromIdx = zoneList.findIndex(x=>x.id===draggedEmpId);
-  if(fromIdx<0) return;
-  zoneList.splice(fromIdx,1);
-  let toIdx = zoneList.findIndex(x=>x.id===targetEmpId);
-  if(toIdx<0) toIdx = zoneList.length;
+  if(!dragged || !target) return;
+  const fromZone = dragged.zone || '';
+  const toZone = target.zone || '';
+  const movingZone = fromZone !== toZone;
+  if(movingZone) dragged.zone = toZone;
+  const destList = staff.filter(x=> x.id!==draggedEmpId && (x.zone||'')===toZone);
+  let toIdx = destList.findIndex(x=>x.id===targetEmpId);
+  if(toIdx<0) toIdx = destList.length;
   if(insertAfter) toIdx += 1;
-  zoneList.splice(toIdx, 0, dragged);
-  zoneList.forEach((x,i)=>{ x.order = i+1; });
+  destList.splice(toIdx, 0, dragged);
+  destList.forEach((x,i)=>{ x.order = i+1; });
+  if(movingZone){
+    // 원래 있던 구역에 남은 인원도 순서를 다시 매겨 order 값 사이에 빈틈이 남지 않게 정리
+    const srcList = staff.filter(x=> x.id!==draggedEmpId && (x.zone||'')===fromZone);
+    srcList.forEach((x,i)=>{ x.order = i+1; });
+    logEvent(`${dragged.name}(${dragged.empno}) 구역 이동(드래그): "${fromZone||'(미지정)'}" → "${toZone||'(미지정)'}"`);
+  }
   persist(); renderRoster();
 }
 /* 정렬 기준에 맞춰 편집 화면에 넣을 구분행 라벨(구역명 / 근무조명)을 반환. 사번·성명순일 때는 구분행 없음. */
@@ -1875,6 +1884,12 @@ function renderRoster(){
   let b = '';
   let lastGroup = undefined;
   const sortMode = document.getElementById('rosterSortBy').value || 'zone';
+  // 날짜 칸 드롭다운에도 "근무조시작등록"과 같은 근무조 시작 옵션을 넣어, 특정 날짜 칸에서
+  // 바로 선택하면 그 날짜부터 새 패턴이 자동으로 이어지도록 함(모든 칸에서 재사용하도록
+  // 반복문 밖에서 한 번만 생성).
+  const shiftStartOptGroupHtml = '<optgroup label="근무조 시작(이 날짜부터 자동 적용)">'
+    + Object.keys(SHIFT_START_LABELS).map(k=>`<option value="__start__${k}">${esc(SHIFT_START_LABELS[k])}</option>`).join('')
+    + '</optgroup>';
   staff.forEach((e,idx)=>{
     const groupLabel = rosterGroupLabel(e);
     if(groupLabel !== null && groupLabel !== lastGroup){
@@ -1894,7 +1909,7 @@ function renderRoster(){
     const reorderBtns = canReorder ? `
         <button class="btn btn-outline" ${empDis||!prevSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 위로" onclick="moveEmpInZone('${e.id}',-1)">▲</button>
         <button class="btn btn-outline" ${empDis||!nextSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 아래로" onclick="moveEmpInZone('${e.id}',1)">▼</button>` : '';
-    const dragHandle = canReorder ? `<span class="zone-drag-handle no-print" ${empDis?'style="opacity:.35;pointer-events:none;"':''} title="마우스로 눌러서 구역 내 순서 이동" onmousedown="this.closest('tr').draggable=true">⠿</span>` : '';
+    const dragHandle = canReorder ? `<span class="zone-drag-handle no-print" ${empDis?'style="opacity:.35;pointer-events:none;"':''} title="마우스로 눌러서 순서 이동(다른 구역 위에 놓으면 그 구역으로 이동)" onmousedown="this.closest('tr').draggable=true">⠿</span>` : '';
     const dragAttrs = canDragRow ? ` draggable="false"
         ondragstart="rosterRowDragStart(event,'${e.id}')"
         ondragover="rosterRowDragOver(event,'${e.id}')"
@@ -1929,6 +1944,7 @@ function renderRoster(){
         + `<option value="__auto__" ${!isOverride?'selected':''}>${esc(codeDisplayLabel(autoCode))}</option>`
         + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${esc(codeDisplayLabel(c))}</option>`).join('')
         + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(codeDisplayLabel(code))}</option>` : '')
+        + shiftStartOptGroupHtml
         + `<option value="__custom__">직접입력(지역+코드)...</option>`
         + `</select></td>`;
     });
@@ -2257,6 +2273,13 @@ document.getElementById('btnReqSubmit').addEventListener('click', ()=>{
 });
 function updateCode(empId, dateStr, val){
   const e = employees.find(e=>e.id===empId); if(!e) return;
+  // 날짜 칸에서 "주시작/야시작/..."을 고른 경우 — 일반 예외 입력이 아니라 그 날짜를
+  // 시작일로 삼아 새 패턴을 등록하는 것이므로 applyPresetFrom()에 그대로 위임한다
+  // (이전 날짜는 유지, 이 날짜부터 자동으로 계속 이어짐 — 근무조시작등록과 동일 로직).
+  if(val && val.indexOf('__start__')===0){
+    applyPresetFrom(empId, val.slice('__start__'.length), dateStr);
+    return;
+  }
   if(!e.overrides) e.overrides={};
   if(val==='__custom__'){
     const input = prompt('지역+근무유형을 직접 입력하세요 (예: 도봉주, 도봉야, 강북숙).\n"주"/"야"/"숙"/"전일"/"휴"로 끝나야 근로시간 계산·근무 공백 확인에 정상 반영됩니다.', '');
@@ -2426,7 +2449,13 @@ function renderRosterPreview(){
   const grouped = isGroupSel(sel);
   const mode = document.getElementById("rosterViewMode").value;
   const dateList = getRosterDateList();
-  const staff = getRosterStaff(sel).slice().sort((a,b)=> grouped ? (a.branch.localeCompare(b.branch) || (a.zone||"").localeCompare(b.zone||"")) : (a.zone||"").localeCompare(b.zone||""));
+  // 편집표와 동일하게 정렬 기준(rosterSortBy: 구역순/상시근무자 우선/사번순/성명순)을 그대로
+  // 따르도록 sortRosterStaff()를 재사용한다(이전에는 항상 구역순으로만 고정돼 있어서
+  // "상시 근무자 우선" 등을 선택해도 미리보기/PDF에는 반영되지 않았음). Array.sort는
+  // 안정 정렬이므로, 지사 묶음 보기(grouped)에서는 정렬된 결과 위에 지사만 한 번 더
+  // 정렬해도 같은 지사 안의 순서(정렬 기준 결과)는 그대로 유지된다.
+  let staff = sortRosterStaff(getRosterStaff(sel));
+  if(grouped) staff = staff.slice().sort((a,b)=> a.branch.localeCompare(b.branch));
   const dowNames = ["일","월","화","수","목","금","토"];
   
   let [y, m] = (document.getElementById("rosterMonth").value || currentMonth).split("-");
