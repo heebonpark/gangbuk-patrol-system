@@ -435,6 +435,7 @@
         </select>
         <button class="btn btn-outline" id="btnZoneTeamRotation" title="같은 구역/호수 직원을 3명 단위로 묶어 주주야야숙숙 / 야야숙숙주주 / 숙숙주주야야 패턴을 자동 배정합니다.">구역별 3교대 자동배정</button>
         <button class="btn btn-outline" id="btnToggleContext" title="이번 달 경계 앞뒤 7일을 함께 보여줘 패턴 연속성을 바로 확인/수정할 수 있게 합니다.">전/후 7일 펼치기</button>
+        <button class="btn btn-outline" id="btnToggleCodeDisplay" title="근무표 편집표의 코드 표시를 주/야/숙 방식과 범례 코드(A/B/K 등, ERP 입력용) 방식 사이에서 전환합니다. 실제 저장되는 값은 바뀌지 않습니다.">범례코드로 보기</button>
         <span class="spacer"></span>
         <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
         <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
@@ -488,6 +489,18 @@
       <p class="callout-warn login-hidden" id="hourMonitorFilterWarning">구역/개인 조회 필터가 적용되어 지사 전체가 아닌 일부만 표시 중입니다. 전체 점검은 "필터 초기화"를 눌러 확인하세요.</p>
       <div class="table-scroll" id="rosterHourMonitor"></div>
     </div>
+    <details class="card no-print" id="erpSummaryCard">
+      <summary>
+        <div class="summary-head">
+          <h2><span class="tag-dot tool"></span>근태유형별 집계 (ERP 등록용)</h2>
+          <p class="sub">지금 조회 중인 기간을 기준으로, 사원별 근태유형(범례 A/B/K 등)별 일수·시간을 미리 계산해둡니다. 사내 ERP에 사람별로 옮겨 적을 때 그대로 참고하세요.</p>
+        </div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+      </summary>
+      <div class="details-body">
+        <div class="table-scroll" id="rosterErpSummary"></div>
+      </div>
+    </details>
     <div class="card no-print" id="zoneQuickPreviewCard" style="display:none;">
       <h2><span class="tag-dot tool"></span>빠른 미리보기<span id="zoneQuickPreviewZoneLabel" style="color:var(--text-mute);font-weight:400;"></span></h2>
       <p class="sub">위에서 구역을 선택하면 그 구역만 간단히 색으로 구분해서 바로 확인할 수 있습니다(공식 제출용 PDF/엑셀 출력은 아래 "미리보기" 버튼을 이용하세요).</p>
@@ -794,6 +807,36 @@ function baseCodeOf(code){
 const OVERTIME_THRESHOLD_HOURS = 240;
 function codeHours(code){ const b=baseCodeOf(code); return HOUR_MAP.hasOwnProperty(b) ? HOUR_MAP[b] : 0; }
 function monthlyHours(emp, dateList){ return dateList.reduce((sum,ds)=> sum + codeHours(effectiveCode(emp, ds)), 0); }
+/* 근무표에서 쓰는 주/야/숙 등 실무 코드와 PDF 범례(근태유형 A~R)의 정식 대응표.
+   HOUR_MAP과 동일한 시간값을 그대로 참조하므로 실무 코드 쪽만 바꾸면 여기도 같이 맞음.
+   ERP 등록용 집계표, "범례코드로 보기" 전환 버튼에서 공통으로 사용. */
+const CODE_LEGEND = {
+  '주': {letter:'A', label:'일근'},
+  '야': {letter:'B', label:'석근'},
+  '전일': {letter:'C', label:'전일'},
+  '숙': {letter:'K', label:'숙명'},
+  '교육': {letter:'I', label:'교육'},
+  '공가': {letter:'J', label:'공가'},
+  '연차': {letter:'L', label:'연차'},
+  '청원': {letter:'M', label:'청원'},
+  '병가': {letter:'N', label:'병가'},
+  '휴': {letter:'', label:'휴무'},
+  '비번': {letter:'', label:'비번'},
+};
+/* 근무표 편집표 코드 표시 전환("범례코드로 보기") — 저장값은 그대로 두고 화면 표시만
+   전환한다. 지역태그·대체근무처럼 원문 코드가 기본 코드와 다르면 "A(도봉주)"처럼 원문을
+   괄호로 병기해 정보 손실 없이 letter를 보여준다. */
+let rosterCodeDisplayMode = 'text'; // 'text' | 'letter'
+function codeLetterLabel(code){
+  if(!code) return '·';
+  const base = baseCodeOf(code);
+  const info = CODE_LEGEND[base];
+  if(!info || !info.letter) return code;
+  return code===base ? info.letter : `${info.letter}(${code})`;
+}
+function codeDisplayLabel(code){
+  return rosterCodeDisplayMode==='letter' ? codeLetterLabel(code) : (code || '·');
+}
 
 /* ---------- 주당·분기 근로시간 모니터링 ----------
    주(1주차~): 월요일~일요일, 1주 64시간 초과 금지.
@@ -1883,9 +1926,9 @@ function renderRoster(){
       const holidayCls = isHoliday(ds) ? ' holiday' : '';
       const isCustomCode = isOverride && !CODE_LIST.includes(code);
       b += `<td class="${isOverride?'is-override':''}${ctxCls}${holidayCls}" title="${isCustomCode?esc(code):''}"><select class="codecell code-${esc(baseCodeOf(code))}" ${empDis} onchange="updateCode('${e.id}','${ds}',this.value)">`
-        + `<option value="__auto__" ${!isOverride?'selected':''}>${autoCode || '·'}</option>`
-        + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${c||'·'}</option>`).join('')
-        + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(code)}</option>` : '')
+        + `<option value="__auto__" ${!isOverride?'selected':''}>${esc(codeDisplayLabel(autoCode))}</option>`
+        + CODE_LIST.map(c=>`<option value="${esc(c)}" ${isOverride && c===code?'selected':''}>${esc(codeDisplayLabel(c))}</option>`).join('')
+        + (isCustomCode ? `<option value="${esc(code)}" selected>${esc(codeDisplayLabel(code))}</option>` : '')
         + `<option value="__custom__">직접입력(지역+코드)...</option>`
         + `</select></td>`;
     });
@@ -1902,6 +1945,7 @@ function renderRoster(){
   document.getElementById('hourMonitorFilterWarning').classList.toggle('login-hidden', !isNarrowed);
   document.getElementById('zoneCoverageFilterWarning').classList.toggle('login-hidden', !isNarrowed);
   renderHourMonitor(staff, coreDateList);
+  renderErpSummary(staff, coreDateList);
   renderZoneQuickPreview(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
   renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin);
@@ -2035,6 +2079,41 @@ function renderHourMonitor(staff, coreDateList){
     });
     const qAvg = quarterlyAvgHoursForEmp(e, qRange);
     h += `<td class="${qAvg>QUARTER_AVG_LIMIT?'hours-over':''}">${qAvg.toFixed(1)}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
+}
+/* ERP 등록용 근태유형별 집계 — 사원별로 이번 조회 범위(coreDateList) 안에서 코드별
+   일수·시간을 미리 계산해, 회사 ERP에 사람별로 입력할 때 이 표를 보고 그대로 옮겨 적을
+   수 있게 한다. 열 순서는 CODE_LEGEND에 정의된 실무 코드 순서를 그대로 따름. */
+const ERP_SUMMARY_CODES = ['주','야','전일','숙','교육','연차','청원','공가','병가','휴','비번'];
+function renderErpSummary(staff, coreDateList){
+  const el = document.getElementById('rosterErpSummary');
+  if(!el) return;
+  if(staff.length===0 || coreDateList.length===0){ el.innerHTML=''; return; }
+  let h = '<table class="grid erp-summary-table"><thead><tr><th style="text-align:left;">사번 / 성명</th>';
+  ERP_SUMMARY_CODES.forEach(c=>{
+    const info = CODE_LEGEND[c];
+    h += `<th>${esc(info.label)}${info.letter?`(${info.letter})`:''}</th>`;
+  });
+  h += '<th>합계(시간)</th></tr></thead><tbody>';
+  staff.forEach(e=>{
+    const counts = {};
+    ERP_SUMMARY_CODES.forEach(c=>{ counts[c]=0; });
+    let totalHours = 0;
+    coreDateList.forEach(ds=>{
+      const code = effectiveCode(e, ds);
+      const base = baseCodeOf(code);
+      if(Object.prototype.hasOwnProperty.call(counts, base)) counts[base]++;
+      totalHours += codeHours(code);
+    });
+    h += `<tr><td style="text-align:left;white-space:nowrap;">${esc(e.empno)} · ${esc(e.name)}</td>`;
+    ERP_SUMMARY_CODES.forEach(c=>{
+      const cnt = counts[c];
+      const hrs = HOUR_MAP[c] || 0;
+      h += `<td>${cnt ? (hrs>0 ? `${cnt}일(${cnt*hrs}h)` : `${cnt}일`) : '-'}</td>`;
+    });
+    h += `<td style="font-weight:700;">${totalHours}</td></tr>`;
   });
   h += '</tbody></table>';
   el.innerHTML = h;
@@ -2319,6 +2398,11 @@ function applyZoneTeamRotation(){
 document.getElementById('btnZoneTeamRotation').addEventListener('click', applyZoneTeamRotation);
 document.getElementById('btnToggleContext').addEventListener('click', ()=>{
   rosterContextExpanded = !rosterContextExpanded;
+  renderRoster();
+});
+document.getElementById('btnToggleCodeDisplay').addEventListener('click', ()=>{
+  rosterCodeDisplayMode = rosterCodeDisplayMode==='text' ? 'letter' : 'text';
+  document.getElementById('btnToggleCodeDisplay').textContent = rosterCodeDisplayMode==='letter' ? '주/야/숙으로 보기' : '범례코드로 보기';
   renderRoster();
 });
 function deleteEmp(empId){
