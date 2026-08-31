@@ -742,7 +742,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <!-- ADMIN PANEL -->
   <section class="panel" id="panel-admin">
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>배포 저장소 연동 상태</h2>
       <p class="sub" id="storageModeDesc">확인 중...</p>
       <div class="toolbar no-print" id="ghConfigBox" style="display:none;">
@@ -762,7 +762,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </p>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>비밀번호 관리</h2>
       <p class="sub">로그인 게이트 비밀번호를 바꿉니다. 이 브라우저에만 저장되며(팀원 기기와 공유 안 됨), 초기화하면 기본값(지사명+1234+!)으로 돌아갑니다.</p>
       <div class="toolbar no-print" style="margin-bottom:8px;">
@@ -780,7 +780,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>경비지도사 관리</h2>
       <p class="sub">이름/연락처 수정은 자동으로 연결된 순회 일정에도 반영됩니다. 삭제는 연결된 일정이 없을 때만 가능합니다.</p>
       <div id="guideAdminList"></div>
@@ -793,7 +793,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>지도사 인계 (담당 변경 이벤트)</h2>
       <p class="sub">특정 지도사가 담당하던 모든 순회 일정을 다른 지도사에게 한 번에 이관합니다. (인사이동·구역 재배정 시 사용)</p>
       <div class="handover-row no-print">
@@ -804,7 +804,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>지사 관리</h2>
       <p class="sub">사용 중(순회 일정·근무표에 연결)인 지사는 삭제할 수 없습니다.</p>
       <div id="branchAdminList"></div>
@@ -814,24 +814,28 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="adminZoneManageCard">
       <h2>직원 구역/호수 관리</h2>
-      <p class="sub">근무표 미리보기에서 직원을 묶어 보여주는 "구역/호수" 값을 지사·직원별로 확인하고 바로 수정합니다.</p>
+      <p class="sub">근무표 미리보기에서 직원을 묶어 보여주는 "구역/호수" 값과 연락처를 지사·직원별로 확인하고 바로 수정합니다. 지사 로그인 시 소속 지사 인원만 보이고 수정할 수 있습니다.</p>
       <div class="toolbar no-print" style="margin-bottom:10px;">
         <select id="zoneAdminBranch"><option value="all">전체 지사</option></select>
+        <button class="btn btn-outline" id="btnZoneAdminExcel">엑셀로 다운로드</button>
+        <label class="btn btn-outline" for="zoneAdminUploadInput" style="margin:0;">엑셀로 일괄 업로드</label>
+        <input type="file" id="zoneAdminUploadInput" accept=".xlsx,.xls" style="display:none;">
+        <span class="sub" style="margin:0;">업로드 형식: 사번 · 구역/호수 · 연락처 (다운로드한 파일을 그대로 고쳐서 다시 올리면 됨)</span>
       </div>
       <div class="table-scroll" style="max-height:420px;">
         <table class="grid" id="zoneAdminTable"><thead></thead><tbody></tbody></table>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>변경 이력 로그</h2>
       <p class="sub">지도사/지사 변경, 인계, 월 롤오버 등 관리자 이벤트가 자동 기록됩니다.</p>
       <div id="changeLogList" style="max-height:260px;overflow-y:auto;"></div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>데이터 백업 · 복원</h2>
       <p class="sub">전체 데이터를 JSON 파일로 내려받거나, 이전 백업 파일로 복원할 수 있습니다.</p>
       <div class="toolbar no-print">
@@ -840,7 +844,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <div class="card">
+    <div class="card admin-only-card">
       <h2>최신 기본값으로 초기화</h2>
       <p class="sub">이 브라우저(또는 exe)에 예전 버전 데이터가 그대로 남아있어서 지사 목록·직원 구성이 최신 코드와 다르게 보일 때 사용합니다.
         <b>이 브라우저에 저장된 근무표·서명·비밀번호 변경 내역이 모두 지워지고</b> 시스템이 원래 갖고 있는 최신 시드 데이터로 되돌아갑니다.
@@ -1287,7 +1291,10 @@ function updateLoginStatusPill(){
 function applyTabRestriction(){
   const a = currentAuth();
   if(!a || a.isAdmin) return;
-  const allowed = new Set(['roster','import']);
+  // 관리자설정 탭 전체가 아니라, 지사가 스스로 관리해도 되는 "직원 구역/호수 관리" 카드만
+  // 볼 수 있게 허용한다(비밀번호 관리/지사 관리/백업·복원/초기화 등 다른 카드는 admin-only-card
+  // 클래스로 그대로 숨김 — renderZoneAdmin()에서 소속 지사 인원만 보이도록 추가로 잠금).
+  const allowed = new Set(['roster','import','admin']);
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     const isAllowed = allowed.has(btn.dataset.tab);
     btn.classList.toggle('login-hidden', !isAllowed);
@@ -1297,6 +1304,7 @@ function applyTabRestriction(){
   document.getElementById('importCard1').classList.add('login-hidden');
   document.getElementById('importCard3').classList.add('login-hidden');
   document.getElementById('importBranchNotice').classList.remove('login-hidden');
+  document.querySelectorAll('#panel-admin .admin-only-card').forEach(c=> c.classList.add('login-hidden'));
   renderRoster();
 }
 function initLoginGate(){
@@ -3530,20 +3538,99 @@ document.getElementById('btnPwAdminReset').addEventListener('click', ()=>{
 });
 function renderZoneAdmin(){
   const sel = document.getElementById('zoneAdminBranch');
+  const auth = currentAuth();
+  const isAdmin = !!(auth && auth.isAdmin);
   const cur = sel.value;
-  sel.innerHTML = '<option value="all">전체 지사</option>' + branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
-  if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+  // 지사 로그인은 소속 지사만 볼 수 있게(다른 지사 인원 노출/수정 방지) 선택지를 자기
+  // 지사 하나로 고정하고 선택칸 자체도 잠근다.
+  if(isAdmin){
+    sel.innerHTML = '<option value="all">전체 지사</option>' + branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+    sel.disabled = false;
+  } else {
+    sel.innerHTML = `<option value="${esc(auth.branch)}">${esc(auth.branch)}</option>`;
+    sel.value = auth.branch;
+    sel.disabled = true;
+  }
   const filterBranch = sel.value || 'all';
   const list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch)
     .slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
   const thead = document.querySelector('#zoneAdminTable thead');
-  thead.innerHTML = '<tr><th>지사</th><th>사번</th><th>성명</th><th>직급</th><th>구역/호수</th></tr>';
+  thead.innerHTML = '<tr><th>지사</th><th>사번</th><th>성명</th><th>직급</th><th>구역/호수</th><th>연락처</th></tr>';
   const tbody = document.querySelector('#zoneAdminTable tbody');
-  if(list.length===0){ tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text-mute);padding:14px;">표시할 직원이 없습니다.</td></tr>`; return; }
+  if(list.length===0){ tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-mute);padding:14px;">표시할 직원이 없습니다.</td></tr>`; return; }
   tbody.innerHTML = list.map(e=>`<tr><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(e.rank)}</td>
-    <td><input type="text" value="${esc(e.zone||'')}" placeholder="예: 401호" onchange="updateEmpZone('${e.id}', this.value)"></td></tr>`).join('');
+    <td><input type="text" value="${esc(e.zone||'')}" placeholder="예: 401호" onchange="updateEmpZone('${e.id}', this.value)"></td>
+    <td><input type="text" value="${esc(e.phone||'')}" placeholder="연락처" onchange="updateEmpPhone('${e.id}', this.value)"></td></tr>`).join('');
 }
 document.getElementById('zoneAdminBranch').addEventListener('change', renderZoneAdmin);
+/* 직원 구역/호수 관리 표의 엑셀 다운로드 — 그대로 고쳐서 다시 올릴 수 있는 왕복용 양식.
+   지사 로그인은 항상 자기 지사만 포함됨(zoneAdminBranch가 잠겨 있으므로). */
+document.getElementById('btnZoneAdminExcel').addEventListener('click', ()=>{
+  const filterBranch = document.getElementById('zoneAdminBranch').value || 'all';
+  const list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch)
+    .slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
+  const rows = [['지사','사번','성명','직급','구역/호수','연락처'], ...list.map(e=>[e.branch, e.empno, e.name, e.rank, e.zone||'', e.phone||''])];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '구역호수관리');
+  const label = filterBranch==='all' ? '전체지사' : filterBranch;
+  XLSX.writeFile(wb, `${label}_직원_구역호수_연락처.xlsx`);
+});
+/* 일괄 업로드 — 다운로드 양식(지사/사번/성명/직급/구역호수/연락처)을 그대로 다시 올리면
+   "사번"으로 직원을 찾아 구역/호수·연락처만 갱신한다(성명/직급은 참고용, 반영 안 함).
+   지사 로그인은 자기 지사 소속 직원만 반영되도록 한 번 더 막는다(업로드 파일에 다른
+   지사 사번이 섞여 있어도 무시). "지사" 열이 있으면 사번과 함께 매칭해 정확도를 높인다. */
+document.getElementById('zoneAdminUploadInput').addEventListener('change', (evt)=>{
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      if(rows.length<2){ alert('업로드할 데이터가 없습니다.'); return; }
+      const header = rows[0].map(h=>String(h).trim());
+      const empnoIdx = header.indexOf('사번');
+      const zoneIdx = header.indexOf('구역/호수');
+      const phoneIdx = header.indexOf('연락처');
+      const branchIdx = header.indexOf('지사');
+      if(empnoIdx<0){ alert('"사번" 열을 찾을 수 없습니다. 다운로드한 양식을 그대로 사용해주세요.'); return; }
+      const auth = currentAuth();
+      const isAdmin = !!(auth && auth.isAdmin);
+      const scopeBranch = isAdmin ? null : auth.branch;
+      let updated = 0, notFound = 0, skipped = 0;
+      for(let i=1;i<rows.length;i++){
+        const row = rows[i];
+        const empno = String(row[empnoIdx]||'').trim();
+        if(!empno) continue;
+        const rowBranch = branchIdx>=0 ? String(row[branchIdx]||'').trim() : '';
+        const candidates = employees.filter(x=> x.empno===empno
+          && (!scopeBranch || x.branch===scopeBranch)
+          && (!rowBranch || x.branch===rowBranch));
+        if(candidates.length===0){
+          if(scopeBranch && employees.some(x=>x.empno===empno)) skipped++; else notFound++;
+          continue;
+        }
+        candidates.forEach(emp=>{
+          if(zoneIdx>=0) emp.zone = String(row[zoneIdx]||'').trim();
+          if(phoneIdx>=0) emp.phone = String(row[phoneIdx]||'').trim();
+        });
+        updated++;
+      }
+      logEvent(`직원 구역/호수·연락처 일괄 업로드: ${updated}명 반영${notFound?`, 사번 못 찾음 ${notFound}명`:''}${skipped?`, 다른 지사 소속이라 건너뜀 ${skipped}명`:''}`);
+      persist(); renderRoster(); renderZoneAdmin();
+      alert(`${updated}명 반영되었습니다.${notFound?`\n사번을 찾지 못한 행: ${notFound}개`:''}${skipped?`\n소속 지사가 달라 건너뛴 행: ${skipped}개`:''}`);
+    }catch(err){
+      alert('파일을 읽는 중 문제가 발생했습니다: ' + err.message);
+    }finally{
+      evt.target.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
 function updateEmpZone(empId, val){
   const e = employees.find(x=>x.id===empId); if(!e) return;
   const old = e.zone || '';
