@@ -1566,6 +1566,7 @@ function addDaysStr(dateStr, delta){
   d.setDate(d.getDate()+delta);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function shortLabel(ds){ return `${parseInt(ds.slice(5,7))}/${parseInt(ds.slice(8,10))}`; }
 function getRosterDateList(){
   const mode = document.getElementById('rosterViewMode').value;
@@ -1791,6 +1792,7 @@ function renderRoster(){
             <option value="standby7">상시(주주주주주숙숙)</option>
           </optgroup>
         </select>
+        <input type="date" id="shiftStartDate_${e.id}" ${empDis} value="${addDaysStr(todayStr(),3)}" title="이 날짜부터 새 근무조가 자동 적용됩니다. 그 이전 날짜는 지금 보이는 값이 그대로 유지됩니다." style="font-size:10px;padding:2px 4px;width:120px;">
         <button class="btn btn-outline" ${empDis} style="padding:2px 6px;font-size:10px;" onclick="applyShiftStart('${e.id}')">근무조시작등록</button>
       </div></td>`;
     dateList.forEach(ds=>{
@@ -2176,26 +2178,40 @@ function promptLeaveSubstitute(emp, dateStr){
   checkAndAlertZoneDuplicateForDates(sub, dates, beforeDupMap);
   alert(`${sub.name}님에게 ${dateStr}~${endDs} "${subCode}"로 대체근무가 등록되었습니다.`);
 }
-function applyPreset(empId, key){
+/* 지정한 시작일(startDs)부터 새 패턴이 자동 적용되도록 등록. 시작일 이전 날짜(현재 화면에
+   보이는 범위 안)는 지금 계산되는 값을 그대로 override로 고정해 과거 기록이 바뀌지 않게 하고,
+   시작일 이후로 남아있던 기존 예외는 지워서 새 패턴이 patternCodeFor()의 모듈로 계산으로
+   그 날부터 끝없이 자동 반영되도록 한다(예: 오늘 등록해도 시작일을 D+3으로 잡으면 D+2까지는
+   그대로, D+3부터 새 패턴이 별도 조작 없이 계속 이어짐). */
+function applyPresetFrom(empId, key, startDs){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   const beforeViolations = getHourViolations(e);
   const coreDateList = getRosterDateList();
   const beforeDupMap = getZoneDupSnapshot(e, coreDateList);
-  const ym = document.getElementById('rosterMonth').value || currentMonth;
-  const {pattern, patternStart} = generateFromPreset(key, ym+'-01');
-  e.pattern = pattern; e.patternStart = patternStart; e.overrides = {};
-  logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key}`);
+  const {pattern} = generateFromPreset(key, startDs);
+  const ov = Object.assign({}, e.overrides || {});
+  coreDateList.forEach(ds=>{
+    if(ds < startDs){
+      if(!Object.prototype.hasOwnProperty.call(ov, ds)) ov[ds] = effectiveCode(e, ds);
+    } else {
+      delete ov[ds];
+    }
+  });
+  e.overrides = ov;
+  e.pattern = pattern; e.patternStart = startDs;
+  logEvent(`${e.name}(${e.empno}) 근무표 패턴 재설정: ${key} (${startDs}부터 자동 적용, 이전 날짜는 유지)`);
   persist(); renderRoster();
   checkAndAlertHourLimit(e, beforeViolations);
   checkAndAlertZoneDuplicateForDates(e, coreDateList, beforeDupMap);
 }
 /* 근무표 편집표 행의 "근무조시작등록" 버튼 — 옆 드롭다운에서 고른 시작 패턴(주시작/야시작/
-   주야시작/야숙시작/상시)을 오늘 보고 있는 달의 1일부터 적용. applyPreset()과 동일한
-   근로시간·구역중복 검사를 그대로 재사용. */
+   주야시작/야숙시작/상시)을 옆 날짜칸에 지정한 시작일부터 적용(기본값 오늘+3일). */
 function applyShiftStart(empId){
   const sel = document.getElementById('shiftStartSel_'+empId);
+  const dateInput = document.getElementById('shiftStartDate_'+empId);
   if(!sel) return;
-  applyPreset(empId, sel.value);
+  const startDs = (dateInput && dateInput.value) || todayStr();
+  applyPresetFrom(empId, sel.value, startDs);
 }
 /* 구역/호수가 같은 "교대" 직원을 3명 단위로 묶어 주/야/숙 담당이 항상 한 명씩 서도록
    자동 배정. 연차 등 예외는 그대로 두고(수동으로만 변경), 기존 예외는 초기화됨. */
