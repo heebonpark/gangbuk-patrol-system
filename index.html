@@ -152,6 +152,14 @@
   table.roster tr.zone-group-row td{background:#EEF2FF;color:var(--navy);font-weight:700;text-align:left;padding:5px 8px;font-size:11.5px;}
   table.roster th.dcol.ctx{background:#EAECF0;color:#9AA3B2;}
   table.roster td.ctx{background:#FAFBFC;}
+  /* 구역 내 순서를 마우스 드래그로 바꾸는 핸들·드롭 표시 — 테트리스처럼 잡은 행이 어디에
+     끼워질지 파란 삽입선으로 미리 보여준다. */
+  .zone-drag-handle{cursor:grab;padding:1px 5px;font-size:12px;color:var(--text-mute);user-select:none;display:inline-block;border-radius:4px;}
+  .zone-drag-handle:hover{background:#EEF2FF;color:var(--accent);}
+  .zone-drag-handle:active{cursor:grabbing;}
+  table.roster tr.row-dragging td{opacity:0.4;}
+  table.roster tr.drop-before td{box-shadow:inset 0 2px 0 0 var(--accent);}
+  table.roster tr.drop-after td{box-shadow:inset 0 -2px 0 0 var(--accent);}
   table.roster td.ctx select.codecell{color:#9AA3B2;}
   table.roster select.codecell:hover{background:#F0F3F8;}
   .code-야{color:#8C4FC9;font-weight:700;}
@@ -1684,6 +1692,70 @@ function moveEmpInZone(empId, dir){
   const tmp = a.order; a.order = b.order; b.order = tmp;
   persist(); renderRoster();
 }
+/* 구역 내 순서를 마우스 드래그로 바꾸는 기능(▲▼ 버튼과 order 필드를 그대로 공유).
+   행의 ⠿ 핸들을 누른 순간에만 그 tr의 draggable을 켜서(dragEnd에서 다시 끔), 코드
+   드롭다운·입력칸을 클릭할 때 실수로 행 전체가 끌리지 않게 한다. */
+let dragEmpId = null;
+function rosterRowDragStart(evt, empId){
+  if((document.getElementById('rosterZonePick').value||'all')!=='all' || (document.getElementById('rosterStaffSearch').value||'').trim()){
+    evt.preventDefault(); return;
+  }
+  dragEmpId = empId;
+  evt.dataTransfer.effectAllowed = 'move';
+  try{ evt.dataTransfer.setData('text/plain', empId); }catch(err){}
+  evt.currentTarget.classList.add('row-dragging');
+}
+function rosterRowDragOver(evt, empId){
+  if(!dragEmpId || dragEmpId===empId) return;
+  const dragEmp = employees.find(x=>x.id===dragEmpId), overEmp = employees.find(x=>x.id===empId);
+  if(!dragEmp || !overEmp || (dragEmp.zone||'')!==(overEmp.zone||'')) return; // 다른 구역엔 드롭 불가
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = 'move';
+  const row = evt.currentTarget;
+  const rect = row.getBoundingClientRect();
+  const before = (evt.clientY - rect.top) < rect.height/2;
+  row.classList.toggle('drop-before', before);
+  row.classList.toggle('drop-after', !before);
+}
+function rosterRowDragLeave(evt){
+  evt.currentTarget.classList.remove('drop-before','drop-after');
+}
+function rosterRowDrop(evt, targetEmpId){
+  evt.preventDefault();
+  const row = evt.currentTarget;
+  const before = row.classList.contains('drop-before');
+  row.classList.remove('drop-before','drop-after');
+  const draggedId = dragEmpId;
+  dragEmpId = null;
+  if(!draggedId || draggedId===targetEmpId) return;
+  reorderEmpInZone(draggedId, targetEmpId, !before);
+}
+function rosterRowDragEnd(evt){
+  evt.currentTarget.classList.remove('row-dragging');
+  evt.currentTarget.draggable = false;
+  document.querySelectorAll('table.roster tr.drop-before, table.roster tr.drop-after').forEach(r=>r.classList.remove('drop-before','drop-after'));
+  dragEmpId = null;
+}
+/* 드래그로 넘겨받은 두 직원의 구역이 같을 때만, 그 구역 안 순서를 통째로 다시 매겨 드롭한
+   자리로 옮긴다(인접 칸만 맞바꾸는 ▲▼와 달리 여러 칸을 한 번에 이동 가능). */
+function reorderEmpInZone(draggedEmpId, targetEmpId, insertAfter){
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  if((document.getElementById('rosterZonePick').value||'all')!=='all' || (document.getElementById('rosterStaffSearch').value||'').trim()) return;
+  const staff = getFilteredRosterStaff(branch);
+  const dragged = staff.find(x=>x.id===draggedEmpId);
+  const target = staff.find(x=>x.id===targetEmpId);
+  if(!dragged || !target || (dragged.zone||'')!==(target.zone||'')) return;
+  const zoneList = staff.filter(x=>(x.zone||'')===(dragged.zone||''));
+  const fromIdx = zoneList.findIndex(x=>x.id===draggedEmpId);
+  if(fromIdx<0) return;
+  zoneList.splice(fromIdx,1);
+  let toIdx = zoneList.findIndex(x=>x.id===targetEmpId);
+  if(toIdx<0) toIdx = zoneList.length;
+  if(insertAfter) toIdx += 1;
+  zoneList.splice(toIdx, 0, dragged);
+  zoneList.forEach((x,i)=>{ x.order = i+1; });
+  persist(); renderRoster();
+}
 /* 정렬 기준에 맞춰 편집 화면에 넣을 구분행 라벨(구역명 / 근무조명)을 반환. 사번·성명순일 때는 구분행 없음. */
 function rosterGroupLabel(e){
   const mode = document.getElementById('rosterSortBy').value || 'zone';
@@ -1773,12 +1845,20 @@ function renderRoster(){
     // 구역선택/검색으로 좁혀진 상태에서는 순서 조정을 막음(부분집합만 놓고 순서를 매기면
     // 필터를 껐을 때 전체 구역의 순서가 예기치 않게 섞이므로 — 필터 없는 전체 보기에서만 허용).
     const canReorder = sortMode==='zone' && !isNarrowed;
+    const canDragRow = canReorder && !empDis;
     const prevSameZone = canReorder && idx>0 && (staff[idx-1].zone||'')===(e.zone||'');
     const nextSameZone = canReorder && idx<staff.length-1 && (staff[idx+1].zone||'')===(e.zone||'');
     const reorderBtns = canReorder ? `
         <button class="btn btn-outline" ${empDis||!prevSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 위로" onclick="moveEmpInZone('${e.id}',-1)">▲</button>
         <button class="btn btn-outline" ${empDis||!nextSameZone?'disabled':''} style="padding:2px 6px;font-size:10px;" title="구역 내 순서 아래로" onclick="moveEmpInZone('${e.id}',1)">▼</button>` : '';
-    b += `<tr><td class="fixed">${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}${empFinalizedBadge}
+    const dragHandle = canReorder ? `<span class="zone-drag-handle no-print" ${empDis?'style="opacity:.35;pointer-events:none;"':''} title="마우스로 눌러서 구역 내 순서 이동" onmousedown="this.closest('tr').draggable=true">⠿</span>` : '';
+    const dragAttrs = canDragRow ? ` draggable="false"
+        ondragstart="rosterRowDragStart(event,'${e.id}')"
+        ondragover="rosterRowDragOver(event,'${e.id}')"
+        ondragleave="rosterRowDragLeave(event)"
+        ondrop="rosterRowDrop(event,'${e.id}')"
+        ondragend="rosterRowDragEnd(event)"` : '';
+    b += `<tr${dragAttrs}><td class="fixed">${dragHandle}${e.empno} · ${esc(e.name)} · ${e.rank} · ${e.shift}${empFinalizedBadge}
       <div class="no-print" style="margin-top:3px;">
         <input type="text" class="zone-inline" ${empDis} value="${esc(e.zone||'')}" placeholder="구역/호수" title="구역/호수 수정" onchange="updateEmpZone('${e.id}', this.value)">${reorderBtns}
         <select id="shiftStartSel_${e.id}" ${empDis} style="font-size:10px;padding:2px 4px;">
