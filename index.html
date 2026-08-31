@@ -582,6 +582,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
       </summary>
       <div class="details-body">
+        <div class="toolbar no-print" style="margin-bottom:8px;">
+          <button class="btn btn-outline" id="btnErpSummaryExcel">엑셀로 다운로드</button>
+        </div>
         <div class="table-scroll" id="rosterErpSummary"></div>
       </div>
     </details>
@@ -2826,6 +2829,9 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
 
   ws.getRow(2).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
   ws.getRow(3).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
+  // 사번·성명·직무·직급·근무조·합계(시간)는 날짜별 요일이 없는(=아래 3행이 항상 빈칸인)
+  // 항목이라, 미리보기/PDF의 rowspan="2"와 똑같이 2~3행을 세로로 병합해 표를 보기 좋게 함.
+  [1,2,3,4,5,colCount].forEach(c=> ws.mergeCells(2,c,3,c));
   staff.forEach(e=>{
     ws.addRow([e.empno, e.name, e.duty||'', e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
   });
@@ -2860,6 +2866,72 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = `${branch}${zoneSuffix}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+});
+document.getElementById('btnErpSummaryExcel').addEventListener('click', async ()=>{
+  // renderErpSummary()와 완전히 같은 데이터를 그대로 엑셀로 내보내, 화면에서 보는 표와
+  // 파일 안 내용이 항상 일치하도록 한다.
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const ym = document.getElementById('rosterMonth').value || currentMonth;
+  const coreDateList = getRosterDateList();
+  const staff = getFilteredRosterStaff(branch);
+  if(staff.length===0){ alert('내보낼 직원이 없습니다.'); return; }
+
+  const wb = new ExcelJS.Workbook();
+  const sheetName = (`${branch}_${ym}_근태집계`).replace(/[\\/*?:[\]]/g,'_').slice(0,31);
+  const ws = wb.addWorksheet(sheetName);
+  const colCount = 2 + ERP_SUMMARY_CODES.length + 1;
+
+  ws.mergeCells(1,1,1,colCount);
+  const titleCell = ws.getCell(1,1);
+  titleCell.value = `${branch}지사 ${ym} 근태유형별 집계 (ERP 등록용)`;
+  titleCell.font = { bold:true, size:13 };
+  titleCell.alignment = { horizontal:'center', vertical:'middle' };
+  ws.getRow(1).height = 22;
+
+  const headerLabels = ERP_SUMMARY_CODES.map(c=>{ const info = CODE_LEGEND[c]; return `${info.label}${info.letter?`(${info.letter})`:''}`; });
+  ws.getRow(2).values = ['사번', '성명', ...headerLabels, '합계(시간)'];
+
+  staff.forEach(e=>{
+    const counts = {};
+    ERP_SUMMARY_CODES.forEach(c=>{ counts[c]=0; });
+    let totalHours = 0;
+    coreDateList.forEach(ds=>{
+      const code = effectiveCode(e, ds);
+      const base = baseCodeOf(code);
+      if(Object.prototype.hasOwnProperty.call(counts, base)) counts[base]++;
+      totalHours += codeHours(code);
+    });
+    const rowVals = ERP_SUMMARY_CODES.map(c=>{
+      const cnt = counts[c], hrs = HOUR_MAP[c] || 0;
+      return cnt ? (hrs>0 ? `${cnt}일(${cnt*hrs}h)` : `${cnt}일`) : '-';
+    });
+    ws.addRow([e.empno, e.name, ...rowVals, totalHours]);
+  });
+
+  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
+  const lastRow = 2 + staff.length;
+  for(let r=2; r<=lastRow; r++){
+    for(let c=1; c<=colCount; c++){
+      const cell = ws.getCell(r,c);
+      cell.border = { top:thin, left:thin, bottom:thin, right:thin };
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      if(r===2){
+        cell.font = { bold:true };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+      }
+    }
+  }
+  ws.getColumn(1).width = 10; ws.getColumn(2).width = 10;
+  ERP_SUMMARY_CODES.forEach((_,i)=>{ ws.getColumn(3+i).width = 11; });
+  ws.getColumn(colCount).width = 10;
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${branch}_${ym}_근태집계.xlsx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
