@@ -338,6 +338,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .sig-img{max-width:56px;max-height:26px;cursor:pointer;}
   .sig-btn{padding:2px 5px !important;font-size:9px !important;}
   .hours-over{background:#fee2e2 !important;color:#b91c1c !important;font-weight:700;}
+  /* 대시보드: 일일 근무배치 현황 — 지사별 근무유형 분포 가로 누적 막대. 색은 dataviz
+     스킬의 검증된 카테고리 팔레트(인접쌍 CVD ΔE>=8, 일반시각 ΔE>=15 통과)를 그대로 사용. */
+  .dash-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--text-mute);}
+  .dash-legend-item{display:flex;align-items:center;gap:6px;}
+  .dash-legend-swatch{width:10px;height:10px;border-radius:2px;display:inline-block;}
+  .dash-branch-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+  .dash-branch-label{width:150px;flex-shrink:0;font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .dash-branch-label .dash-branch-sub{font-weight:400;color:var(--text-mute);font-size:11px;margin-left:4px;}
+  .dash-bar{flex:1;display:flex;gap:2px;height:22px;border-radius:5px;overflow:hidden;background:#EEF1F6;}
+  .dash-seg{height:100%;min-width:3px;transition:opacity 0.15s ease;}
+  .dash-seg:hover{opacity:0.75;}
+  .dash-seg-ju{background:#2a78d6;} .dash-seg-ya{background:#eb6834;}
+  .dash-seg-suk{background:#1baf7a;} .dash-seg-etc{background:#9aa3b2;}
+  .dash-gap-badge{flex-shrink:0;width:74px;text-align:right;font-size:11px;}
+  .dash-gap-badge.has-gap{color:var(--danger);font-weight:700;}
+  .dash-gap-badge.no-gap{color:var(--good);}
   .preview-main-table tr.row-match td:not(.preview-name-col):not(.preview-hours-col):not(.sig-cell){background:#fef9c3 !important;transition:background 0.4s;}
   .preview-main-table tr.row-match td.preview-name-col{font-weight:700;}
 
@@ -472,6 +488,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <button data-tab="doc">경찰서 제출용 (별지1)</button>
   <button data-tab="alerts">운영 알림 · 자동검증</button>
   <button data-tab="import">엑셀 가져오기</button>
+  <button data-tab="dashboard">대시보드</button>
   <button data-tab="admin">관리자 설정</button>
 </nav>
 
@@ -736,6 +753,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="toolbar no-print" id="batchImportActions" style="display:none;margin-top:12px;">
         <span class="spacer"></span>
         <button class="btn btn-warm" id="btnBatchImport">전 지사 일괄 가져오기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD PANEL (관리자 전용) -->
+  <section class="panel" id="panel-dashboard">
+    <div class="card">
+      <h2>일일 근무배치 현황</h2>
+      <p class="sub">선택한 날짜 기준으로 지사별 근무유형(주/야/숙/휴·기타) 인원 분포와 구역 공백 여부를 한눈에 봅니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:14px;">
+        <label style="font-size:11.5px;color:var(--text-mute);">기준일</label>
+        <input type="date" id="dashDate">
+      </div>
+      <div class="dash-legend" id="dashLegend"></div>
+      <div id="dashChart"></div>
+      <div class="table-scroll" style="margin-top:18px;">
+        <table class="grid" id="dashTable"><thead></thead><tbody></tbody></table>
       </div>
     </div>
   </section>
@@ -1581,6 +1615,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     if(btn.dataset.tab==='alerts') renderAlerts();
     if(btn.dataset.tab==='table') renderTableBody();
     if(btn.dataset.tab==='admin') renderAdmin();
+    if(btn.dataset.tab==='dashboard') renderDashboard();
   });
 });
 
@@ -3714,6 +3749,66 @@ function startEditContact(span, empId, field){
   span.appendChild(input);
   input.focus();
 }
+/* ---------- 대시보드: 일일 근무배치 현황(관리자 전용) ----------
+   선택한 날짜 하루 기준으로 지사별 주/야/숙/휴·기타 인원 분포(누적 막대)와 구역 공백
+   여부를 한눈에 보여준다. 근무표 탭의 renderZoneCoverageCheck()와 같은 판단 기준(숙/휴
+   동일 취급)을 하루짜리로 축약해 재사용. */
+function renderDashboard(){
+  const dateInput = document.getElementById('dashDate');
+  if(!dateInput.value) dateInput.value = todayStr();
+  const ds = dateInput.value;
+
+  const legendEl = document.getElementById('dashLegend');
+  legendEl.innerHTML = [
+    ['dash-seg-ju','주'], ['dash-seg-ya','야'], ['dash-seg-suk','숙'], ['dash-seg-etc','휴·기타']
+  ].map(([cls,label])=>`<span class="dash-legend-item"><span class="dash-legend-swatch ${cls}"></span>${label}</span>`).join('');
+
+  const chartEl = document.getElementById('dashChart');
+  const rows = [];
+  let chartHtml = '';
+  branches.forEach(b=>{
+    const staff = employees.filter(e=>e.branch===b);
+    const counts = { 주:0, 야:0, 숙:0, etc:0 };
+    staff.forEach(e=>{
+      const base = baseCodeOf(effectiveCode(e, ds));
+      if(base==='주') counts.주++;
+      else if(base==='야') counts.야++;
+      else if(base==='숙') counts.숙++;
+      else counts.etc++;
+    });
+    const total = staff.length || 1;
+    const pct = k => (counts[k]/total*100).toFixed(2);
+
+    const zones = {};
+    staff.forEach(e=>{ if(e.zone) (zones[e.zone]=zones[e.zone]||[]).push(e); });
+    const zoneNames = Object.keys(zones).filter(z=> zones[z].some(e=>e.shift==='교대'));
+    let gapZoneCount = 0;
+    zoneNames.forEach(z=>{
+      const codes = zones[z].map(e=>baseCodeOf(effectiveCode(e, ds)));
+      const missing = ['주','야','숙'].filter(r=> r==='숙' ? !codes.some(c=>c==='숙'||c==='휴') : !codes.includes(r));
+      if(missing.length>0) gapZoneCount++;
+    });
+
+    chartHtml += `<div class="dash-branch-row">
+      <div class="dash-branch-label">${esc(b)}<span class="dash-branch-sub">(${staff.length}명)</span></div>
+      <div class="dash-bar">
+        ${counts.주>0?`<div class="dash-seg dash-seg-ju" style="width:${pct('주')}%;" title="${esc(b)} 주 ${counts.주}명"></div>`:''}
+        ${counts.야>0?`<div class="dash-seg dash-seg-ya" style="width:${pct('야')}%;" title="${esc(b)} 야 ${counts.야}명"></div>`:''}
+        ${counts.숙>0?`<div class="dash-seg dash-seg-suk" style="width:${pct('숙')}%;" title="${esc(b)} 숙 ${counts.숙}명"></div>`:''}
+        ${counts.etc>0?`<div class="dash-seg dash-seg-etc" style="width:${pct('etc')}%;" title="${esc(b)} 휴/기타 ${counts.etc}명"></div>`:''}
+      </div>
+      <div class="dash-gap-badge ${gapZoneCount>0?'has-gap':'no-gap'}">${gapZoneCount>0?`공백 ${gapZoneCount}곳`:'공백 없음'}</div>
+    </div>`;
+
+    rows.push(`<tr><td style="text-align:left;">${esc(b)}</td><td>${staff.length}</td><td>${counts.주}</td><td>${counts.야}</td><td>${counts.숙}</td><td>${counts.etc}</td><td class="${gapZoneCount>0?'hours-over':''}">${gapZoneCount>0?`${gapZoneCount}곳`:'없음'}</td></tr>`);
+  });
+  chartEl.innerHTML = chartHtml || '<p class="sub">등록된 지사가 없습니다.</p>';
+
+  const thead = document.querySelector('#dashTable thead');
+  thead.innerHTML = '<tr><th style="text-align:left;">지사</th><th>총원</th><th>주</th><th>야</th><th>숙</th><th>휴·기타</th><th>구역 공백</th></tr>';
+  document.querySelector('#dashTable tbody').innerHTML = rows.join('');
+}
+document.getElementById('dashDate').addEventListener('change', renderDashboard);
 function renderAdmin(){
   renderStorageAdmin();
   renderPasswordAdmin();
