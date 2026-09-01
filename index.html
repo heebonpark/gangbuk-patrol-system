@@ -3150,6 +3150,12 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   rangeCell.value = `${branch}지사   시작일 ${dateList[0]}   종료일 ${dateList[dateList.length-1]}`;
   rangeCell.font = { size:14 };
   rangeCell.alignment = { horizontal:'center', vertical:'middle' };
+  // 엑셀은 행 높이를 지정 안 하면(기본값 그대로) 큰 글씨(26pt/14pt)를 열었을 때만 자동으로
+  // 다시 계산해주는데, 이 재계산에 안 맞는 프로그램(구버전 엑셀, 다른 스프레드시트 뷰어 등)
+  // 에서는 글자가 위아래로 잘려 보일 수 있어 처음부터 확실한 높이를 직접 지정해둔다.
+  ws.getRow(1).height = 20;
+  ws.getRow(2).height = 16; // 1~2행 합쳐서 26pt 제목이 넉넉히 들어감
+  ws.getRow(3).height = 20; // 14pt 기간 문구
 
   // ---------- ④ "지사: OO" 라벨(범례/결재란과 사번 헤더 사이 여백행에 표시) ----------
   const spacerRow = LEGEND_LAST_ROW + 1;
