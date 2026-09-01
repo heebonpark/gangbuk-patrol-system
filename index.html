@@ -3070,7 +3070,18 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const wb = new ExcelJS.Workbook();
   const sheetName = ((branch+zoneSuffix+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
   const ws = wb.addWorksheet(sheetName);
-  ws.views = [{ showGridLines: false }]; // 엑셀 기본 눈금선을 꺼서 PDF처럼 표선만 깔끔하게 보이게 함
+  // 엑셀 기본 눈금선을 끄고(PDF처럼 표선만 깔끔하게 보이도록), 열어보면 바로 페이지 나누기
+  // 미리보기로 보이게 한다(인쇄 범위/페이지 경계를 바로 확인할 수 있게).
+  ws.views = [{ showGridLines: false, view: 'pageBreakPreview' }];
+  // 인쇄 설정 — 가로 방향, 가로 폭을 1페이지에 자동으로 맞추고(세로는 필요한 만큼),
+  // 여백은 위 1.4 / 아래 0.5 / 좌우 0.8인치로 지정.
+  ws.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { top: 1.4, bottom: 0.5, left: 0.8, right: 0.8, header: 0.3, footer: 0.3 },
+  };
 
   const thin = { style:'thin', color:{argb:'FF94A3B8'} };
   const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
@@ -3127,12 +3138,12 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   ws.mergeCells(1, titleColStart, 2, titleColEnd);
   const titleCell = ws.getCell(1, titleColStart);
   titleCell.value = `${titleYear}년  근무실적(계획)  ${parseInt(titleMonthNum,10)}월${zoneSuffix?'  ('+zoneSuffix.slice(1)+')':''}`;
-  titleCell.font = { bold:true, size:16 };
+  titleCell.font = { bold:true, size:26 };
   titleCell.alignment = { horizontal:'center', vertical:'middle' };
   ws.mergeCells(3, titleColStart, 3, titleColEnd);
   const rangeCell = ws.getCell(3, titleColStart);
   rangeCell.value = `${branch}지사   시작일 ${dateList[0]}   종료일 ${dateList[dateList.length-1]}`;
-  rangeCell.font = { size:11 };
+  rangeCell.font = { size:14 };
   rangeCell.alignment = { horizontal:'center', vertical:'middle' };
 
   // ---------- ④ "지사: OO" 라벨(범례/결재란과 사번 헤더 사이 여백행에 표시) ----------
