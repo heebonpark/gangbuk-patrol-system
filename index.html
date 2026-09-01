@@ -3080,7 +3080,12 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0,
-    margins: { top: 1.4, bottom: 0.5, left: 0.8, right: 0.8, header: 0.3, footer: 0.3 },
+    // OOXML/ExcelJS의 여백 값은 항상 "인치" 단위로 저장된다(엑셀 화면에 인치로
+    // 보이든 cm로 보이든, 파일 안에는 무조건 인치로 들어감). 한국어 엑셀은 페이지
+    // 설정 단위가 기본 cm라, 요청하신 1.4/0.5/0.8/0.8을 cm로 보고 인치로 환산해서
+    // 넣어야 실제로 열었을 때 딱 그 cm 값으로 보인다(그냥 1.4를 인치로 넣으면
+    // 화면엔 3.56cm처럼 훨씬 크게 보여서 "적용 안 된 것처럼" 보였음).
+    margins: { top: 1.4/2.54, bottom: 0.5/2.54, left: 0.8/2.54, right: 0.8/2.54, header: 0.3/2.54, footer: 0.3/2.54 },
   };
 
   const thin = { style:'thin', color:{argb:'FF94A3B8'} };
