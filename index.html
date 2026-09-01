@@ -449,6 +449,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   </div>
 </div>
 
+<div class="login-gate login-hidden" id="licenseExpiredGate">
+  <div class="login-box" style="text-align:center;">
+    <h1>사용 기간이 만료되었습니다</h1>
+    <p class="sub" id="licenseExpiredMsg">관리자에게 문의해 사용 기간을 연장해주세요.</p>
+    <button class="btn btn-outline" id="btnLicenseExpiredLogout" style="width:100%;margin-top:8px;">로그아웃</button>
+  </div>
+</div>
+
 <div class="sig-modal login-hidden no-print" id="sigModal">
   <div class="sig-modal-box">
     <h3>근무자 확인 서명</h3>
@@ -484,6 +492,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <p>강북/강원사업지원팀 · 순회일정 + 근무표 단일 스키마 · 자동 월 롤오버 · 실근무 자동대조</p>
   <div class="status-pill"><span class="status-dot"></span><span id="syncStatus">동기화 대기중</span></div>
   <div class="status-pill" id="monthPill">관리월 확인 중...</div>
+  <div class="status-pill login-hidden" id="licenseWarnPill" style="background:rgba(192,57,43,0.35);border-color:rgba(255,120,110,0.5);"></div>
   <div class="status-pill" id="loginStatusPill">
     <span id="loginStatusLabel"></span>
     <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:6px;">로그아웃</a>
@@ -823,6 +832,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <button class="btn btn-primary" id="btnPwAdminSave">관리자 비밀번호 변경</button>
         <button class="btn btn-outline" id="btnPwAdminReset">기본값으로</button>
         <span id="pwAdminCurrent" class="sub" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div class="card admin-only-card">
+      <h2>사용 기간 제한</h2>
+      <p class="sub">지사 로그인이 접속할 수 있는 마지막 날짜를 정합니다. 지난 날짜가 되면 지사 로그인은 "만료됨" 화면만 보이고, 관리자 로그인은 그대로 접속해 기간을 연장할 수 있습니다. GitHub 연동 중이면 이 설정도 모든 지사에 함께 동기화됩니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:8px;">
+        <span class="sub" id="licenseStatusLabel" style="margin:0;font-weight:600;"></span>
+      </div>
+      <div class="toolbar no-print" style="margin-bottom:8px;">
+        <input type="date" id="licenseExpiryInput">
+        <button class="btn btn-primary" id="btnLicenseSetDate">이 날짜로 설정</button>
+        <button class="btn btn-outline" id="btnLicenseClear">제한 없음(무제한)</button>
+      </div>
+      <div class="toolbar no-print">
+        <span class="sub" style="margin:0;">오늘부터</span>
+        <button class="btn btn-outline" id="btnLicenseExtend1">+1년</button>
+        <button class="btn btn-outline" id="btnLicenseExtend2">+2년</button>
+        <button class="btn btn-outline" id="btnLicenseExtend3">+3년</button>
+        <button class="btn btn-outline" id="btnLicenseExtend4">+4년</button>
       </div>
     </div>
 
@@ -1305,6 +1334,7 @@ let rosterFinalized={}, changeRequests=[]; // rosterFinalized: {branch: {ym:true
 let rosterFinalizedEmp={};  // 개인별 확정: {empId: {ym:true}}
 let rosterFinalizedZone={}; // 구역별 확정: {branch: {zone: {ym:true}}}
 let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
+let licenseExpiry = null; // 사용 기간 제한(YYYY-MM-DD) — null/미설정이면 무제한
 let storageMode = 'none'; // 'artifact' | 'github' | 'none'
 let ghConfig = null;      // {owner, repo, branch, path, token}
 let ghSha = null;         // 마지막으로 읽은 GitHub 파일의 sha (충돌 방지용)
@@ -1334,7 +1364,39 @@ function updateLoginStatusPill(){
   const el = document.getElementById('loginStatusLabel');
   if(el) el.textContent = loginLabel() ? ('로그인: ' + loginLabel()) : '';
 }
+/* 사용 기간 제한 — licenseExpiry(YYYY-MM-DD)가 지나면 지사 로그인은 "만료됨" 화면만
+   보이게 막고(로그인은 유지한 채 조작만 차단), 관리자 로그인은 그대로 쓰되 상단에
+   경고 배지를 띄워 연장을 안내한다. GitHub 연동 중이면 licenseExpiry도 packState()에
+   포함되어 다른 지사 PC에도 함께 동기화된다. 로그인 성공 직후·기존 세션 복원 시 모두
+   applyTabRestriction()에서 함께 호출된다. */
+function enforceLicenseExpiry(){
+  const gate = document.getElementById('licenseExpiredGate');
+  const warnPill = document.getElementById('licenseWarnPill');
+  if(!gate || !warnPill) return;
+  const auth = currentAuth();
+  const expired = !!(licenseExpiry && todayStr() > licenseExpiry);
+  if(!auth || !expired){
+    gate.classList.add('login-hidden');
+    warnPill.classList.add('login-hidden');
+    return;
+  }
+  if(auth.isAdmin){
+    gate.classList.add('login-hidden');
+    warnPill.classList.remove('login-hidden');
+    warnPill.textContent = `⚠ 사용 기간 만료(${licenseExpiry}) — 지사 로그인 차단됨. 관리자설정에서 연장하세요.`;
+  } else {
+    warnPill.classList.add('login-hidden');
+    const msgEl = document.getElementById('licenseExpiredMsg');
+    if(msgEl) msgEl.textContent = `사용 기간(${licenseExpiry})이 지났습니다. 관리자에게 문의해 연장해주세요.`;
+    gate.classList.remove('login-hidden');
+  }
+}
+document.getElementById('btnLicenseExpiredLogout').addEventListener('click', ()=>{
+  sessionStorage.removeItem('patrol_auth');
+  location.reload();
+});
 function applyTabRestriction(){
+  enforceLicenseExpiry();
   const a = currentAuth();
   if(!a || a.isAdmin) return;
   // 관리자설정 탭 전체가 아니라, 지사가 스스로 관리해도 되는 "직원 구역/호수 관리" 카드만
@@ -1505,7 +1567,7 @@ async function ghPutFile(cfg, stateObj, sha){
   if(!res.ok) throw new Error('GitHub 저장 실패 (' + res.status + ')');
   return res.json();
 }
-function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests}; }
+function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests, licenseExpiry}; }
 function applyState(data){
   records = data.records || seedRecords();
   extraCols = data.extraCols || [];
@@ -1517,6 +1579,7 @@ function applyState(data){
   rosterFinalizedEmp = data.rosterFinalizedEmp || {};
   rosterFinalizedZone = data.rosterFinalizedZone || {};
   changeRequests = data.changeRequests || [];
+  licenseExpiry = data.licenseExpiry || null;
 }
 function renderStorageAdmin(){
   const desc = document.getElementById('storageModeDesc');
@@ -3838,6 +3901,57 @@ document.getElementById('btnPwAdminReset').addEventListener('click', ()=>{
   logEvent('관리자 비밀번호 기본값으로 초기화');
   renderPasswordAdmin();
 });
+function renderLicenseAdmin(){
+  const label = document.getElementById('licenseStatusLabel');
+  const input = document.getElementById('licenseExpiryInput');
+  if(!label || !input) return;
+  if(!licenseExpiry){
+    label.textContent = '현재 상태: 제한 없음(무제한 사용 가능)';
+    label.style.color = 'var(--good)';
+  } else {
+    const days = daysBetween(todayStr(), licenseExpiry);
+    if(days < 0){
+      label.textContent = `현재 상태: ${licenseExpiry}까지(만료됨, ${-days}일 지남) — 지사 로그인 차단 중`;
+      label.style.color = 'var(--danger)';
+    } else {
+      label.textContent = `현재 상태: ${licenseExpiry}까지 사용 가능(${days}일 남음)`;
+      label.style.color = days<=30 ? 'var(--warn)' : 'var(--good)';
+    }
+  }
+  if(!input.value) input.value = licenseExpiry || addDaysStr(todayStr(), 365);
+}
+function setLicenseExpiry(dateStr, logMsg){
+  licenseExpiry = dateStr;
+  logEvent(logMsg);
+  persist(true); // 만료일은 지사 접속 가능 여부를 즉시 좌우하므로 디바운스 없이 바로 저장
+  renderLicenseAdmin();
+  enforceLicenseExpiry();
+}
+document.getElementById('btnLicenseSetDate').addEventListener('click', ()=>{
+  const val = document.getElementById('licenseExpiryInput').value;
+  if(!val){ alert('날짜를 선택하세요.'); return; }
+  setLicenseExpiry(val, `사용 기간 만료일 설정: ${val}`);
+});
+document.getElementById('btnLicenseClear').addEventListener('click', ()=>{
+  if(!confirm('사용 기간 제한을 없애고 무제한으로 바꿀까요?')) return;
+  licenseExpiry = null;
+  logEvent('사용 기간 제한 해제(무제한으로 변경)');
+  persist(true);
+  renderLicenseAdmin();
+  enforceLicenseExpiry();
+});
+[1,2,3,4].forEach(years=>{
+  document.getElementById(`btnLicenseExtend${years}`).addEventListener('click', ()=>{
+    // "오늘부터 N년" — 아직 유효한 만료일이 남아있으면 그 날짜부터, 이미 만료됐거나
+    // 처음 설정하는 것이면 오늘부터 N년을 더한다(둘 다 사용자가 기대하는 "N년치 연장").
+    const base = (licenseExpiry && licenseExpiry >= todayStr()) ? licenseExpiry : todayStr();
+    const d = new Date(base+'T00:00:00');
+    d.setFullYear(d.getFullYear()+years);
+    const newDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    document.getElementById('licenseExpiryInput').value = newDate;
+    setLicenseExpiry(newDate, `사용 기간 ${years}년 연장: ${newDate}까지`);
+  });
+});
 function renderZoneAdmin(){
   const sel = document.getElementById('zoneAdminBranch');
   const auth = currentAuth();
@@ -4079,6 +4193,7 @@ document.getElementById('dashDate').addEventListener('change', renderDashboard);
 function renderAdmin(){
   renderStorageAdmin();
   renderPasswordAdmin();
+  renderLicenseAdmin();
   renderZoneAdmin();
   const gArea = document.getElementById('guideAdminList');
   gArea.innerHTML = guides.map(g=>{
