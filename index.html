@@ -3191,7 +3191,12 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
 
   // 6번째 열(근무조)은 본표에서는 좁아도 되지만, 위쪽 범례에서 "유계결근"/"무계결근" 같은
   // 4글자 근태유형명이 같은 열에 들어가므로 잘려 보이지 않게 조금 더 넓힌다.
-  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i===0 ? 8 : (i<3 ? 10 : (i===5 ? 10 : 8)); });
+  // 범례는 이 6개 열을 그대로 재사용하는데(1=코드1,2=이름1,3=시간1,4=코드2,5=이름2,6=시간2),
+  // 지난번엔 실수로 "근무조"(6번째, 숫자만 들어가는 칸)를 넓히고 정작 "유계결근"/"무계결근"
+  // 같은 4글자가 들어가는 "직급" 칸(5번째)은 좁게 둬서 실제 엑셀에서 잘려 보일 위험이 있었다.
+  // 사번(2번째, "대체전일" 등)·직급(5번째, "유계결근" 등) 두 이름칸만 넉넉하게, 나머지는
+  // 좁게 잡아 PDF 범례의 촘촘한 비율에 더 가깝게 맞춘다.
+  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = (i===1 || i===4) ? 10 : 8; });
   dateList.forEach((_,i)=>{ ws.getColumn(fixedCols.length+1+i).width = 5; });
   ws.getColumn(hoursCol).width = 8;
   ws.getColumn(sigCol).width = 9;
