@@ -3010,8 +3010,8 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
     }
   }
 
-  // ---------- ④ 근무표 본표(범례 아래) ----------
-  const headRow1 = LEGEND_LAST_ROW + 1, headRow2 = LEGEND_LAST_ROW + 2;
+  // ---------- ④ 근무표 본표(범례 아래, 한 행 띄워서 시작) ----------
+  const headRow1 = LEGEND_LAST_ROW + 2, headRow2 = LEGEND_LAST_ROW + 3; // LEGEND_LAST_ROW+1은 범례/결재란과 사번 헤더 사이 여백행
   ws.getRow(headRow1).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
   ws.getRow(headRow2).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
   // 사번·성명·직무·직급·근무조·합계(시간)는 날짜별 요일이 없는(=아래 행이 항상 빈칸인) 항목이라,
@@ -3043,7 +3043,9 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
       if(Object.keys(font).length) cell.font = font;
     }
   }
-  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i<2 ? 10 : 8; });
+  // 5번째 열(근무조)은 본표에서는 좁아도 되지만, 위쪽 범례에서 "유계결근"/"무계결근" 같은
+  // 4글자 근태유형명이 같은 열에 들어가므로 잘려 보이지 않게 조금 더 넓힌다.
+  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i<2 ? 10 : (i===4 ? 10 : 8); });
   dateList.forEach((_,i)=>{ ws.getColumn(fixedCols.length+1+i).width = 5; });
   ws.getColumn(colCount).width = 10;
 
