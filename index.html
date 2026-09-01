@@ -2943,20 +2943,36 @@ const ROSTER_LEGEND_ROWS = [
   ['H','토요근무',8,'P','무계결근',0],
   ['R','대체휴무','','Q','반차',0],
 ];
+/* 근무표 엑셀의 구역호수 칸 배경색 — renderRosterPreview()의 .preview-row-group-0~4와
+   완전히 같은 팔레트를 그대로 씀(구역이 바뀌는 지점마다 5색을 순환). */
+const ROSTER_ZONE_COLORS = [
+  {bg:'FFFBE8C6', fg:'FF8A5A12'},
+  {bg:'FFF7D9CE', fg:'FF9A4A2E'},
+  {bg:'FFD6E4F6', fg:'FF2C5282'},
+  {bg:'FFD6EEDD', fg:'FF276749'},
+  {bg:'FFE1E5EC', fg:'FF3F4A5E'},
+];
 document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   // SheetJS 무료판은 셀 테두리 스타일을 저장하지 못해서(borders/fills가 무시됨),
   // 실제로 테두리가 보이는 파일을 만들기 위해 이 내보내기만 ExcelJS를 씁니다.
   const branch = document.getElementById('rosterBranch').value || branches[0];
   const mode = document.getElementById('rosterViewMode').value;
   const dateList = getRosterDateList();
-  const staff = getRosterStaffFiltered(branch);
+  // 미리보기(renderRosterPreview)와 완전히 같은 정렬·구역 그룹핑을 써야 구역호수 병합·
+  // 색상이 PDF와 정확히 일치한다(예전엔 정렬 없이 그냥 필터만 걸어서 순서가 달랐음).
+  const staff = sortRosterStaff(getRosterStaff(branch));
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
   const [titleYear, titleMonthNum] = dateList[0].split('-');
+  const sigYM = titleRange.includes('~') ? dateList[0].slice(0,7) : titleRange;
   const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all' && rosterZoneFilter!=='__main__') ? ('_' + rosterZoneFilter) : '';
   const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
-  const fixedCols = ['사번','성명','직무','직급','근무조'];
-  const colCount = fixedCols.length + dateList.length + 1;
+  // 미리보기 본표와 동일한 열 구성: 구역호수를 맨 앞에, 합계(시간)/근무자 확인 서명/
+  // 연락처·비고를 맨 뒤에 추가(예전엔 사번~합계(시간)만 있어 PDF보다 정보가 빠져 있었음).
+  const fixedCols = ['구역\n호수','사번','성명','직무','직급','근무조'];
+  const TRAIL_COLS = 3; // 합계(시간), 근무자 확인 서명, 연락처/비고
+  const colCount = fixedCols.length + dateList.length + TRAIL_COLS;
+  const hoursCol = colCount - 2, sigCol = colCount - 1, contactCol = colCount;
 
   const wb = new ExcelJS.Workbook();
   const sheetName = ((branch+zoneSuffix+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
@@ -3021,30 +3037,76 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   ws.getColumn(apprGapCol).width = 3;
   [0,1,2].forEach(i=> ws.getColumn(apprColStart+i).width = 12);
 
-  // ---------- ④ 근무표 본표(범례 아래, 한 행 띄워서 시작) ----------
-  const headRow1 = LEGEND_LAST_ROW + 2, headRow2 = LEGEND_LAST_ROW + 3; // LEGEND_LAST_ROW+1은 범례/결재란과 사번 헤더 사이 여백행
-  ws.getRow(headRow1).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
-  ws.getRow(headRow2).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
-  // 사번·성명·직무·직급·근무조·합계(시간)는 날짜별 요일이 없는(=아래 행이 항상 빈칸인) 항목이라,
-  // 미리보기/PDF의 rowspan="2"와 똑같이 두 행을 세로로 병합해 표를 보기 좋게 함.
-  [1,2,3,4,5,colCount].forEach(c=> ws.mergeCells(headRow1,c,headRow2,c));
-  staff.forEach(e=>{
-    ws.addRow([e.empno, e.name, e.duty||'', e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
+  // ---------- ④ "지사: OO" 라벨(범례/결재란과 사번 헤더 사이 여백행에 표시) ----------
+  const spacerRow = LEGEND_LAST_ROW + 1;
+  const labelCell = ws.getCell(spacerRow, 1);
+  labelCell.value = `지사: ${branch}`;
+  labelCell.font = { bold:true, size:11 };
+
+  // ---------- ⑤ 근무표 본표(여백행 다음부터) ----------
+  const headRow1 = LEGEND_LAST_ROW + 2, headRow2 = LEGEND_LAST_ROW + 3;
+  ws.getRow(headRow1).values = [...fixedCols, ...dateList.map(shortLabel), '합계\n(시간)', '근무자\n확인 서명', '연락처\n/ 비고'];
+  ws.getRow(headRow2).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), '', '', ''];
+  // 구역호수·사번·성명·직무·직급·근무조·합계(시간)·근무자 확인 서명·연락처/비고는 날짜별
+  // 요일이 없는(=아래 행이 항상 빈칸인) 항목이라, 미리보기/PDF의 rowspan="2"와 똑같이
+  // 두 행을 세로로 병합해 표를 보기 좋게 함.
+  [1,2,3,4,5,6,hoursCol,sigCol,contactCol].forEach(c=> ws.mergeCells(headRow1,c,headRow2,c));
+  [headRow1,headRow2].forEach(r=> ws.getRow(r).eachCell(cell=>{ cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }; }));
+
+  // 구역호수 병합/색상 — renderRosterPreview()와 완전히 같은 방식으로 연속된 같은 구역을
+  // 하나로 묶고(spans), 구역이 바뀔 때마다 5색을 순환시킨다.
+  const spans = [];
+  { let currentGroup = '';
+    for(let i=0;i<staff.length;i++){
+      const g = staff[i].zone || '';
+      if(i===0 || g!==currentGroup){
+        currentGroup = g;
+        let count = 1;
+        for(let j=i+1;j<staff.length;j++){ if((staff[j].zone||'')===g) count++; else break; }
+        spans.push(count);
+      } else spans.push(0);
+    }
+  }
+  const dataStartRow = headRow2 + 1;
+  const rowColorIdx = [];
+  const zoneStartRows = [];
+  let groupIndex = -1;
+  staff.forEach((e,i)=>{
+    if(spans[i] > 0){ groupIndex = (groupIndex+1) % ROSTER_ZONE_COLORS.length; }
+    rowColorIdx.push(groupIndex);
+    const r = dataStartRow + i;
+    if(spans[i] > 0 && i > 0) zoneStartRows.push(r);
+    const rowVals = [ spans[i]>0 ? (e.zone||'-') : '', e.empno, e.name, e.duty||'', e.rank, e.shift,
+      ...dateList.map(ds=>effectiveCode(e,ds)||'·'), monthlyHours(e, dateList), '', `${e.phone||''}\n${e.note||''}` ];
+    ws.getRow(r).values = rowVals;
+    if(spans[i] > 1) ws.mergeCells(r, 1, r+spans[i]-1, 1);
+    // 이미 서명(sig)이 저장돼 있으면 실제 서명 이미지를 셀에 삽입, 없으면 직접 서명할 수 있게 빈칸으로 둠.
+    const sig = e.signatures && e.signatures[sigYM];
+    if(sig){
+      try{
+        const base64 = sig.split(',')[1] || sig;
+        const imgId = wb.addImage({ base64, extension:'png' });
+        ws.addImage(imgId, { tl:{ col:sigCol-1, row:r-1+0.05 }, ext:{ width:48, height:22 } });
+      }catch(err){ /* 서명 이미지가 손상됐어도 표 자체는 계속 만들어야 하므로 조용히 넘어감 */ }
+    }
   });
 
-  const lastRow = headRow2 + staff.length;
+  const lastRow = dataStartRow + staff.length - 1;
   for(let r=headRow1; r<=lastRow; r++){
     for(let c=1; c<=colCount; c++){
       const cell = ws.getCell(r,c);
       cell.border = { top:thin, left:thin, bottom:thin, right:thin };
-      cell.alignment = { horizontal:'center', vertical:'middle' };
+      if(r > headRow2) cell.alignment = { horizontal:'center', vertical:'middle', wrapText: c===contactCol };
       let font = {};
       if(r<=headRow2){
         font.bold = true;
         cell.fill = grayFill;
+      } else if(c===1){
+        const colorInfo = ROSTER_ZONE_COLORS[rowColorIdx[r-dataStartRow]];
+        if(colorInfo){ cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:colorInfo.bg} }; font.color = {argb:colorInfo.fg}; font.bold = true; }
       }
       const dateIdx = c - fixedCols.length - 1;
-      if(dateIdx>=0 && dateIdx<dateList.length){
+      if(r>headRow2 && dateIdx>=0 && dateIdx<dateList.length){
         const ds = dateList[dateIdx];
         const wd = dateWeekdays[dateIdx];
         if(isHoliday(ds)){ cell.fill = holidayFill; font.color = holidayFont; } // 공휴일이 주말보다 우선(미리보기와 동일)
@@ -3054,11 +3116,23 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
       if(Object.keys(font).length) cell.font = font;
     }
   }
-  // 5번째 열(근무조)은 본표에서는 좁아도 되지만, 위쪽 범례에서 "유계결근"/"무계결근" 같은
+  // 구역이 바뀌는 행 위쪽에 살짝 굵은 선을 넣어 구역 구간 경계가 눈에 띄게 함(미리보기의
+  // .zone-start와 같은 목적).
+  const zoneBorderTop = { style:'medium', color:{argb:'FF64748B'} };
+  zoneStartRows.forEach(r=>{
+    for(let c=1;c<=colCount;c++){
+      const cell = ws.getCell(r,c);
+      cell.border = Object.assign({}, cell.border, { top: zoneBorderTop });
+    }
+  });
+
+  // 6번째 열(근무조)은 본표에서는 좁아도 되지만, 위쪽 범례에서 "유계결근"/"무계결근" 같은
   // 4글자 근태유형명이 같은 열에 들어가므로 잘려 보이지 않게 조금 더 넓힌다.
-  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i<2 ? 10 : (i===4 ? 10 : 8); });
+  fixedCols.forEach((_,i)=>{ ws.getColumn(i+1).width = i===0 ? 8 : (i<3 ? 10 : (i===5 ? 10 : 8)); });
   dateList.forEach((_,i)=>{ ws.getColumn(fixedCols.length+1+i).width = 5; });
-  ws.getColumn(colCount).width = 10;
+  ws.getColumn(hoursCol).width = 8;
+  ws.getColumn(sigCol).width = 9;
+  ws.getColumn(contactCol).width = 14;
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
