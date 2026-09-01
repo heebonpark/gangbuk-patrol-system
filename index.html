@@ -492,7 +492,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <p>강북/강원사업지원팀 · 순회일정 + 근무표 단일 스키마 · 자동 월 롤오버 · 실근무 자동대조</p>
   <div class="status-pill"><span class="status-dot"></span><span id="syncStatus">동기화 대기중</span></div>
   <div class="status-pill" id="monthPill">관리월 확인 중...</div>
-  <div class="status-pill login-hidden" id="licenseWarnPill" style="background:rgba(192,57,43,0.35);border-color:rgba(255,120,110,0.5);"></div>
+  <div class="status-pill login-hidden" id="licenseWarnPill"></div>
   <div class="status-pill" id="loginStatusPill">
     <span id="loginStatusLabel"></span>
     <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:6px;">로그아웃</a>
@@ -791,6 +791,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div id="dashChart"></div>
       <div class="table-scroll" style="margin-top:18px;">
         <table class="grid" id="dashTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="tag-dot safety"></span>초과근무 현황</h2>
+      <p class="sub">선택한 달 기준으로 주64시간·분기평균52시간을 초과한 직원을 전체 지사에서 한눈에 봅니다(근무표 탭의 판정 기준과 동일).</p>
+      <div class="toolbar no-print" style="margin-bottom:14px;">
+        <label style="font-size:11.5px;color:var(--text-mute);">기준월</label>
+        <select id="dashOvertimeMonth"></select>
+      </div>
+      <div class="table-scroll">
+        <table class="grid" id="dashOvertimeTable"><thead></thead><tbody></tbody></table>
       </div>
     </div>
   </section>
@@ -1366,16 +1378,22 @@ function updateLoginStatusPill(){
 }
 /* 사용 기간 제한 — licenseExpiry(YYYY-MM-DD)가 지나면 지사 로그인은 "만료됨" 화면만
    보이게 막고(로그인은 유지한 채 조작만 차단), 관리자 로그인은 그대로 쓰되 상단에
-   경고 배지를 띄워 연장을 안내한다. GitHub 연동 중이면 licenseExpiry도 packState()에
-   포함되어 다른 지사 PC에도 함께 동기화된다. 로그인 성공 직후·기존 세션 복원 시 모두
-   applyTabRestriction()에서 함께 호출된다. */
+   경고 배지를 띄워 연장을 안내한다. 만료 30일 전부터는(아직 지사는 막지 않고) 관리자
+   에게만 "곧 만료" 배지를 미리 띄워, 정작 만료된 뒤에야 알게 되는 일이 없게 한다.
+   GitHub 연동 중이면 licenseExpiry도 packState()에 포함되어 다른 지사 PC에도 함께
+   동기화된다. 로그인 성공 직후·기존 세션 복원 시 모두 applyTabRestriction()에서
+   함께 호출된다. */
+const LICENSE_WARN_DAYS_BEFORE = 30;
 function enforceLicenseExpiry(){
   const gate = document.getElementById('licenseExpiredGate');
   const warnPill = document.getElementById('licenseWarnPill');
   if(!gate || !warnPill) return;
   const auth = currentAuth();
-  const expired = !!(licenseExpiry && todayStr() > licenseExpiry);
-  if(!auth || !expired){
+  const daysLeft = licenseExpiry ? daysBetween(todayStr(), licenseExpiry) : null; // 음수면 이미 지남
+  const expired = daysLeft !== null && daysLeft < 0;
+  const expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= LICENSE_WARN_DAYS_BEFORE;
+
+  if(!auth || (!expired && !expiringSoon)){
     gate.classList.add('login-hidden');
     warnPill.classList.add('login-hidden');
     return;
@@ -1383,12 +1401,24 @@ function enforceLicenseExpiry(){
   if(auth.isAdmin){
     gate.classList.add('login-hidden');
     warnPill.classList.remove('login-hidden');
-    warnPill.textContent = `⚠ 사용 기간 만료(${licenseExpiry}) — 지사 로그인 차단됨. 관리자설정에서 연장하세요.`;
-  } else {
+    if(expired){
+      warnPill.style.background = 'rgba(192,57,43,0.35)';
+      warnPill.style.borderColor = 'rgba(255,120,110,0.5)';
+      warnPill.textContent = `⚠ 사용 기간 만료(${licenseExpiry}) — 지사 로그인 차단됨. 관리자설정에서 연장하세요.`;
+    } else {
+      warnPill.style.background = 'rgba(180,121,12,0.35)';
+      warnPill.style.borderColor = 'rgba(255,196,110,0.5)';
+      warnPill.textContent = `⚠ 사용 기간 ${daysLeft}일 후 만료(${licenseExpiry}) — 관리자설정에서 미리 연장하세요.`;
+    }
+  } else if(expired){
     warnPill.classList.add('login-hidden');
     const msgEl = document.getElementById('licenseExpiredMsg');
     if(msgEl) msgEl.textContent = `사용 기간(${licenseExpiry})이 지났습니다. 관리자에게 문의해 연장해주세요.`;
     gate.classList.remove('login-hidden');
+  } else {
+    // 지사 로그인은 아직 만료 전이라 조작을 막지 않는다(사전 경고 배지는 관리자 전용).
+    gate.classList.add('login-hidden');
+    warnPill.classList.add('login-hidden');
   }
 }
 document.getElementById('btnLicenseExpiredLogout').addEventListener('click', ()=>{
@@ -4193,8 +4223,57 @@ function renderDashboard(){
   const thead = document.querySelector('#dashTable thead');
   thead.innerHTML = '<tr><th style="text-align:left;">지사</th><th>총원</th><th>주</th><th>야</th><th>숙</th><th>휴·기타</th><th>구역 공백</th></tr>';
   document.querySelector('#dashTable tbody').innerHTML = rows.join('');
+
+  renderDashboardOvertime();
 }
 document.getElementById('dashDate').addEventListener('change', renderDashboard);
+/* 초과근무 현황(관리자 전용) — 근무표 탭의 getHourViolations()와 완전히 같은 판정 기준
+   (주64시간, 분기평균52시간)을 쓰되, 근무표 탭의 DOM 상태(선택된 지사/보기모드)에
+   의존하지 않고 "기준월" 드롭다운에서 고른 달의 날짜 목록으로 직접 계산해, 대시보드가
+   지사 탭 상태와 무관하게 전체 지사·전체 직원을 한 번에 보여줄 수 있게 한다. */
+function computeMonthDateList(ym){
+  const {y,m} = ymParts(ym);
+  const dim = daysInMonth(y,m);
+  const list = [];
+  for(let d=1; d<=dim; d++) list.push(dstr(y,m,d));
+  return list;
+}
+function renderDashboardOvertime(){
+  const sel = document.getElementById('dashOvertimeMonth');
+  if(!sel) return;
+  if(!sel.options.length){
+    sel.innerHTML = monthOptions(currentMonth).map(ym=>`<option value="${ym}">${ym}</option>`).join('');
+    sel.value = currentMonth;
+  }
+  const ym = sel.value || currentMonth;
+  const dateList = computeMonthDateList(ym);
+  const firstMonday = getWeekMonday(dateList[0]);
+  const lastMonday = getWeekMonday(dateList[dateList.length-1]);
+  const qRange = getQuarterRange(dateList[Math.floor(dateList.length/2)]);
+
+  const rows = [];
+  employees.forEach(e=>{
+    const weekMsgs = [];
+    for(let mo=firstMonday; mo<=lastMonday; mo=addDaysStr(mo,7)){
+      const hrs = weeklyHoursForEmp(e, mo);
+      if(hrs > WEEKLY_HOUR_LIMIT) weekMsgs.push(`${shortLabel(mo)}~${shortLabel(addDaysStr(mo,6))}주 ${hrs}h`);
+    }
+    const qAvg = quarterlyAvgHoursForEmp(e, qRange);
+    const quarterOver = qAvg > QUARTER_AVG_LIMIT;
+    if(weekMsgs.length===0 && !quarterOver) return;
+    const detail = [
+      ...weekMsgs.map(m=>`주 초과: ${m}(상한 ${WEEKLY_HOUR_LIMIT}h)`),
+      ...(quarterOver ? [`분기 평균 초과: ${qRange.start}~${qRange.end} ${qAvg.toFixed(1)}h(상한 ${QUARTER_AVG_LIMIT}h)`] : []),
+    ].join(' · ');
+    rows.push(`<tr><td style="text-align:left;">${esc(e.branch)}</td><td>${esc(e.empno)}</td><td style="text-align:left;">${esc(e.name)}</td><td style="text-align:left;" class="hours-over">${detail}</td></tr>`);
+  });
+
+  const thead = document.querySelector('#dashOvertimeTable thead');
+  thead.innerHTML = '<tr><th style="text-align:left;">지사</th><th>사번</th><th style="text-align:left;">성명</th><th style="text-align:left;">초과 내역</th></tr>';
+  const tbody = document.querySelector('#dashOvertimeTable tbody');
+  tbody.innerHTML = rows.length ? rows.join('') : `<tr><td colspan="4" style="color:var(--good);padding:14px;">${ym} 기준 초과근무 인원이 없습니다.</td></tr>`;
+}
+document.getElementById('dashOvertimeMonth').addEventListener('change', renderDashboardOvertime);
 function renderAdmin(){
   renderStorageAdmin();
   renderPasswordAdmin();
