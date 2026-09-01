@@ -129,6 +129,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:19px 21px;margin-bottom:16px;box-shadow:var(--shadow-sm);transition:box-shadow 0.2s ease;}
   .card h2{font-family:var(--display);font-size:15.5px;font-weight:700;margin:0 0 3px;letter-spacing:-0.1px;}
   .card .sub{font-size:12px;color:var(--text-mute);margin:0 0 14px;}
+  .erp-daily-title{font-family:var(--display);font-size:13px;font-weight:700;margin:20px 0 2px;color:var(--text);}
+  table.erp-daily-table th, table.erp-daily-table td{font-size:10.5px;padding:4px 3px;}
+  table.erp-daily-table th.dcol-sun{color:#C0392B;} table.erp-daily-table th.dcol-sat{color:#2F6FED;}
   .card h2 .tag-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:8px;vertical-align:middle;position:relative;top:-1px;}
   .tag-dot.primary{background:var(--accent);}
   .tag-dot.safety{background:var(--danger);}
@@ -425,8 +428,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <label>지사</label>
       <select id="loginBranch"></select>
     </div>
+    <div class="login-field login-hidden" id="loginNewBranchField">
+      <label>새 지사명</label>
+      <input type="text" id="loginNewBranchName" placeholder="예: 부천" autocomplete="off">
+      <p class="sub" style="margin:6px 0 0;text-align:left;">등록과 동시에 바로 로그인됩니다. 다음부터는 비밀번호 "지사명+1234+!"로 로그인하세요(관리자설정에서 나중에 바꿀 수 있어요).</p>
+    </div>
     <label class="login-admin-toggle"><input type="checkbox" id="loginAsAdmin"> 관리자로 로그인</label>
-    <div class="login-field">
+    <div class="login-field" id="loginPwField">
       <label>비밀번호</label>
       <div class="login-pw-wrap">
         <input type="password" id="loginPw" placeholder="비밀번호" autocomplete="off">
@@ -437,6 +445,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div class="login-error" id="loginError">비밀번호가 올바르지 않습니다.</div>
     <button class="btn btn-primary" id="btnLoginSubmit">로그인</button>
+    <p class="sub" id="loginCopyright" style="margin:16px 0 0;text-align:center;font-size:10.5px;"></p>
   </div>
 </div>
 
@@ -603,6 +612,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button class="btn btn-outline" id="btnErpSummaryExcel">엑셀로 다운로드</button>
         </div>
         <div class="table-scroll" id="rosterErpSummary"></div>
+        <h3 class="erp-daily-title">일자별 상세 (범례 코드)</h3>
+        <p class="sub" style="margin:0 0 8px;">사원별로 하루하루 어떤 근태유형이었는지 범례 코드(A/B/K 등)로 보여줍니다. ERP에 일자별로 등록할 때 참고하세요.</p>
+        <div class="table-scroll" id="rosterErpDaily"></div>
       </div>
     </details>
     <div class="card no-print" id="zoneQuickPreviewCard" style="display:none;">
@@ -1341,15 +1353,43 @@ function applyTabRestriction(){
   document.querySelectorAll('#panel-admin .admin-only-card').forEach(c=> c.classList.add('login-hidden'));
   renderRoster();
 }
+/* 로그인 화면의 지사 선택칸 — loadState() 완료 전(초기 렌더)엔 아직 실제 branches 배열이
+   없어 seedBranches()로 우선 채우고, loadState() 완료 후 init()에서 다시 불러 실제 지사
+   목록(관리자설정에서 나중에 추가한 지사 포함)으로 갱신한다. "+ 새 지사 등록"은 항상
+   맨 끝에 붙여, 지사 로그인 화면에서 바로 새 지사를 만들어 쓸 수 있게 한다. */
+function refreshLoginBranchOptions(){
+  const sel = document.getElementById('loginBranch');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (typeof branches !== 'undefined' && branches && branches.length) ? branches : seedBranches();
+  sel.innerHTML = list.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('') + '<option value="__new__">+ 새 지사 등록</option>';
+  if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+}
 function initLoginGate(){
   const gate = document.getElementById('loginGate');
   const sel = document.getElementById('loginBranch');
-  sel.innerHTML = seedBranches().map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+  refreshLoginBranchOptions();
   const adminChk = document.getElementById('loginAsAdmin');
   const branchField = document.getElementById('loginBranchField');
+  const newBranchField = document.getElementById('loginNewBranchField');
+  const newBranchInput = document.getElementById('loginNewBranchName');
+  const pwField = document.getElementById('loginPwField');
   const pwInput = document.getElementById('loginPw');
   const errBox = document.getElementById('loginError');
-  adminChk.addEventListener('change', ()=>{ branchField.classList.toggle('login-hidden', adminChk.checked); });
+  const copyrightEl = document.getElementById('loginCopyright');
+  if(copyrightEl) copyrightEl.textContent = '© 2026 Seeun Appa. All rights reserved.';
+  function syncNewBranchUI(){
+    const isNew = sel.value === '__new__';
+    newBranchField.classList.toggle('login-hidden', !isNew);
+    pwField.classList.toggle('login-hidden', isNew);
+  }
+  sel.addEventListener('change', syncNewBranchUI);
+  syncNewBranchUI();
+  adminChk.addEventListener('change', ()=>{
+    branchField.classList.toggle('login-hidden', adminChk.checked);
+    if(adminChk.checked){ newBranchField.classList.add('login-hidden'); pwField.classList.remove('login-hidden'); }
+    else syncNewBranchUI();
+  });
   const btnTogglePw = document.getElementById('btnTogglePw');
   const pwEyeIcon = document.getElementById('pwEyeIcon');
   const EYE_OPEN = '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>';
@@ -1378,7 +1418,27 @@ function initLoginGate(){
     if(lockTimer){ clearInterval(lockTimer); lockTimer = null; }
     return false;
   }
+  /* "+ 새 지사 등록" 선택 시: 비밀번호 확인 없이(아직 없는 지사라 확인할 게 없음) 바로
+     branches에 추가하고 기본 비밀번호(지사명+1234+!) 규칙 그대로 이번 세션은 즉시
+     로그인시킨다. 다음부터는 그 기본 비밀번호로 로그인하면 됨(관리자설정에서 변경 가능). */
+  function attemptRegisterBranch(){
+    if(updateLockUI()) return;
+    errBox.style.display = 'none';
+    const name = newBranchInput.value.trim();
+    if(!name){ errBox.style.display='block'; errBox.textContent = '새 지사명을 입력하세요.'; return; }
+    const existing = (typeof branches !== 'undefined' && branches) ? branches : seedBranches();
+    if(existing.includes(name)){ errBox.style.display='block'; errBox.textContent = '이미 있는 지사명입니다. 목록에서 선택해주세요.'; return; }
+    if(typeof branches === 'undefined' || !branches){ branches = []; }
+    branches.push(name);
+    if(typeof logEvent==='function') logEvent(`지사 추가(로그인 화면에서 자가 등록): ${name}`);
+    if(typeof persist==='function') persist(true); // 새로 만든 지사라 곧바로 로그아웃/새로고침해도 안전하게 즉시 저장
+    saveLoginFailState({count:0, lockUntil:0});
+    sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:name}));
+    gate.classList.add('login-hidden'); updateLoginStatusPill(); refreshSelects(); applyLoginBranchDefault(); applyTabRestriction();
+    alert(`"${name}" 지사가 등록되어 바로 로그인되었습니다.\n다음부터는 비밀번호 "${branchPassword(name)}"로 로그인하세요.`);
+  }
   function attempt(){
+    if(sel.value==='__new__' && !adminChk.checked){ attemptRegisterBranch(); return; }
     if(updateLockUI()) return;
     errBox.style.display = 'none';
     const isAdmin = adminChk.checked;
@@ -2092,6 +2152,7 @@ function renderRoster(){
   document.getElementById('zoneCoverageFilterWarning').classList.toggle('login-hidden', !isNarrowed);
   renderHourMonitor(staff, coreDateList);
   renderErpSummary(staff, coreDateList);
+  renderErpDaily(staff, coreDateList);
   renderZoneQuickPreview(staff, coreDateList);
   renderZoneCoverageCheck(staff, coreDateList);
   renderRosterZoneAdminTable(staff, branch, ym, finalized, isAdmin);
@@ -2262,6 +2323,30 @@ function renderErpSummary(staff, coreDateList){
       h += `<td>${cnt ? (hrs>0 ? `${cnt}일(${cnt*hrs}h)` : `${cnt}일`) : '-'}</td>`;
     });
     h += `<td style="font-weight:700;">${totalHours}</td></tr>`;
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
+}
+/* ERP 등록용 일자별 상세 — renderErpSummary()의 기간 합계 대신, 사원별로 하루하루 어떤
+   근태유형이었는지 범례 코드(A/B/K 등, codeLetterLabel 재사용)로 보여준다. 날짜가 많으면
+   가로로 길어지므로 table-scroll로 감싸 스크롤해서 본다. */
+function renderErpDaily(staff, coreDateList){
+  const el = document.getElementById('rosterErpDaily');
+  if(!el) return;
+  if(staff.length===0 || coreDateList.length===0){ el.innerHTML=''; return; }
+  const dowNames = ['일','월','화','수','목','금','토'];
+  let h = '<table class="grid erp-daily-table"><thead><tr><th style="text-align:left;">사번 / 성명</th>';
+  coreDateList.forEach(ds=>{
+    const wd = new Date(ds+'T00:00:00').getDay();
+    h += `<th class="${wd===0?'dcol-sun':wd===6?'dcol-sat':''}">${shortLabel(ds)}<br>${dowNames[wd]}</th>`;
+  });
+  h += '</tr></thead><tbody>';
+  staff.forEach(e=>{
+    h += `<tr><td style="text-align:left;white-space:nowrap;">${esc(e.empno)} · ${esc(e.name)}</td>`;
+    coreDateList.forEach(ds=>{
+      h += `<td>${esc(codeLetterLabel(effectiveCode(e, ds)))}</td>`;
+    });
+    h += '</tr>';
   });
   h += '</tbody></table>';
   el.innerHTML = h;
@@ -2969,6 +3054,43 @@ document.getElementById('btnErpSummaryExcel').addEventListener('click', async ()
   ws.getColumn(1).width = 10; ws.getColumn(2).width = 10;
   ERP_SUMMARY_CODES.forEach((_,i)=>{ ws.getColumn(3+i).width = 11; });
   ws.getColumn(colCount).width = 10;
+
+  // 두 번째 시트: 일자별 상세(범례 코드) — renderErpDaily()와 같은 데이터를 그대로 내보냄.
+  const dailySheetName = (`${branch}_${ym}_일자별상세`).replace(/[\\/*?:[\]]/g,'_').slice(0,31);
+  const wsDaily = wb.addWorksheet(dailySheetName);
+  const dailyColCount = 2 + coreDateList.length;
+  wsDaily.mergeCells(1,1,1,dailyColCount);
+  const dailyTitleCell = wsDaily.getCell(1,1);
+  dailyTitleCell.value = `${branch}지사 ${ym} 일자별 상세 (범례 코드)`;
+  dailyTitleCell.font = { bold:true, size:13 };
+  dailyTitleCell.alignment = { horizontal:'center', vertical:'middle' };
+  wsDaily.getRow(1).height = 22;
+  const dowNames = ['일','월','화','수','목','금','토'];
+  const dateWeekdaysErp = coreDateList.map(ds=> new Date(ds+'T00:00:00').getDay());
+  wsDaily.getRow(2).values = ['사번', '성명', ...coreDateList.map(shortLabel)];
+  wsDaily.getRow(3).values = ['', '', ...dateWeekdaysErp.map(wd=>dowNames[wd])];
+  wsDaily.mergeCells(2,1,3,1); wsDaily.mergeCells(2,2,3,2);
+  staff.forEach(e=>{
+    wsDaily.addRow([e.empno, e.name, ...coreDateList.map(ds=>codeLetterLabel(effectiveCode(e, ds)))]);
+  });
+  const dailyLastRow = 3 + staff.length;
+  for(let r=2; r<=dailyLastRow; r++){
+    for(let c=1; c<=dailyColCount; c++){
+      const cell = wsDaily.getCell(r,c);
+      cell.border = { top:thin, left:thin, bottom:thin, right:thin };
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      let font = {};
+      if(r<=3){ font.bold = true; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} }; }
+      const dateIdx = c - 3;
+      if(dateIdx>=0 && dateIdx<coreDateList.length){
+        const wd = dateWeekdaysErp[dateIdx];
+        if(wd===0) font.color = {argb:'FFC0392B'}; else if(wd===6) font.color = {argb:'FF2F6FED'};
+      }
+      if(Object.keys(font).length) cell.font = font;
+    }
+  }
+  wsDaily.getColumn(1).width = 10; wsDaily.getColumn(2).width = 10;
+  coreDateList.forEach((_,i)=>{ wsDaily.getColumn(3+i).width = 5; });
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -3883,7 +4005,7 @@ document.getElementById('btnAddBranch').addEventListener('click', ()=>{
   branches.push(name);
   logEvent(`지사 추가: ${name}`);
   document.getElementById('newBranchName').value='';
-  persist(); renderAdmin();
+  persist(); renderAdmin(); refreshLoginBranchOptions();
 });
 function deleteBranch(name){
   const used = records.filter(r=>r.branch===name).length + employees.filter(e=>e.branch===name).length;
@@ -3891,7 +4013,7 @@ function deleteBranch(name){
   if(!confirm(`${name} 지사를 삭제할까요?`)) return;
   branches = branches.filter(b=>b!==name);
   logEvent(`지사 삭제: ${name}`);
-  persist(); renderAdmin();
+  persist(); renderAdmin(); refreshLoginBranchOptions();
 }
 function renderLog(){
   const el = document.getElementById('changeLogList');
@@ -3942,6 +4064,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
 (async function init(){
   await loadState();
   refreshSelects();
+  refreshLoginBranchOptions(); // loadState() 완료 후 실제 지사 목록(관리자가 나중에 추가한 지사 포함)으로 로그인 화면 갱신
   document.getElementById('refDate').value = currentMonth + '-24';
   renderTableHead();
   renderTableBody();
