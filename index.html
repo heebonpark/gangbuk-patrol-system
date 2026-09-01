@@ -2930,6 +2930,19 @@ document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
   document.getElementById('btnRosterPreview').textContent='미리보기 닫기';
   setTimeout(()=>{ fitPreviewToOnePage(); window.print(); }, 60);
 });
+/* PDF/미리보기 상단의 범례표 원본(renderRosterPreview()의 legend-table과 완전히 동일한
+   내용) — 근무표 엑셀 출력에서도 그대로 재사용해 PDF와 엑셀이 같은 정보를 담게 한다. */
+const ROSTER_LEGEND_ROWS = [
+  ['A','일근',8,'I','교육',8],
+  ['B','석근',14,'J','공가',0],
+  ['C','전일',22,'K','숙명',0],
+  ['D','대체일근',8,'L','연차',0],
+  ['E','대체석근',14,'M','청원',0],
+  ['F','대체전일',22,'N','병가',0],
+  ['G','휴일근무',8,'O','유계결근',0],
+  ['H','토요근무',8,'P','무계결근',0],
+  ['R','대체휴무','','Q','반차',0],
+];
 document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   // SheetJS 무료판은 셀 테두리 스타일을 저장하지 못해서(borders/fills가 무시됨),
   // 실제로 테두리가 보이는 파일을 만들기 위해 이 내보내기만 ExcelJS를 씁니다.
@@ -2939,6 +2952,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const staff = getRosterStaffFiltered(branch);
   const dowNames = ['일','월','화','수','목','금','토'];
   const titleRange = mode==='week7' ? `${dateList[0]}~${dateList[dateList.length-1]}` : (document.getElementById('rosterMonth').value || currentMonth);
+  const [titleYear, titleMonthNum] = dateList[0].split('-');
   const zoneSuffix = (BRANCH_SUBREGIONS[branch] && rosterZoneFilter!=='all' && rosterZoneFilter!=='__main__') ? ('_' + rosterZoneFilter) : '';
   const dateWeekdays = dateList.map(ds=> new Date(ds+'T00:00:00').getDay());
   const fixedCols = ['사번','성명','직무','직급','근무조'];
@@ -2948,38 +2962,82 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const sheetName = ((branch+zoneSuffix+'_'+titleRange).replace(/[\\/*?:[\]]/g,'_')).slice(0,31);
   const ws = wb.addWorksheet(sheetName);
 
-  ws.mergeCells(1,1,1,colCount);
-  const titleCell = ws.getCell(1,1);
-  titleCell.value = `${branch}지사${zoneSuffix?' ('+zoneSuffix.slice(1)+')':''} ${titleRange} 근무계획표`;
-  titleCell.font = { bold:true, size:13 };
-  titleCell.alignment = { horizontal:'center', vertical:'middle' };
-  ws.getRow(1).height = 22;
+  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
+  const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+  const holidayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFDF3DE'} };
+  const holidayFont = { argb:'FFB4790C' };
 
-  ws.getRow(2).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
-  ws.getRow(3).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
-  // 사번·성명·직무·직급·근무조·합계(시간)는 날짜별 요일이 없는(=아래 3행이 항상 빈칸인)
-  // 항목이라, 미리보기/PDF의 rowspan="2"와 똑같이 2~3행을 세로로 병합해 표를 보기 좋게 함.
-  [1,2,3,4,5,colCount].forEach(c=> ws.mergeCells(2,c,3,c));
+  // ---------- ① 범례(왼쪽, 1~6열) ----------
+  ws.mergeCells(1,1,1,3); ws.getCell(1,1).value = '범 례';
+  ws.mergeCells(1,4,1,6); ws.getCell(1,4).value = '근태유형';
+  [1,4].forEach(c=>{ const cell = ws.getCell(1,c); cell.font = {bold:true}; cell.alignment = {horizontal:'center',vertical:'middle'}; cell.fill = grayFill; });
+  ROSTER_LEGEND_ROWS.forEach((row,i)=>{
+    const r = 2+i;
+    row.forEach((val,ci)=>{
+      const cell = ws.getCell(r, ci+1);
+      cell.value = val;
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      if(ci===0 || ci===3) cell.fill = grayFill; // 코드 문자(A, I 등) 칸만 회색 배경(preview의 bg-gray와 동일)
+    });
+  });
+  const LEGEND_LAST_ROW = 1 + ROSTER_LEGEND_ROWS.length; // 범례 마지막 행(=10)
+
+  // ---------- ② 제목 + 시작일/종료일(가운데) ----------
+  const apprColStart = colCount - 2;
+  const titleColStart = 7, titleColEnd = apprColStart - 1;
+  ws.mergeCells(1, titleColStart, 2, titleColEnd);
+  const titleCell = ws.getCell(1, titleColStart);
+  titleCell.value = `${titleYear}년  근무실적(계획)  ${parseInt(titleMonthNum,10)}월${zoneSuffix?'  ('+zoneSuffix.slice(1)+')':''}`;
+  titleCell.font = { bold:true, size:16 };
+  titleCell.alignment = { horizontal:'center', vertical:'middle' };
+  ws.mergeCells(3, titleColStart, 3, titleColEnd);
+  const rangeCell = ws.getCell(3, titleColStart);
+  rangeCell.value = `${branch}지사   시작일 ${dateList[0]}   종료일 ${dateList[dateList.length-1]}`;
+  rangeCell.font = { size:11 };
+  rangeCell.alignment = { horizontal:'center', vertical:'middle' };
+
+  // ---------- ③ 3단결재(오른쪽, 마지막 3열) ----------
+  ['담 당','팀 장','지사장'].forEach((label,i)=>{
+    const cell = ws.getCell(1, apprColStart+i);
+    cell.value = label; cell.font = {bold:true}; cell.alignment = {horizontal:'center',vertical:'middle'}; cell.fill = grayFill;
+  });
+  for(let i=0;i<3;i++) ws.mergeCells(2, apprColStart+i, LEGEND_LAST_ROW, apprColStart+i); // 서명란 — 범례 높이만큼 넉넉하게
+
+  // 범례/제목/결재 헤더 블록 전체에 테두리
+  for(let r=1; r<=LEGEND_LAST_ROW; r++){
+    for(let c=1; c<=colCount; c++){
+      ws.getCell(r,c).border = { top:thin, left:thin, bottom:thin, right:thin };
+    }
+  }
+
+  // ---------- ④ 근무표 본표(범례 아래) ----------
+  const headRow1 = LEGEND_LAST_ROW + 1, headRow2 = LEGEND_LAST_ROW + 2;
+  ws.getRow(headRow1).values = [...fixedCols, ...dateList.map(shortLabel), '합계(시간)'];
+  ws.getRow(headRow2).values = [...fixedCols.map(()=>''), ...dateWeekdays.map(wd=>dowNames[wd]), ''];
+  // 사번·성명·직무·직급·근무조·합계(시간)는 날짜별 요일이 없는(=아래 행이 항상 빈칸인) 항목이라,
+  // 미리보기/PDF의 rowspan="2"와 똑같이 두 행을 세로로 병합해 표를 보기 좋게 함.
+  [1,2,3,4,5,colCount].forEach(c=> ws.mergeCells(headRow1,c,headRow2,c));
   staff.forEach(e=>{
     ws.addRow([e.empno, e.name, e.duty||'', e.rank, e.shift, ...dateList.map(ds=>effectiveCode(e,ds)), monthlyHours(e, dateList)]);
   });
 
-  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
-  const lastRow = 3 + staff.length;
-  for(let r=2; r<=lastRow; r++){
+  const lastRow = headRow2 + staff.length;
+  for(let r=headRow1; r<=lastRow; r++){
     for(let c=1; c<=colCount; c++){
       const cell = ws.getCell(r,c);
       cell.border = { top:thin, left:thin, bottom:thin, right:thin };
       cell.alignment = { horizontal:'center', vertical:'middle' };
       let font = {};
-      if(r<=3){
+      if(r<=headRow2){
         font.bold = true;
-        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+        cell.fill = grayFill;
       }
       const dateIdx = c - fixedCols.length - 1;
       if(dateIdx>=0 && dateIdx<dateList.length){
+        const ds = dateList[dateIdx];
         const wd = dateWeekdays[dateIdx];
-        if(wd===0) font.color = {argb:'FFC0392B'};
+        if(isHoliday(ds)){ cell.fill = holidayFill; font.color = holidayFont; } // 공휴일이 주말보다 우선(미리보기와 동일)
+        else if(wd===0) font.color = {argb:'FFC0392B'};
         else if(wd===6) font.color = {argb:'FF2F6FED'};
       }
       if(Object.keys(font).length) cell.font = font;
