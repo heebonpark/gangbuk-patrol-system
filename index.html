@@ -3072,7 +3072,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   const ws = wb.addWorksheet(sheetName);
   // 엑셀 기본 눈금선을 끄고(PDF처럼 표선만 깔끔하게 보이도록), 열어보면 바로 페이지 나누기
   // 미리보기로 보이게 한다(인쇄 범위/페이지 경계를 바로 확인할 수 있게).
-  ws.views = [{ showGridLines: false, view: 'pageBreakPreview' }];
+  ws.views = [{ showGridLines: false, state: 'normal', style: 'pageBreakPreview' }];
   // 인쇄 설정 — 가로 방향, 가로 폭을 1페이지에 자동으로 맞추고(세로는 필요한 만큼),
   // 여백은 위 1.4 / 아래 0.5 / 좌우 0.8인치로 지정.
   ws.pageSetup = {
