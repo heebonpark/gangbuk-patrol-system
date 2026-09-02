@@ -189,6 +189,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .cal-dow{font-size:11px;color:var(--text-mute);text-align:center;font-weight:700;padding:4px 0;}
   .cal-cell{min-height:92px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px;font-size:11px;}
   .cal-cell.empty{background:transparent;border:none;}
+  .cal-cell-clickable{cursor:pointer;}
+  .cal-cell-clickable:hover{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;}
   .cal-date{font-weight:700;color:var(--text-mute);font-size:11px;margin-bottom:4px;}
   .cal-chip{display:block;background:#EAF1FF;color:var(--navy);border-radius:5px;padding:2px 5px;margin-top:3px;font-size:10.3px;line-height:1.35;}
 
@@ -722,6 +724,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div id="calDow" class="cal-grid" style="margin-bottom:4px;"></div>
       <div id="calBody" class="cal-grid"></div>
+      <div id="calDayDetail" class="no-print" style="display:none;margin-top:16px;"></div>
     </div>
   </section>
 
@@ -1635,7 +1638,7 @@ function initLoginGate(){
   const pwInput = document.getElementById('loginPw');
   const errBox = document.getElementById('loginError');
   const copyrightEl = document.getElementById('loginCopyright');
-  if(copyrightEl) copyrightEl.textContent = '© 2026 Seeun Appa. All rights reserved.';
+  if(copyrightEl) copyrightEl.textContent = '© 2026 H.B. Park. All rights reserved.';
   // 사번 선택칸은 구역을 골랐을 때만 의미가 있으므로(지사→구역→사번 순으로 좁혀짐),
   // 구역이 비어있으면 숨긴다.
   function syncEmpnoUI(){
@@ -4044,14 +4047,42 @@ function renderCalendar(){
   for(let d=1; d<=dim; d++){
     const ds = dstr(y,m,d);
     const items = records.filter(r=>r.guide_name===guide && r.visit_date===ds);
-    html += `<div class="cal-cell"><div class="cal-date">${d}</div>`;
+    const clickable = items.length>0;
+    html += `<div class="cal-cell${clickable?' cal-cell-clickable':''}"${clickable?` onclick="showCalDayDetail('${ds}')"`:''}><div class="cal-date">${d}</div>`;
     items.forEach(it=>{ html += `<span class="cal-chip">${it.branch} ${it.visit_time.split('~')[0]} · ${it.headcount}명</span>`; });
     html += `</div>`;
   }
   body.innerHTML = html;
+  // 달/지도사를 바꾸면 이전에 보던 날짜의 상세 목록은 더 이상 유효하지 않으므로 접어둔다.
+  document.getElementById('calDayDetail').style.display = 'none';
 }
 document.getElementById('calGuide').addEventListener('change', renderCalendar);
 document.getElementById('calMonth').addEventListener('change', renderCalendar);
+/* 캘린더 날짜 클릭 → 그날 순회 대상 지사에 실제 배치된 직원 목록(지사/사번/성명/근무유형)을
+   달력 아래에 보여준다 — 순회감독이 그날 현장에 누가 있었는지 근무표 기준으로 바로
+   대조해볼 수 있게. 한 날짜에 순회 기록이 여러 지사에 걸쳐 있을 수 있어 지사별로 묶는다. */
+function showCalDayDetail(ds){
+  const guide = document.getElementById('calGuide').value || (guides[0]&&guides[0].name);
+  const items = records.filter(r=>r.guide_name===guide && r.visit_date===ds);
+  const wrap = document.getElementById('calDayDetail');
+  if(items.length===0){ wrap.style.display='none'; return; }
+  const branchesToday = [...new Set(items.map(r=>r.branch))];
+  let html = `<h3 style="font-size:14.5px;margin:0 0 8px;">${ds} 순회 대상 지사 배치 인원</h3>`;
+  branchesToday.forEach(b=>{
+    const staff = employees.filter(e=>e.branch===b).slice().sort((a,c)=> (a.zone||'').localeCompare(c.zone||'') || a.empno.localeCompare(c.empno));
+    html += `<p class="sub" style="margin:10px 0 4px;">${esc(b)}지사 (${staff.length}명)</p>`;
+    if(staff.length===0){ html += `<p class="sub" style="margin:0 0 8px;">등록된 직원이 없습니다.</p>`; }
+    else{
+      html += '<div class="table-scroll"><table class="grid"><thead><tr><th>지사</th><th>사번</th><th style="text-align:left;">성명</th><th>근무유형</th></tr></thead><tbody>';
+      staff.forEach(e=>{
+        html += `<tr><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td style="text-align:left;">${esc(e.name)}</td><td>${esc(effectiveCode(e, ds) || '-')}</td></tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+  });
+  wrap.innerHTML = html;
+  wrap.style.display = 'block';
+}
 
 /* ---------- 별지1 제출용 ---------- */
 function renderDoc(){
