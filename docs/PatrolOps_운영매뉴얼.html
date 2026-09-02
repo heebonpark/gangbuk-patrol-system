@@ -129,11 +129,14 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
       <a href="#branch-preview">미리보기·서명</a>
       <a href="#branch-export">엑셀·PDF 출력</a>
       <a href="#branch-finalize">근무표 확정·수정요청</a>
+      <a href="#branch-audit">근로시간 검증시트</a>
       <div class="grp">관리자</div>
       <a href="#admin-request">수정요청 처리</a>
       <a href="#admin-password">비밀번호 관리</a>
       <a href="#admin-zone">지사·구역 관리</a>
       <a href="#admin-backup">백업·복원</a>
+      <a href="#admin-dashboard">대시보드·초과근무 현황</a>
+      <a href="#admin-holiday">회사 자체 휴일 관리</a>
       <div class="grp">참고</div>
       <a href="#codes">근태유형 코드표</a>
       <a href="#faq">자주 묻는 질문</a>
@@ -191,7 +194,7 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
 
     <section id="branch-export">
       <div class="section-head"><div class="num">지사 담당자 · 04</div><h2>엑셀 · PDF 출력</h2></div>
-      <p><code>엑셀로 출력</code>은 현재 화면의 근무표를 그대로 엑셀 파일로 내려받습니다. <code>PDF 출력</code>은 A3 가로 용지 <b>한 장</b>에 맞춰 자동으로 축소해 인쇄/저장합니다 — 별도로 용지 크기를 맞출 필요가 없습니다.</p>
+      <p><code>엑셀로 출력</code>은 현재 화면의 근무표를 그대로 엑셀 파일로 내려받습니다. <code>PDF 출력</code>은 A4 가로 용지 <b>한 장</b>에 맞춰 자동으로 축소해 인쇄/저장합니다 — 별도로 용지 크기를 맞출 필요가 없습니다.</p>
     </section>
 
     <section id="branch-finalize">
@@ -201,6 +204,21 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
         <li class="step"><span class="idx">2</span><div><div class="h">수정이 필요하면</div><div class="d">확정 후 나타나는 <code>수정 요청</code> 버튼을 눌러 대상 직원(선택)과 요청 내용을 적어 보냅니다. 관리자가 확인 후 처리합니다.</div></div></li>
       </ol>
       <div class="callout"><b>주의.</b> 확정 취소는 관리자만 할 수 있습니다. 잘못 확정했다면 관리자에게 요청하세요.</div>
+    </section>
+
+    <section id="branch-audit">
+      <div class="section-head"><div class="num">지사 담당자 · 06</div><h2>근로시간 검증시트</h2><p class="desc">노동시간 준수 여부를 점검하고 ERP 등록용 자료를 만드는 감사용 자료입니다.</p></div>
+      <p>근무표 화면 상단의 <code>검증 시작일</code>을 지정하고 <code>근로시간 검증시트</code>를 누르면, 그 날부터 91일(13주)간 소속 지사 전체 직원의 근태를 4개 시트로 담은 엑셀 파일을 내려받습니다. 파일을 내려받지 않고 화면에서 바로 확인하려면 <code>근로시간 검증시트 미리보기</code>를 누르세요 — 미리보기 화면 안에서도 바로 엑셀로 내려받을 수 있습니다.</p>
+      <div class="tbl-scroll"><table>
+        <thead><tr><th>시트</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>① 근무자별 근무실적표</td><td>91일 전체 날짜별 근태 코드(범례 문자)</td></tr>
+          <tr><td>② 근무자별 근무수당 시간</td><td>주차별·평균 근로시간. 주 64시간 초과는 빨간 글씨, 분기평균 52시간 초과 주는 색상 표시</td></tr>
+          <tr><td>③ 근무자별 근무시간</td><td>①과 같은 91일 그리드를 코드 대신 시간(숫자)으로 환산</td></tr>
+          <tr><td>④ ERP 업로드</td><td>직원별 1일 1행 형식의 근태 업로드 양식(사번·근태유형·시작/종료 일시). 공휴일·회사 자체 휴일에 배정된 근무는 자동으로 "휴일근무"로 재분류되고 해당 행이 음영 표시됩니다.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="callout"><b>참고.</b> 시작일은 굳이 월요일이 아니어도 되며, 지정한 날부터 정확히 91일이 조회됩니다.</div>
     </section>
 
     <section id="admin-request">
@@ -222,6 +240,18 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
     <section id="admin-backup">
       <div class="section-head"><div class="num">관리자 · 04</div><h2>백업 · 복원</h2></div>
       <p><code>관리자 설정</code> 탭 <b>데이터 백업·복원</b>에서 전체 데이터를 JSON 파일로 내려받거나, 이전 백업 파일을 업로드해 복원할 수 있습니다. 정기적으로 백업해두는 것을 권장합니다.</p>
+    </section>
+
+    <section id="admin-dashboard">
+      <div class="section-head"><div class="num">관리자 · 05</div><h2>대시보드 · 초과근무 현황</h2></div>
+      <p><code>대시보드</code> 탭은 관리자에게만 보입니다. 상단 <b>일일 근무배치 현황</b> 카드는 기준일 하루의 지사별 주·야·숙 인원 분포와 구역 공백 여부를 보여주고, 아래 <b>초과근무 현황</b> 카드는 기준월 한 달 동안 주 64시간 또는 분기평균 52시간을 초과한 직원을 전체 지사에서 한 번에 찾아줍니다(근무표 탭과 같은 판정 기준).</p>
+      <p>이 카드의 <code>근로시간 검증시트 다운로드(전체 지사)</code> / <code>근로시간 검증시트 미리보기(전체 지사)</code> 버튼을 누르면, 지사 담당자 화면의 근로시간 검증시트와 같은 형식으로 <b>전체 지사</b> 직원을 한 번에 담아 확인·다운로드할 수 있습니다.</p>
+    </section>
+
+    <section id="admin-holiday">
+      <div class="section-head"><div class="num">관리자 · 06</div><h2>회사 자체 휴일 관리</h2></div>
+      <p><code>관리자 설정</code> 탭 <b>회사 자체 휴일 관리</b> 카드에서 법정공휴일 외에 회사가 자체적으로 지정하는 휴일(창립기념일 등)을 등록/삭제할 수 있습니다. <b>매년 반복</b>(월/일 고정) · <b>매월 반복</b>(일자 고정) · <b>특정 날짜 1회</b> 중 골라 등록합니다.</p>
+      <p>여기서 등록한 휴일은 근무표·엑셀·대시보드의 공휴일 강조 표시에 자동으로 함께 반영되고, 근로시간 검증시트의 ERP 업로드 시트에서는 그 날 실제 근무(주/야/전일/교육)가 배정된 직원의 근태가 자동으로 "휴일근무"로 재분류됩니다.</p>
     </section>
 
     <section id="codes">
@@ -251,6 +281,8 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
         <div class="faq-item"><div class="q">다른 지사 데이터가 안 보여요.</div><div class="a">지사 로그인은 원래 자기 지사만 보이도록 설계되어 있습니다. 여러 지사를 봐야 하면 관리자 로그인이 필요합니다.</div></div>
         <div class="faq-item"><div class="q">비밀번호를 5번 틀렸더니 잠겼어요.</div><div class="a">5분 뒤 자동으로 풀립니다. 화면에 남은 시간이 표시됩니다.</div></div>
         <div class="faq-item"><div class="q">데이터가 사라졌어요.</div><div class="a">이 시스템은 이 브라우저(또는 연결된 GitHub 저장소)에만 데이터를 저장합니다. 브라우저 데이터를 지웠거나 다른 기기·브라우저로 접속하면 이전 입력이 보이지 않을 수 있습니다. 정기적으로 <code>전체 백업 다운로드</code>를 해두면 복구할 수 있습니다.</div></div>
+        <div class="faq-item"><div class="q">근로시간 검증시트는 왜 91일 단위인가요?</div><div class="a">주 64시간·분기평균 52시간 초과 여부가 13주(91일) 단위로 계산되기 때문입니다 — 근무표 탭·대시보드의 초과근무 판정과 같은 기준입니다.</div></div>
+        <div class="faq-item"><div class="q">창립기념일처럼 회사가 정한 휴일은 어디서 등록하나요?</div><div class="a">관리자 설정 탭의 "회사 자체 휴일 관리" 카드에서 등록합니다(관리자만 등록/삭제 가능). 등록하면 근무표·엑셀·대시보드의 공휴일 표시에 자동으로 반영됩니다.</div></div>
       </div>
     </section>
 
