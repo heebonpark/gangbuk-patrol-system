@@ -343,6 +343,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hours-over{background:#fee2e2 !important;color:#b91c1c !important;font-weight:700;}
   .audit-warn{background:#d1fae5 !important;color:#065f46 !important;}
   table.audit-grid th, table.audit-grid td{padding:4px 5px;font-size:10.8px;text-align:center;white-space:nowrap;}
+  table.grid tr.holiday-row td{background:var(--warn-bg);color:var(--warn);}
   /* 대시보드: 일일 근무배치 현황 — 지사별 근무유형 분포 가로 누적 막대. 색은 dataviz
      스킬의 검증된 카테고리 팔레트(인접쌍 CVD ΔE>=8, 일반시각 ΔE>=15 통과)를 그대로 사용. */
   .dash-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--text-mute);}
@@ -3187,10 +3188,12 @@ function computeAuditErpRow(e, ds){
   const workTime = AUDIT_TIME_MAP[base]; // 주/야/전일/교육만 실제 근무시간이 정의돼 있음
   const holidayWork = !!workTime && isHoliday(ds);
   const time = holidayWork ? HOLIDAY_WORK_TIME : (workTime || NO_WORK_TIME);
-  const letter = holidayWork ? 'G' : auditCodeLabel(code);
+  // B열(근태)의 "휴"는 K(숙명)로 반영한다(요청사항) — 근태유형(라벨)은 그대로 "휴무" 유지.
+  const letter = holidayWork ? 'G' : (base==='휴' ? 'K' : auditCodeLabel(code));
   const label = holidayWork ? '휴일근무' : (info ? info.label : (base || ''));
   const endDate = time.crossesDay ? addDaysStr(ds,1) : ds;
-  return { letter, label, startTime: time.start, endDate, endTime: time.end };
+  // holiday: 휴일근무 재분류 여부와 무관하게 이 날짜 자체가 휴일인지 — 행 음영 표시에 씀.
+  return { letter, label, startTime: time.start, endDate, endTime: time.end, holiday: isHoliday(ds) };
 }
 async function buildLaborAuditWorkbook(staffList, startDs){
   const dateList = []; for(let i=0;i<AUDIT_DAYS;i++) dateList.push(addDaysStr(startDs,i));
@@ -3200,6 +3203,9 @@ async function buildLaborAuditWorkbook(staffList, startDs){
   const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
   const warnFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFD6EEDD'} };
   const overFont = { bold:true, color:{argb:'FFC0392B'} };
+  // 근무표 엑셀(btnRosterExcel)의 공휴일 강조와 같은 색 — ④ERP 업로드에서 휴일 행 음영 표시용.
+  const holidayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFDF3DE'} };
+  const holidayFont = { argb:'FFB4790C' };
   const fixedHeaders = ['순번','지사','근무자명','사번'];
   const wb = new ExcelJS.Workbook();
 
@@ -3297,9 +3303,10 @@ async function buildLaborAuditWorkbook(staffList, startDs){
     ws.getRow(2).eachCell(cell=>{ cell.font = {bold:true}; cell.fill = grayFill; cell.alignment = {horizontal:'center',vertical:'middle'}; });
 
     let r = 3;
+    const holidayRows = [];
     staffList.forEach((e,i)=>{
       dateList.forEach(ds=>{
-        const { letter, label, startTime, endDate, endTime } = computeAuditErpRow(e, ds);
+        const { letter, label, startTime, endDate, endTime, holiday } = computeAuditErpRow(e, ds);
         ws.getRow(r).values = [
           i+1, letter, '', e.empno, e.name,
           label,
@@ -3307,11 +3314,20 @@ async function buildLaborAuditWorkbook(staffList, startDs){
           endDate, endTime,
           '', '실적', '',
         ];
+        if(holiday) holidayRows.push(r);
         r++;
       });
     });
     const lastRow = r - 1;
     borderAll(ws, 2, 1, lastRow, headers.length);
+    // 휴일(법정공휴일·회사 자체 휴일) 행 전체를 근무표 엑셀과 같은 색으로 음영 표시.
+    holidayRows.forEach(hr=>{
+      for(let c=1; c<=headers.length; c++){
+        const cell = ws.getCell(hr,c);
+        cell.fill = holidayFill;
+        cell.font = Object.assign({}, cell.font, { color: holidayFont });
+      }
+    });
     for(let rr=3; rr<=lastRow; rr++) ws.getRow(rr).eachCell(cell=>{ cell.alignment = {horizontal:'center',vertical:'middle'}; });
     ws.columns = [7,7,7,9.5,10,10,11,9.5,11,9.5,12,7,14].map(w=>({width:w}));
   }
@@ -3403,8 +3419,8 @@ function renderLaborAuditPreviewTab(bodyElId, staffList, dateList, tab){
     let h = '<div class="table-scroll"><table class="grid"><thead><tr><th>구분</th><th>근태</th><th>UPL</th><th>사번</th><th>성명</th><th>근태유형</th><th>시작일자</th><th>시작시간</th><th>종료일자</th><th>종료시간</th><th>사유</th><th>구분</th><th>메시지</th></tr></thead><tbody>';
     staffList.forEach((e,i)=>{
       dateList.forEach(ds=>{
-        const { letter, label, startTime, endDate, endTime } = computeAuditErpRow(e, ds);
-        h += `<tr><td>${i+1}</td><td>${esc(letter)}</td><td></td><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(label)}</td><td>${ds}</td><td>${startTime}</td><td>${endDate}</td><td>${endTime}</td><td></td><td>실적</td><td></td></tr>`;
+        const { letter, label, startTime, endDate, endTime, holiday } = computeAuditErpRow(e, ds);
+        h += `<tr class="${holiday?'holiday-row':''}"><td>${i+1}</td><td>${esc(letter)}</td><td></td><td>${esc(e.empno)}</td><td>${esc(e.name)}</td><td>${esc(label)}</td><td>${ds}</td><td>${startTime}</td><td>${endDate}</td><td>${endTime}</td><td></td><td>실적</td><td></td></tr>`;
       });
     });
     h += '</tbody></table></div>';
