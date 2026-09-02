@@ -200,10 +200,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   table.doc{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:6px;}
   table.doc th, table.doc td{border:1px solid #333;padding:8px 6px;text-align:center;}
   table.doc th{background:#F5F5F5;font-weight:700;}
-  table.doc .addr{text-align:left;font-size:11.8px;line-height:1.4;}
+  table.doc .addr{text-align:center;font-size:11.8px;line-height:1.4;}
   .doc-footer{margin-top:22px;font-size:11px;color:var(--text-mute);text-align:right;}
   .doc-empty{padding:40px;text-align:center;color:var(--text-mute);font-size:13px;}
   .doc-wrap-wide{max-width:100%;overflow-x:auto;margin-top:14px;}
+  .doc-page-break{page-break-before:always; padding-top:20px;}
   table.roster-preview-table{font-size:10px;}
   table.roster-preview-table th, table.roster-preview-table td{padding:3px 3px;white-space:nowrap;}
   table.roster-preview-table .dow-sun{background:#FBEAE8;}
@@ -536,6 +537,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <input type="text" id="searchBox" placeholder="주소·비고 검색">
         <span class="spacer"></span>
         <button class="btn btn-outline" id="btnExportExcel">엑셀로 내보내기</button>
+        <button class="btn btn-outline" id="btnDoc1Excel" title="필터에서 고른 경비지도사(전체면 전원)를 별지1 양식(성명·자격번호·연락처 포함)의 엑셀로 내려받습니다. 지도사 1명당 시트 1장.">별지1 엑셀 다운로드</button>
+        <button class="btn btn-outline" id="btnDoc1PDF" title="필터에서 고른 경비지도사(전체면 전원)를 별지1 양식으로 한 번에 인쇄/PDF 저장합니다.">별지1 PDF 보기</button>
         <button class="btn btn-outline" id="btnAddCol">+ 컬럼 추가</button>
         <button class="btn btn-primary" id="btnAddRow">+ 일정 추가</button>
       </div>
@@ -1387,11 +1390,11 @@ function generateFromPreset(key, monthStartStr){
 /* ---------- 시드 데이터 ---------- */
 function seedGuides(){
   return [
-    {id:'g1',name:'권도영', license:'22257', phone:'010-****-3565', color:'#2F6FED'},
-    {id:'g2',name:'서명훈', license:'22027', phone:'010-****-7428', color:'#C87F3A'},
-    {id:'g3',name:'원병현', license:'22230', phone:'010-****-5058', color:'#227A5A'},
-    {id:'g4',name:'김상헌', license:'20769', phone:'010-****-4631', color:'#8C4FC9'},
-    {id:'g5',name:'오승태', license:'22077', phone:'010-****-4702', color:'#C0392B'},
+    {id:'g1',name:'권도영', license:'22257', phone:'010-2841-3565', color:'#2F6FED'},
+    {id:'g2',name:'서명훈', license:'22027', phone:'010-6193-7428', color:'#C87F3A'},
+    {id:'g3',name:'원병현', license:'22230', phone:'010-7726-5058', color:'#227A5A'},
+    {id:'g4',name:'김상헌', license:'20769', phone:'010-3054-4631', color:'#8C4FC9'},
+    {id:'g5',name:'오승태', license:'22077', phone:'010-9482-4702', color:'#C0392B'},
   ];
 }
 function seedBranches(){ return ["중앙","의정부","강북","서대문","고양","남양주","강릉","원주"]; }
@@ -3303,10 +3306,10 @@ const ROSTER_ZONE_COLORS = [
    행이 많으면 자동으로 여러 페이지에 걸쳐 세로로 이어짐), 여백 위1.4/아래0.5/좌우0.8cm를
    그대로 재사용한다. paperSize:9(A4)를 명시해 여는 PC의 기본 용지 설정과 무관하게 항상
    A4로 고정한다(전에는 fitToWidth만 있고 paperSize가 없어 이론상 다른 용지로 열릴 수 있었음). */
-function applyA4LandscapePrint(ws){
+function applyA4LandscapePrint(ws, orientation){
   ws.pageSetup = {
     paperSize: 9, // 9 = A4 (OOXML 표준 용지 코드)
-    orientation: 'landscape',
+    orientation: orientation || 'landscape',
     fitToPage: true,
     fitToWidth: 1,
     fitToHeight: 0,
@@ -4085,13 +4088,14 @@ function showCalDayDetail(ds){
 }
 
 /* ---------- 별지1 제출용 ---------- */
-function renderDoc(){
-  const guide = document.getElementById('docGuide').value || (guides[0]&&guides[0].name);
-  const g = guides.find(g=>g.name===guide);
-  const rows = records.filter(r=>r.guide_name===guide).sort((a,b)=>(a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
+/* 경비지도사 1명분 별지1 문서 HTML — 단일 지도사 화면(renderDoc)과 "통합 순회 일정" 탭의
+   여러 지도사 일괄 PDF/엑셀 다운로드가 이 한 함수를 공유한다(내용이 어긋나지 않게). */
+function buildGuideDocHtml(guideName){
+  const g = guides.find(g=>g.name===guideName);
+  const rows = records.filter(r=>r.guide_name===guideName).sort((a,b)=>(a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
   let html = `<div class="doc-title">별지1 경비지도사 순회감독 일정표</div>`;
   html += `<table class="doc" style="margin-bottom:14px;">
-    <tr><th style="width:20%;">경비지도사 성명</th><td style="width:30%;">${g?g.name:''}</td>
+    <tr><th style="width:20%;">경비지도사 성명</th><td style="width:30%;">${g?g.name:guideName}</td>
         <th style="width:20%;">자격번호</th><td style="width:30%;">${g?g.license:''}</td></tr>
     <tr><th>연락처</th><td colspan="3">${g?g.phone:''}</td></tr>
   </table>`;
@@ -4108,10 +4112,103 @@ function renderDoc(){
   const now = new Date();
   const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
   html += `<div class="doc-footer">${loginLabel() ? loginLabel() + ' / ' : ''}${ts}</div>`;
-  document.getElementById('docWrap').innerHTML = html;
+  return html;
+}
+/* 지도사 여러 명을 한 번에 인쇄/PDF 저장할 때 — 지도사가 바뀔 때마다 새 페이지에서
+   시작하도록 첫 번째를 제외하고 doc-page-break 클래스를 붙인다. */
+function buildMultiGuideDocHtml(guideNames){
+  return guideNames.map((name,i)=> `<div class="${i>0?'doc-page-break':''}">${buildGuideDocHtml(name)}</div>`).join('');
+}
+function renderDoc(){
+  const guide = document.getElementById('docGuide').value || (guides[0]&&guides[0].name);
+  document.getElementById('docWrap').innerHTML = buildGuideDocHtml(guide);
 }
 document.getElementById('docGuide').addEventListener('change', renderDoc);
 document.getElementById('btnPrint').addEventListener('click', ()=>window.print());
+/* "통합 순회 일정" 탭에서 지금 필터된 경비지도사(전체 또는 특정 1명) 기준으로 별지1
+   양식을 일괄 PDF 미리보기/엑셀 다운로드한다 — 경찰서 제출용(별지1) 탭과 같은 내용이지만
+   여러 명을 한 번에 받을 수 있게 함. */
+function getDoc1TargetGuideNames(){
+  const sel = document.getElementById('filterGuide').value || 'all';
+  return sel==='all' ? guides.map(g=>g.name) : [sel];
+}
+document.getElementById('btnDoc1PDF').addEventListener('click', ()=>{
+  const names = getDoc1TargetGuideNames();
+  if(names.length===0){ alert('등록된 경비지도사가 없습니다.'); return; }
+  document.querySelector('nav.tabs button[data-tab="doc"]').click(); // renderDoc()이 자동 실행되지만 아래에서 바로 덮어씀
+  document.getElementById('docWrap').innerHTML = buildMultiGuideDocHtml(names);
+  setTimeout(()=>window.print(), 60);
+});
+document.getElementById('btnDoc1Excel').addEventListener('click', async ()=>{
+  const names = getDoc1TargetGuideNames();
+  if(names.length===0){ alert('등록된 경비지도사가 없습니다.'); return; }
+  const wb = new ExcelJS.Workbook();
+  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
+  const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+  const usedNames = new Set();
+  names.forEach(guideName=>{
+    const g = guides.find(x=>x.name===guideName);
+    const rows = records.filter(r=>r.guide_name===guideName).sort((a,b)=>(a.visit_date+a.visit_time).localeCompare(b.visit_date+b.visit_time));
+    let sheetName = guideName.replace(/[\\/*?:[\]]/g,'_').slice(0,28);
+    if(usedNames.has(sheetName)) sheetName = `${sheetName}_${usedNames.size}`;
+    usedNames.add(sheetName);
+    const ws = wb.addWorksheet(sheetName);
+    applyA4LandscapePrint(ws); // A4 가로(기존 근무표 엑셀과 동일한 방향으로 통일)
+    const colCount = 5;
+    ws.mergeCells(1,1,1,colCount);
+    const titleCell = ws.getCell(1,1);
+    titleCell.value = '별지1 경비지도사 순회감독 일정표';
+    titleCell.font = { bold:true, size:14 };
+    titleCell.alignment = { horizontal:'center', vertical:'middle' };
+    ws.getRow(1).height = 24;
+    // 경비지도사 성명/자격번호/연락처 헤더 — 화면(별지1 탭)과 같은 2행 구성. 가로 방향이라
+    // 세로일 때보다 위아래 여유가 적어 보일 수 있어 높이를 살짝 넉넉하게 지정한다.
+    ws.getCell(2,1).value = '경비지도사 성명'; ws.getCell(2,2).value = g?g.name:guideName;
+    ws.getCell(2,3).value = '자격번호'; ws.getCell(2,4).value = g?g.license:'';
+    ws.mergeCells(2,4,2,5);
+    ws.getCell(3,1).value = '연락처'; ws.mergeCells(3,2,3,5); ws.getCell(3,2).value = g?g.phone:'';
+    ws.getRow(2).height = 20; ws.getRow(3).height = 20;
+    [[2,1],[2,3],[3,1]].forEach(([r,c])=>{ const cell = ws.getCell(r,c); cell.font = {bold:true}; cell.fill = grayFill; cell.alignment = {horizontal:'center',vertical:'middle'}; });
+    [[2,2],[2,4],[3,2]].forEach(([r,c])=>{ ws.getCell(r,c).alignment = {horizontal:'center',vertical:'middle'}; });
+    for(let r=1;r<=3;r++) for(let c=1;c<=colCount;c++) ws.getCell(r,c).border = { top:thin, left:thin, bottom:thin, right:thin };
+    const headRow = 5;
+    ws.getRow(headRow).values = ['선임업체명','경비원 배치현장 주소','순회 예정 일시','배치인원','비고'];
+    ws.getRow(headRow).height = 20;
+    ws.getRow(headRow).eachCell(cell=>{ cell.font = {bold:true}; cell.fill = grayFill; cell.alignment = {horizontal:'center',vertical:'middle'}; });
+    if(rows.length===0){
+      ws.mergeCells(headRow+1,1,headRow+1,colCount);
+      ws.getCell(headRow+1,1).value = '이 경비지도사에게 배정된 순회 일정이 없습니다.';
+      ws.getCell(headRow+1,1).alignment = { horizontal:'center', vertical:'middle' };
+    } else {
+      rows.forEach((r,i)=>{
+        const dateFmt = r.visit_date ? `'${r.visit_date.slice(2,4)}. ${r.visit_date.slice(5,7)}. ${r.visit_date.slice(8,10)}` : '';
+        const dataRow = ws.getRow(headRow+1+i);
+        dataRow.values = [r.company, (r.site_address||'').replace(/\n/g,' '), `${dateFmt} ${r.visit_time}`, `${r.headcount}명`, r.police_station];
+        // 가로 방향은 주소 열 너비가 넉넉해져 대부분 1~2줄이면 충분하므로, 세로일 때보다
+        // 낮은 높이로도 안 잘리고 여백만 줄어 더 보기 좋다(줄바꿈 있는 주소 기준 실측).
+        dataRow.height = 26;
+      });
+    }
+    const lastRow = headRow + Math.max(rows.length,1);
+    for(let r=headRow;r<=lastRow;r++){
+      for(let c=1;c<=colCount;c++){
+        const cell = ws.getCell(r,c);
+        cell.border = { top:thin, left:thin, bottom:thin, right:thin };
+        if(r>headRow) cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+      }
+    }
+    // 가로(A4 landscape)는 세로보다 가용 폭이 넓어, 특히 주소 열을 더 넉넉하게 잡아
+    // 줄바꿈이 줄어들도록 폭 배분을 다시 잡는다(세로 기준 22/38/20/12/16 → 가로 기준으로 확장).
+    ws.columns = [{width:24},{width:52},{width:22},{width:13},{width:18}];
+  });
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `별지1_순회감독일정표_${new Date().toISOString().slice(0,10)}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+});
 
 /* ---------- 운영 알림 · 자동검증 ---------- */
 function copyText(str, btn){
