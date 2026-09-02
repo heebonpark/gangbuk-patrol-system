@@ -906,6 +906,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
+    <div class="card admin-only-card">
+      <h2>회사 자체 휴일 관리 (창립기념일 등)</h2>
+      <p class="sub">법정공휴일 외에 회사에서 자체적으로 지정하는 휴일입니다. 근무표·엑셀 출력·대시보드 등 공휴일 강조가 쓰이는 모든 곳에 자동 반영되고, "근로시간 검증시트"의 ERP 업로드에서는 이 날짜에 근무(주/야/전일/교육)가 배정돼 있으면 자동으로 "휴일근무"로 분류됩니다. 매년 반복(월/일 고정, 예: 창립기념일)·매월 반복(일자 고정)·특정 날짜 1회 중 선택할 수 있습니다.</p>
+      <div id="customHolidayList"></div>
+      <div class="toolbar no-print" style="margin-top:10px;">
+        <input type="text" id="newHolidayLabel" placeholder="휴일명(예: 창립기념일)" style="width:160px;">
+        <select id="newHolidayRecur">
+          <option value="yearly">매년 반복(월/일 고정)</option>
+          <option value="monthly">매월 반복(일자 고정)</option>
+          <option value="once">특정 날짜 1회</option>
+        </select>
+        <input type="number" id="newHolidayMonth" min="1" max="12" placeholder="월" style="width:60px;">
+        <input type="number" id="newHolidayDay" min="1" max="31" placeholder="일" style="width:60px;">
+        <input type="date" id="newHolidayDate" style="display:none;">
+        <button class="btn btn-primary" id="btnAddCustomHoliday">+ 휴일 추가</button>
+      </div>
+    </div>
+
     <div class="card" id="adminZoneManageCard">
       <h2>직원 구역/호수 관리</h2>
       <p class="sub">근무표 미리보기에서 직원을 묶어 보여주는 "구역/호수" 값과 연락처를 지사·직원별로 확인하고 바로 수정합니다. 지사 로그인 시 소속 지사 인원만 보이고 수정할 수 있습니다.</p>
@@ -1253,7 +1271,18 @@ const HOLIDAYS_KR = new Set([
   '2026-12-25', // 크리스마스
 ]);
 function isWeekend(dateStr){ const wd = new Date(dateStr+'T00:00:00').getDay(); return wd===0 || wd===6; }
-function isHoliday(dateStr){ return HOLIDAYS_KR.has(dateStr); }
+/* 회사 자체 휴일(창립기념일 등, 관리자설정에서 등록) — customHolidays는 이 함수보다 뒤에서
+   let로 선언되지만, 실제 호출은 항상 부팅(applyState) 이후에 일어나므로 문제 없다. */
+function isCustomHoliday(dateStr){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return customHolidays.some(h=>{
+    if(h.recur==='yearly') return h.month===m && h.day===d;
+    if(h.recur==='monthly') return h.day===d;
+    if(h.recur==='once') return h.date===dateStr;
+    return false;
+  });
+}
+function isHoliday(dateStr){ return HOLIDAYS_KR.has(dateStr) || isCustomHoliday(dateStr); }
 
 /* ---------- 근무표: 패턴 + 예외 모델 ---------- */
 function patternCodeFor(emp, dateStr){
@@ -1344,12 +1373,20 @@ function seedEmployees(){
     pattern:r.pattern, patternStart:r.patternStart, overrides:r.overrides
   }));
 }
+/* 회사 자체 지정 휴일(창립기념일 등) 기본값 — 관리자설정 > "회사 자체 휴일 관리"에서 추가/삭제 가능.
+   recur: 'yearly'(월/일 고정으로 매년 반복) | 'monthly'(일자 고정으로 매월 반복) | 'once'(date 1회성). */
+function seedCustomHolidays(){
+  return [
+    { id:'ch_founding', label:'창립기념일', recur:'yearly', month:11, day:15 },
+  ];
+}
 
 /* ---------- 상태 ---------- */
 let records=[], extraCols=[], employees=[], guides=[], branches=[], changeLog=[];
 let rosterFinalized={}, changeRequests=[]; // rosterFinalized: {branch: {ym:true}}
 let rosterFinalizedEmp={};  // 개인별 확정: {empId: {ym:true}}
 let rosterFinalizedZone={}; // 구역별 확정: {branch: {zone: {ym:true}}}
+let customHolidays=[]; // 회사 자체 휴일(창립기념일 등) — seedCustomHolidays() 참고
 let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
 let licenseExpiry = null; // 사용 기간 제한(YYYY-MM-DD) — null/미설정이면 무제한
 let storageMode = 'none'; // 'artifact' | 'github' | 'none'
@@ -1602,7 +1639,7 @@ async function ghPutFile(cfg, stateObj, sha){
   if(!res.ok) throw new Error('GitHub 저장 실패 (' + res.status + ')');
   return res.json();
 }
-function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests, licenseExpiry}; }
+function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests, licenseExpiry, customHolidays}; }
 function applyState(data){
   records = data.records || seedRecords();
   extraCols = data.extraCols || [];
@@ -1615,6 +1652,7 @@ function applyState(data){
   rosterFinalizedZone = data.rosterFinalizedZone || {};
   changeRequests = data.changeRequests || [];
   licenseExpiry = data.licenseExpiry || null;
+  customHolidays = data.customHolidays || seedCustomHolidays();
 }
 function renderStorageAdmin(){
   const desc = document.getElementById('storageModeDesc');
@@ -1693,7 +1731,13 @@ async function loadState(){
       catch(e){ return fallback; }
     }
     const state = await get('patrol_state_v1', null);
-    if(state) applyState(state); else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+    // 저장된 상태가 아예 없을 때도 applyState({})로 통일해서 처리한다 — 예전엔 여기서
+    // records/employees 등 일부 필드만 손으로 다시 나열해 시드값을 채웠는데, customHolidays
+    // 같은 새 필드를 추가할 때마다 이 4곳을 전부 같이 고쳐야 해서 하나라도 빠뜨리면(실제로
+    // customHolidays가 한 번 빠졌었음) 완전히 빈 상태로 처음 켤 때만 그 필드가 시드되지 않는
+    // 버그가 생겼다. applyState({})는 모든 필드에 대해 이미 "없으면 시드값" 처리를 하므로
+    // 필드가 늘어나도 이 네 곳을 다시 고칠 필요가 없다.
+    if(state) applyState(state); else applyState({});
     lastYM = await get('patrol_lastmonth_v1', null);
     setSyncStatus('동기화됨 (Claude 팀 공유 저장소 · 미리보기 전용)', true);
   } else if(ghConfig && ghConfig.owner && ghConfig.repo && ghConfig.token){
@@ -1704,21 +1748,21 @@ async function loadState(){
         const data = JSON.parse(b64DecodeUnicode(file.content.replace(/\n/g,'')));
         applyState(data); lastYM = data.lastKnownMonth || null; ghSha = file.sha;
       } else {
-        records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; ghSha=null;
+        applyState({}); ghSha=null;
       }
       setSyncStatus('동기화됨 (GitHub 저장소: ' + ghConfig.owner + '/' + ghConfig.repo + ')', true);
     }catch(e){
       storageMode = 'none';
       const cached = safeLocalGet('patrol_state_v1');
       if(cached){ const d=JSON.parse(cached); applyState(d); lastYM=d.lastKnownMonth||null; }
-      else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+      else applyState({});
       setSyncStatus('⚠ GitHub 연결 실패(' + e.message + ') - 이 기기에만 저장됩니다', false);
     }
   } else {
     storageMode = 'none';
     const cached = safeLocalGet('patrol_state_v1');
     if(cached){ const d=JSON.parse(cached); applyState(d); lastYM=d.lastKnownMonth||null; }
-    else { records=seedRecords(); extraCols=[]; employees=seedEmployees(); guides=seedGuides(); branches=seedBranches(); changeLog=[]; }
+    else applyState({});
     setSyncStatus('⚠ 저장소 미연결 - 이 기기에만 임시 저장됩니다', false);
   }
 
@@ -3070,6 +3114,13 @@ const AUDIT_TIME_MAP = {
   '전일': { start:'09:00', end:'09:00', crossesDay:true },
   '교육': { start:'09:00', end:'18:00', crossesDay:false },
 };
+/* 휴일근무(G)로 재분류될 때 쓰는 시각 — 참고한 ERP 원본 양식의 코드값 범례표(코드값 G행)를
+   그대로 따른 것으로, 실제로 어떤 근무(주/야/전일)였는지와 무관하게 09:00~18:00 고정이다. */
+const HOLIDAY_WORK_TIME = { start:'09:00', end:'18:00', crossesDay:false };
+/* 연차/숙명 등 근무시간이 정의되지 않은 코드용 기본값 — 참고한 ERP 원본에서 VLOOKUP이 범례표의
+   빈 칸(J~R행은 시작·종료시간이 비어 있음)을 참조하면 0이 반환돼 "00:00"으로 표시되는 것과
+   동일하게, 빈 문자열로 남기지 않고 00:00을 채운다. */
+const NO_WORK_TIME = { start:'00:00', end:'00:00', crossesDay:false };
 function auditCodeLabel(code){
   if(!code) return '';
   const base = baseCodeOf(code);
@@ -3192,13 +3243,25 @@ async function buildLaborAuditWorkbook(staffList, startDs){
         const code = effectiveCode(e, ds);
         const base = baseCodeOf(code);
         const info = CODE_LEGEND[base];
-        const time = AUDIT_TIME_MAP[base];
-        const endDate = time ? (time.crossesDay ? addDaysStr(ds,1) : ds) : '';
+        const workTime = AUDIT_TIME_MAP[base]; // 주/야/전일/교육만 실제 근무시간이 정의돼 있음
+        // 실제 근무(주/야/전일/교육)가 공휴일/회사 자체 휴일에 배정된 날은 근태(코드)·근태유형·
+        // 시작종료시각을 전부 "휴일근무(G)" 기준으로 재분류한다 — 참고한 ERP 원본의 코드값
+        // 범례표(G행)를 보면 휴일근무는 실제 근무형태(주/야)와 무관하게 09:00~18:00 고정이라,
+        // 원래 근무시간을 그대로 남기면 참고 양식과 달라진다.
+        const holidayWork = !!workTime && isHoliday(ds);
+        const time = holidayWork ? HOLIDAY_WORK_TIME : (workTime || NO_WORK_TIME);
+        const dispLetter = holidayWork ? 'G' : auditCodeLabel(code);
+        const dispLabel = holidayWork ? '휴일근무' : (info ? info.label : (base || ''));
+        // 종료일자/시작시간/종료시간은 참고한 ERP 원본에서 IF·VLOOKUP 수식으로 항상 채워지는
+        // 칸이다(연차 등 근무시간이 없는 코드는 VLOOKUP이 빈 칸을 참조해 0 → "00:00"으로 표시되고,
+        // 종료일자는 기본이 시작일과 동일) — 그래서 여기서도 빈 문자열로 비워두지 않고 항상 값을
+        // 채운다.
+        const endDate = time.crossesDay ? addDaysStr(ds,1) : ds;
         ws.getRow(r).values = [
-          i+1, auditCodeLabel(code), '', e.empno, e.name,
-          info ? info.label : (base || ''),
-          ds, time ? time.start : '',
-          endDate, time ? time.end : '',
+          i+1, dispLetter, '', e.empno, e.name,
+          dispLabel,
+          ds, time.start,
+          endDate, time.end,
           '', '실적', '',
         ];
         r++;
@@ -4536,9 +4599,66 @@ function renderAdmin(){
     return `<span class="branch-chip">${b} <span style="color:var(--text-mute);font-size:10.5px;">(${used})</span><button onclick="deleteBranch('${b}')">×</button></span>`;
   }).join('');
 
+  renderCustomHolidayAdmin();
   renderLog();
   refreshSelects();
 }
+function customHolidayRecurLabel(h){
+  if(h.recur==='yearly') return `매년 ${h.month}월 ${h.day}일`;
+  if(h.recur==='monthly') return `매월 ${h.day}일`;
+  return `${h.date} (1회)`;
+}
+function renderCustomHolidayAdmin(){
+  const el = document.getElementById('customHolidayList');
+  if(!el) return;
+  if(customHolidays.length===0){ el.innerHTML = `<p style="color:var(--text-mute);font-size:12px;">등록된 회사 자체 휴일이 없습니다.</p>`; return; }
+  const sorted = customHolidays.slice().sort((a,b)=> customHolidayRecurLabel(a).localeCompare(customHolidayRecurLabel(b)));
+  el.innerHTML = sorted.map(h=>`<div class="admin-row" style="grid-template-columns:1fr 1fr 70px;">
+    <span>${esc(h.label)}</span>
+    <span style="color:var(--text-mute);">${esc(customHolidayRecurLabel(h))}</span>
+    <button class="btn btn-danger" onclick="deleteCustomHoliday('${h.id}')">삭제</button>
+  </div>`).join('');
+}
+function deleteCustomHoliday(id){
+  const h = customHolidays.find(x=>x.id===id); if(!h) return;
+  if(!confirm(`"${h.label}"(${customHolidayRecurLabel(h)}) 휴일을 삭제할까요?`)) return;
+  customHolidays = customHolidays.filter(x=>x.id!==id);
+  logEvent(`회사 자체 휴일 삭제: ${h.label}(${customHolidayRecurLabel(h)})`);
+  persist(); renderAdmin(); renderRoster(); renderDashboard();
+}
+document.getElementById('newHolidayRecur').addEventListener('change', ()=>{
+  const recur = document.getElementById('newHolidayRecur').value;
+  document.getElementById('newHolidayMonth').style.display = recur==='yearly' ? '' : 'none';
+  document.getElementById('newHolidayDay').style.display = (recur==='yearly'||recur==='monthly') ? '' : 'none';
+  document.getElementById('newHolidayDate').style.display = recur==='once' ? '' : 'none';
+});
+document.getElementById('btnAddCustomHoliday').addEventListener('click', ()=>{
+  const label = document.getElementById('newHolidayLabel').value.trim();
+  const recur = document.getElementById('newHolidayRecur').value;
+  if(!label){ alert('휴일명을 입력하세요.'); return; }
+  let entry;
+  if(recur==='yearly'){
+    const month = parseInt(document.getElementById('newHolidayMonth').value, 10);
+    const day = parseInt(document.getElementById('newHolidayDay').value, 10);
+    if(!month || !day || month<1 || month>12 || day<1 || day>31){ alert('월/일을 올바르게 입력하세요.'); return; }
+    entry = { id:'ch_'+Date.now(), label, recur, month, day };
+  } else if(recur==='monthly'){
+    const day = parseInt(document.getElementById('newHolidayDay').value, 10);
+    if(!day || day<1 || day>31){ alert('일자를 올바르게 입력하세요.'); return; }
+    entry = { id:'ch_'+Date.now(), label, recur, day };
+  } else {
+    const date = document.getElementById('newHolidayDate').value;
+    if(!date){ alert('날짜를 선택하세요.'); return; }
+    entry = { id:'ch_'+Date.now(), label, recur, date };
+  }
+  customHolidays.push(entry);
+  logEvent(`회사 자체 휴일 추가: ${label}(${customHolidayRecurLabel(entry)})`);
+  document.getElementById('newHolidayLabel').value = '';
+  document.getElementById('newHolidayMonth').value = '';
+  document.getElementById('newHolidayDay').value = '';
+  document.getElementById('newHolidayDate').value = '';
+  persist(); renderAdmin(); renderRoster(); renderDashboard();
+});
 function editGuide(id, key, val){
   const g = guides.find(g=>g.id===id); if(!g) return;
   if(key==='name' && val!==g.name){
