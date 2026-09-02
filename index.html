@@ -435,6 +435,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <label>구역(선택)</label>
       <select id="loginZone"><option value="">지사 전체(구역 선택 안 함)</option></select>
     </div>
+    <div class="login-field login-hidden" id="loginEmpnoField">
+      <label>사번(선택)</label>
+      <select id="loginEmpno"><option value="">구역 전체(사번 선택 안 함)</option></select>
+    </div>
     <div class="login-field login-hidden" id="loginNewBranchField">
       <label>새 지사명</label>
       <input type="text" id="loginNewBranchName" placeholder="예: 부천" autocomplete="off">
@@ -561,6 +565,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <button class="btn btn-outline" id="btnZoneTeamRotation" title="같은 구역/호수 직원을 3명 단위로 묶어 주주야야숙숙 / 야야숙숙주주 / 숙숙주주야야 패턴을 자동 배정합니다.">구역별 3교대 자동배정</button>
         <button class="btn btn-outline" id="btnToggleContext" title="이번 달 경계 앞뒤 7일을 함께 보여줘 패턴 연속성을 바로 확인/수정할 수 있게 합니다.">전/후 7일 펼치기</button>
         <button class="btn btn-outline" id="btnToggleCodeDisplay" title="근무표 편집표의 코드 표시를 주/야/숙 방식과 범례 코드(A/B/K 등, ERP 입력용) 방식 사이에서 전환합니다. 실제 저장되는 값은 바뀌지 않습니다.">범례코드로 보기</button>
+        <button class="btn btn-outline" id="btnToggleZoneDivider" title="구역/호수가 바뀌는 지점의 구분 행(📍)을 보이거나 숨깁니다.">구역강조선 미적용</button>
         <span class="spacer"></span>
         <span style="font-size:11.3px;color:var(--text-mute);margin-right:6px;">주황 배경 = 예외(수동 수정)</span>
         <span class="badge" id="rosterFinalizeBadge" style="display:none;background:var(--good-bg);color:var(--good);">확정됨</span>
@@ -981,15 +986,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
 
     <div class="card" id="zonePwManageCard">
-      <h2>구역별 비밀번호 관리</h2>
-      <p class="sub">구역(예: 401호) 단위로 따로 로그인할 수 있는 비밀번호를 관리합니다. 기본 비밀번호는 "구역명+1234+!"(예: 401호1234+!)이며, 지사 로그인 화면에서 지사 선택 후 구역을 골라 로그인합니다. 구역으로 로그인하면 그 구역 직원만 보이고 수정할 수 있습니다. 이 카드는 지사 로그인(구역 로그인 제외)과 관리자만 볼 수 있습니다.</p>
+      <h2>구역·사번별 비밀번호 관리</h2>
+      <p class="sub">구역(예: 401호)이나 사번 단위로 따로 로그인할 수 있는 비밀번호를 관리합니다. 기본 비밀번호는 각각 "구역명+1234+!"·"사번+1234+!"이며, 로그인 화면에서 지사 선택 후 구역(→사번)을 골라 로그인합니다. 구역·사번 어느 쪽으로 로그인해도 그 구역 전체 직원만 보이고 수정할 수 있습니다(사번은 그중에서도 근무표만). 이 카드는 지사 로그인(구역·사번 로그인 제외)과 관리자만 볼 수 있습니다.</p>
       <div class="toolbar no-print" style="margin-bottom:8px;">
         <select id="zonePwBranch"></select>
         <select id="zonePwZone"></select>
         <input type="text" id="zonePwNew" placeholder="새 비밀번호">
-        <button class="btn btn-primary" id="btnZonePwSave">변경</button>
+        <button class="btn btn-primary" id="btnZonePwSave">구역 비밀번호 변경</button>
         <button class="btn btn-outline" id="btnZonePwReset">기본값으로</button>
         <span id="zonePwCurrent" class="sub" style="margin:0;"></span>
+      </div>
+      <div class="toolbar no-print">
+        <select id="empnoPwEmpno"></select>
+        <input type="text" id="empnoPwNew" placeholder="새 비밀번호">
+        <button class="btn btn-primary" id="btnEmpnoPwSave">사번 비밀번호 변경</button>
+        <button class="btn btn-outline" id="btnEmpnoPwReset">기본값으로</button>
+        <span id="empnoPwCurrent" class="sub" style="margin:0;"></span>
       </div>
     </div>
 
@@ -1443,6 +1455,7 @@ let rosterFinalized={}, changeRequests=[]; // rosterFinalized: {branch: {ym:true
 let rosterFinalizedEmp={};  // 개인별 확정: {empId: {ym:true}}
 let rosterFinalizedZone={}; // 구역별 확정: {branch: {zone: {ym:true}}}
 let customHolidays=[]; // 회사 자체 휴일(창립기념일 등) — seedCustomHolidays() 참고
+let branchApprovals={}; // 삼단결재 서명: {branch: {ym: {담당|팀장|지사장: dataURL}}}
 let currentMonth = null; // roster/calendar 뷰 기준 월 (YYYY-MM)
 let licenseExpiry = null; // 사용 기간 제한(YYYY-MM-DD) — null/미설정이면 무제한
 let storageMode = 'none'; // 'artifact' | 'github' | 'none'
@@ -1473,11 +1486,19 @@ function resetZonePasswordOverride(b, z){ const o=getPasswordOverrides(); if(o.z
 function zonesOfBranch(b){
   return [...new Set(employees.filter(e=>e.branch===b && e.zone).map(e=>e.zone))].sort((a,c)=>a.localeCompare(c));
 }
+/* 사번(개인) 단위 로그인 비밀번호 — 구역 비밀번호와 같은 규칙(사번+1234+!). 사번으로
+   로그인하면 그 사람이 아니라 "그 사람이 속한 구역 전체"가 보인다(요청사항) — 그래서
+   effectiveEmpnoPassword는 로그인 성공 여부만 가리고, 화면 범위는 auth.zone이 그대로
+   맡는다(currentAuth().empno 자체는 조회범위 필터링에 쓰이지 않음). */
+function empnoPassword(empno){ return String(empno).replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234+!'; }
+function effectiveEmpnoPassword(b, empno){ const o=getPasswordOverrides(); return (o.empnos && o.empnos[b] && o.empnos[b][empno]) || empnoPassword(empno); }
+function setEmpnoPasswordOverride(b, empno, val){ const o=getPasswordOverrides(); o.empnos=o.empnos||{}; o.empnos[b]=o.empnos[b]||{}; o.empnos[b][empno]=val; savePasswordOverrides(o); }
+function resetEmpnoPasswordOverride(b, empno){ const o=getPasswordOverrides(); if(o.empnos && o.empnos[b]) delete o.empnos[b][empno]; savePasswordOverrides(o); }
 const LOGIN_MAX_FAILS = 5, LOGIN_LOCK_MS = 5*60*1000;
 function getLoginFailState(){ try{ return JSON.parse(safeLocalGet('patrol_login_fails')||'{}'); }catch(e){ return {}; } }
 function saveLoginFailState(s){ safeLocalSet('patrol_login_fails', JSON.stringify(s)); }
 function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
-function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사' + (a.zone ? ` · ${a.zone}` : '')) : ''; }
+function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사' + (a.zone ? ` · ${a.zone}` : '') + (a.empno ? ` · ${a.empno}` : '')) : ''; }
 function applyLoginBranchDefault(){
   const a = currentAuth();
   if(a && !a.isAdmin && a.branch){ const rb = document.getElementById('rosterBranch'); if(rb && [...rb.options].some(o=>o.value===a.branch)) rb.value = a.branch; }
@@ -1542,7 +1563,9 @@ function applyTabRestriction(){
   // 관리자설정 탭 전체가 아니라, 지사가 스스로 관리해도 되는 "직원 구역/호수 관리" 카드만
   // 볼 수 있게 허용한다(비밀번호 관리/지사 관리/백업·복원/초기화 등 다른 카드는 admin-only-card
   // 클래스로 그대로 숨김 — renderZoneAdmin()에서 소속 지사 인원만 보이도록 추가로 잠금).
-  const allowed = new Set(['roster','import','admin']);
+  // 사번 로그인은 그보다 한 단계 더 좁아서 근무표 탭만 볼 수 있다(요청사항: "사번으로
+  // 로그인시 근무표만 보이게").
+  const allowed = a.empno ? new Set(['roster']) : new Set(['roster','import','admin']);
   document.querySelectorAll('nav.tabs button').forEach(btn=>{
     const isAllowed = allowed.has(btn.dataset.tab);
     btn.classList.toggle('login-hidden', !isAllowed);
@@ -1582,6 +1605,20 @@ function refreshLoginZoneOptions(){
   zoneSel.innerHTML = '<option value="">지사 전체(구역 선택 안 함)</option>' + zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('');
   if(cur && [...zoneSel.options].some(o=>o.value===cur)) zoneSel.value = cur; else zoneSel.value = '';
 }
+/* 구역까지 고르면 그 구역 소속 직원의 사번 목록으로 사번 선택칸을 채운다(지사→구역→사번
+   순으로 좁혀지는 3단 로그인). */
+function refreshLoginEmpnoOptions(){
+  const sel = document.getElementById('loginBranch');
+  const zoneSel = document.getElementById('loginZone');
+  const empnoSel = document.getElementById('loginEmpno');
+  if(!sel || !zoneSel || !empnoSel) return;
+  const b = sel.value, z = zoneSel.value;
+  const list = (b && z && typeof employees!=='undefined' && employees)
+    ? employees.filter(e=>e.branch===b && e.zone===z && e.empno).sort((a,c)=>a.empno.localeCompare(c.empno)) : [];
+  const cur = empnoSel.value;
+  empnoSel.innerHTML = '<option value="">구역 전체(사번 선택 안 함)</option>' + list.map(e=>`<option value="${esc(e.empno)}">${esc(e.empno)} · ${esc(e.name)}</option>`).join('');
+  if(cur && [...empnoSel.options].some(o=>o.value===cur)) empnoSel.value = cur; else empnoSel.value = '';
+}
 function initLoginGate(){
   const gate = document.getElementById('loginGate');
   const sel = document.getElementById('loginBranch');
@@ -1590,6 +1627,8 @@ function initLoginGate(){
   const branchField = document.getElementById('loginBranchField');
   const zoneField = document.getElementById('loginZoneField');
   const zoneSel = document.getElementById('loginZone');
+  const empnoField = document.getElementById('loginEmpnoField');
+  const empnoSel = document.getElementById('loginEmpno');
   const newBranchField = document.getElementById('loginNewBranchField');
   const newBranchInput = document.getElementById('loginNewBranchName');
   const pwField = document.getElementById('loginPwField');
@@ -1597,19 +1636,27 @@ function initLoginGate(){
   const errBox = document.getElementById('loginError');
   const copyrightEl = document.getElementById('loginCopyright');
   if(copyrightEl) copyrightEl.textContent = '© 2026 Seeun Appa. All rights reserved.';
+  // 사번 선택칸은 구역을 골랐을 때만 의미가 있으므로(지사→구역→사번 순으로 좁혀짐),
+  // 구역이 비어있으면 숨긴다.
+  function syncEmpnoUI(){
+    refreshLoginEmpnoOptions();
+    empnoField.classList.toggle('login-hidden', !zoneSel.value);
+  }
   function syncNewBranchUI(){
     const isNew = sel.value === '__new__';
     newBranchField.classList.toggle('login-hidden', !isNew);
     pwField.classList.toggle('login-hidden', isNew);
     zoneField.classList.toggle('login-hidden', isNew);
-    if(!isNew) refreshLoginZoneOptions();
+    if(isNew) empnoField.classList.add('login-hidden');
+    else { refreshLoginZoneOptions(); syncEmpnoUI(); }
   }
   sel.addEventListener('change', syncNewBranchUI);
+  zoneSel.addEventListener('change', syncEmpnoUI);
   syncNewBranchUI();
   adminChk.addEventListener('change', ()=>{
     branchField.classList.toggle('login-hidden', adminChk.checked);
     zoneField.classList.toggle('login-hidden', adminChk.checked);
-    if(adminChk.checked){ newBranchField.classList.add('login-hidden'); pwField.classList.remove('login-hidden'); }
+    if(adminChk.checked){ newBranchField.classList.add('login-hidden'); pwField.classList.remove('login-hidden'); empnoField.classList.add('login-hidden'); }
     else syncNewBranchUI();
   });
   const btnTogglePw = document.getElementById('btnTogglePw');
@@ -1664,17 +1711,21 @@ function initLoginGate(){
     if(updateLockUI()) return;
     errBox.style.display = 'none';
     const isAdmin = adminChk.checked;
-    // 구역을 골랐으면 지사 비밀번호가 아니라 그 구역의 비밀번호(기본값: 구역명+1234+!)로 확인.
+    // 지사→구역→사번 순으로 좁혀지는 3단 로그인: 사번을 골랐으면 사번 비밀번호로, 구역만
+    // 골랐으면 구역 비밀번호로, 둘 다 안 골랐으면 지사 비밀번호로 확인한다. 사번으로
+    // 로그인해도 화면 범위는 "그 사번이 속한 구역 전체"이므로 zone은 항상 함께 저장한다.
     const zone = (!isAdmin && zoneSel.value) ? zoneSel.value : null;
+    const empno = (!isAdmin && zone && empnoSel.value) ? empnoSel.value : null;
     const ok = isAdmin ? (pwInput.value === effectiveAdminPassword())
+      : empno ? (pwInput.value === effectiveEmpnoPassword(sel.value, empno))
       : zone ? (pwInput.value === effectiveZonePassword(sel.value, zone))
       : (pwInput.value === effectiveBranchPassword(sel.value));
     if(ok){
       saveLoginFailState({count:0, lockUntil:0});
       if(isAdmin){
-        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null, zone:null}));
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null, zone:null, empno:null}));
       } else {
-        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value, zone}));
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value, zone, empno}));
       }
       gate.classList.add('login-hidden'); updateLoginStatusPill(); refreshSelects(); applyLoginBranchDefault(); applyTabRestriction();
     } else {
@@ -1731,7 +1782,7 @@ async function ghPutFile(cfg, stateObj, sha){
   if(!res.ok) throw new Error('GitHub 저장 실패 (' + res.status + ')');
   return res.json();
 }
-function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests, licenseExpiry, customHolidays}; }
+function packState(){ return {records, extraCols, employees, guides, branches, changeLog, rosterFinalized, rosterFinalizedEmp, rosterFinalizedZone, changeRequests, licenseExpiry, customHolidays, branchApprovals}; }
 function applyState(data){
   records = data.records || seedRecords();
   extraCols = data.extraCols || [];
@@ -1745,6 +1796,7 @@ function applyState(data){
   changeRequests = data.changeRequests || [];
   licenseExpiry = data.licenseExpiry || null;
   customHolidays = data.customHolidays || seedCustomHolidays();
+  branchApprovals = data.branchApprovals || {};
 }
 function renderStorageAdmin(){
   const desc = document.getElementById('storageModeDesc');
@@ -2063,6 +2115,7 @@ function getRosterDateList(){
    미리보기·엑셀·근무시간 합계 등은 항상 getRosterDateList()(해당 월만)를 그대로 씁니다. */
 const ROSTER_CONTEXT_DAYS = 7;
 let rosterContextExpanded = false; // 전/후 문맥일(±7일) 기본은 접힌 상태
+let rosterZoneDividerOn = false; // 근무표 편집표의 구역 구분 행(📍) 표시 여부 — 기본은 미적용(꺼짐)
 function getRosterContextDateList(){
   const mode = document.getElementById('rosterViewMode').value;
   const core = getRosterDateList();
@@ -2106,12 +2159,22 @@ function getRosterStaffFiltered(branch){
 function renderZoneFilterBar(branch){
   const bar = document.getElementById('zoneFilterBar');
   const subregions = BRANCH_SUBREGIONS[branch];
-  if(!subregions){ bar.innerHTML = ''; rosterZoneFilter = 'all'; return; }
-  const opts = [['all','전체'], ['__main__','지사'], ...subregions.map(s=>[s,s])];
-  if(!opts.some(([val])=>val===rosterZoneFilter)) rosterZoneFilter = 'all'; // 지사가 바뀌어 이전 필터값이 더는 유효하지 않으면 초기화
-  bar.innerHTML = opts.map(([val,label])=>
-    `<button type="button" class="btn ${rosterZoneFilter===val?'btn-primary':'btn-outline'}" style="padding:3px 10px;font-size:11.5px;" onclick="setRosterZoneFilter('${val}')">${label}</button>`
-  ).join('');
+  let html = '';
+  if(subregions){
+    const opts = [['all','전체'], ['__main__','지사'], ...subregions.map(s=>[s,s])];
+    if(!opts.some(([val])=>val===rosterZoneFilter)) rosterZoneFilter = 'all'; // 지사가 바뀌어 이전 필터값이 더는 유효하지 않으면 초기화
+    html += opts.map(([val,label])=>
+      `<button type="button" class="btn ${rosterZoneFilter===val?'btn-primary':'btn-outline'}" style="padding:3px 10px;font-size:11.5px;" onclick="setRosterZoneFilter('${val}')">${label}</button>`
+    ).join('');
+  } else {
+    rosterZoneFilter = 'all';
+  }
+  // 구역을 바꿔가며 확인할 때마다 위 툴바까지 스크롤하지 않고 바로 엑셀·PDF로 받을 수
+  // 있게, 지금 선택된 구역 그대로 내려받는 빠른 버튼을 필터 버튼바에도 둔다.
+  html += `<span class="spacer"></span>
+    <button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:11.5px;" onclick="downloadRosterExcel()">📥 엑셀 다운로드</button>
+    <button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:11.5px;" onclick="showRosterPDF()">🖨 PDF 보기</button>`;
+  bar.innerHTML = html;
 }
 function setRosterZoneFilter(val){
   rosterZoneFilter = val;
@@ -2285,6 +2348,13 @@ function renderRoster(){
   const coreSet = new Set(coreDateList);
   const dateList = rosterContextExpanded ? getRosterContextDateList() : coreDateList;
   document.getElementById('btnToggleContext').textContent = rosterContextExpanded ? '전/후 7일 접기' : '전/후 7일 펼치기';
+  {
+    // 구역강조선 토글은 지사·관리자 로그인에서만 의미가 있음(구역/사번 로그인은 애초에
+    // 자기 구역 하나만 보여서 구역 경계가 생기지 않음).
+    const a = currentAuth();
+    const showDivider = !!(a && (a.isAdmin || !a.zone));
+    document.getElementById('btnToggleZoneDivider').classList.toggle('login-hidden', !showDivider);
+  }
   renderZoneFilterBar(branch);
   const staff = getFilteredRosterStaff(branch);
   // 구역선택/개인검색으로 좁혀진 상태인지 — 이 상태에서는 구역 내 순서 조정(▲▼)을 막고
@@ -2321,10 +2391,10 @@ function renderRoster(){
     + '</optgroup>';
   staff.forEach((e,idx)=>{
     const groupLabel = rosterGroupLabel(e);
-    if(groupLabel !== null && groupLabel !== lastGroup){
+    if(rosterZoneDividerOn && groupLabel !== null && groupLabel !== lastGroup){
       b += `<tr class="zone-group-row no-print"><td colspan="${dateList.length+2}">📍 ${esc(groupLabel)}</td></tr>`;
-      lastGroup = groupLabel;
     }
+    if(groupLabel !== lastGroup) lastGroup = groupLabel;
     // 지사 전체 확정 외에, 이 직원 개인 확정 또는 이 직원 구역 확정도 잠금 사유가 됨.
     const empLocked = isEmpRosterLocked(e, branch, ym, isAdmin);
     const empDis = empLocked ? 'disabled' : '';
@@ -2885,6 +2955,11 @@ document.getElementById('btnToggleCodeDisplay').addEventListener('click', ()=>{
   document.getElementById('btnToggleCodeDisplay').textContent = rosterCodeDisplayMode==='letter' ? '주/야/숙으로 보기' : '범례코드로 보기';
   renderRoster();
 });
+document.getElementById('btnToggleZoneDivider').addEventListener('click', ()=>{
+  rosterZoneDividerOn = !rosterZoneDividerOn;
+  document.getElementById('btnToggleZoneDivider').textContent = rosterZoneDividerOn ? '구역강조선 미적용' : '구역강조선 적용';
+  renderRoster();
+});
 function deleteEmp(empId){
   const e = employees.find(e=>e.id===empId); if(!e) return;
   if(!confirm(`${e.name} 직원의 근무표를 삭제할까요?`)) return;
@@ -2954,7 +3029,12 @@ function renderRosterPreview(){
 
       <table class="preview-approval-table">
           <tr><th>담 당</th><th>팀 장</th><th>지사장</th></tr>
-          <tr><td></td><td></td><td></td></tr>
+          <tr>${['담당','팀장','지사장'].map(role=>{
+            const sig = branchApprovals[sel] && branchApprovals[sel][sigYM] && branchApprovals[sel][sigYM][role];
+            return sig
+              ? `<td class="sig-cell"><img class="sig-img" src="${sig}" onclick="openApprovalSignaturePad('${esc(sel)}','${sigYM}','${role}')"></td>`
+              : `<td class="sig-cell"><button class="btn btn-outline sig-btn no-print" onclick="openApprovalSignaturePad('${esc(sel)}','${sigYM}','${role}')">서명하기</button></td>`;
+          }).join('')}</tr>
       </table>
     </div>
 
@@ -3075,13 +3155,15 @@ function searchPreviewName(q){
 }
 
 /* ---------- 근무자 확인 서명 (웹 배포용 전자서명) ---------- */
+let sigTargetKind = 'emp'; // 'emp'(근무자 확인 서명) | 'approval'(삼단결재: 담당/팀장/지사장)
 let sigTargetEmpId = null, sigTargetYM = null, sigDrawing = false, sigHasDrawn = false, sigCtx = null;
+let sigTargetBranch = null, sigTargetRole = null; // sigTargetKind==='approval'일 때만 사용
 function sigPointerPos(evt, canvas){
   const rect = canvas.getBoundingClientRect();
   return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
 }
-function openSignaturePad(empId, ym){
-  sigTargetEmpId = empId; sigTargetYM = ym; sigHasDrawn = false;
+function openSignaturePadCommon(){
+  sigHasDrawn = false;
   const canvas = document.getElementById('sigCanvas');
   document.getElementById('sigModal').classList.remove('login-hidden');
   const dpr = window.devicePixelRatio || 1;
@@ -3091,6 +3173,16 @@ function openSignaturePad(empId, ym){
   sigCtx.scale(dpr, dpr);
   sigCtx.lineWidth = 2.2; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round'; sigCtx.strokeStyle = '#0f172a';
   sigCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+function openSignaturePad(empId, ym){
+  sigTargetKind = 'emp'; sigTargetEmpId = empId; sigTargetYM = ym;
+  openSignaturePadCommon();
+}
+/* 삼단결재(담당/팀장/지사장) 서명 — 특정 직원이 아니라 그 지사·그 달의 결재란 자체에
+   붙는 서명이라 employees가 아니라 branchApprovals에 저장한다. */
+function openApprovalSignaturePad(branch, ym, role){
+  sigTargetKind = 'approval'; sigTargetBranch = branch; sigTargetYM = ym; sigTargetRole = role;
+  openSignaturePadCommon();
 }
 (function initSignaturePad(){
   const canvas = document.getElementById('sigCanvas');
@@ -3118,12 +3210,21 @@ document.getElementById('btnSigCancel').addEventListener('click', ()=>{
 });
 document.getElementById('btnSigSave').addEventListener('click', ()=>{
   if(!sigHasDrawn){ alert('서명을 입력해주세요.'); return; }
-  const e = employees.find(x=>x.id===sigTargetEmpId);
-  if(e){
-    if(!e.signatures) e.signatures = {};
-    e.signatures[sigTargetYM] = document.getElementById('sigCanvas').toDataURL('image/png');
-    logEvent(`${e.name}(${e.empno}) ${sigTargetYM} 근무표 서명`);
+  const dataUrl = document.getElementById('sigCanvas').toDataURL('image/png');
+  if(sigTargetKind==='approval'){
+    branchApprovals[sigTargetBranch] = branchApprovals[sigTargetBranch] || {};
+    branchApprovals[sigTargetBranch][sigTargetYM] = branchApprovals[sigTargetBranch][sigTargetYM] || {};
+    branchApprovals[sigTargetBranch][sigTargetYM][sigTargetRole] = dataUrl;
+    logEvent(`${sigTargetBranch}지사 ${sigTargetYM} ${sigTargetRole} 서명`);
     persist();
+  } else {
+    const e = employees.find(x=>x.id===sigTargetEmpId);
+    if(e){
+      if(!e.signatures) e.signatures = {};
+      e.signatures[sigTargetYM] = dataUrl;
+      logEvent(`${e.name}(${e.empno}) ${sigTargetYM} 근무표 서명`);
+      persist();
+    }
   }
   document.getElementById('sigModal').classList.add('login-hidden');
   refreshRosterPreviewIfOpen();
@@ -3164,12 +3265,13 @@ window.addEventListener('afterprint', resetPreviewFit);
 window.addEventListener('beforeprint', ()=>{
   if(document.getElementById('rosterPreviewContainer').style.display !== 'none') fitPreviewToOnePage();
 });
-document.getElementById('btnRosterPDF').addEventListener('click', ()=>{
+function showRosterPDF(){
   renderRosterPreview();
   document.getElementById('rosterPreviewContainer').style.display='block';
   document.getElementById('btnRosterPreview').textContent='미리보기 닫기';
   setTimeout(()=>{ fitPreviewToOnePage(); window.print(); }, 60);
-});
+}
+document.getElementById('btnRosterPDF').addEventListener('click', showRosterPDF);
 /* PDF/미리보기 상단의 범례표 원본(renderRosterPreview()의 legend-table과 완전히 동일한
    내용) — 근무표 엑셀 출력에서도 그대로 재사용해 PDF와 엑셀이 같은 정보를 담게 한다. */
 const ROSTER_LEGEND_ROWS = [
@@ -3192,6 +3294,22 @@ const ROSTER_ZONE_COLORS = [
   {bg:'FFD6EEDD', fg:'FF276749'},
   {bg:'FFE1E5EC', fg:'FF3F4A5E'},
 ];
+
+/* 모든 ExcelJS 엑셀 다운로드가 공유하는 인쇄 설정 — 근무표 엑셀(btnRosterExcel)에서 먼저
+   확립한 A4 가로, 폭 1페이지 고정(fitToWidth:1)·세로는 필요한 만큼 이어짐(fitToHeight:0,
+   행이 많으면 자동으로 여러 페이지에 걸쳐 세로로 이어짐), 여백 위1.4/아래0.5/좌우0.8cm를
+   그대로 재사용한다. paperSize:9(A4)를 명시해 여는 PC의 기본 용지 설정과 무관하게 항상
+   A4로 고정한다(전에는 fitToWidth만 있고 paperSize가 없어 이론상 다른 용지로 열릴 수 있었음). */
+function applyA4LandscapePrint(ws){
+  ws.pageSetup = {
+    paperSize: 9, // 9 = A4 (OOXML 표준 용지 코드)
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { top: 1.4/2.54, bottom: 0.5/2.54, left: 0.8/2.54, right: 0.8/2.54, header: 0.3/2.54, footer: 0.3/2.54 },
+  };
+}
 
 /* ---------- 근로시간 검증시트 (13주/91일 단위 근태·근로시간 감사용 다운로드) ----------
    사용자가 지정한 시작일부터 91일(13주)간 effectiveCode()로 실제 배정된 근태를 기준으로
@@ -3281,6 +3399,7 @@ async function buildLaborAuditWorkbook(staffList, startDs){
   // ①③ 공통: "N주차" 밴드 + 요일 + 날짜 3단 헤더를 가진 91일 그리드 시트.
   function buildDailyGridSheet(name, title, valueFn){
     const ws = wb.addWorksheet(name);
+    applyA4LandscapePrint(ws);
     const colCount = fixedHeaders.length + AUDIT_DAYS;
     ws.mergeCells(1,1,1,colCount);
     const t = ws.getCell(1,1); t.value = title; t.font = { bold:true, size:13 }; t.alignment = { horizontal:'center', vertical:'middle' };
@@ -3327,6 +3446,7 @@ async function buildLaborAuditWorkbook(staffList, startDs){
   // ② 근무자별 근무수당 시간
   {
     const ws = wb.addWorksheet('2.근무자별 근무수당 시간');
+    applyA4LandscapePrint(ws);
     const colCount = fixedHeaders.length + 1 + AUDIT_WEEKS; // +평균 근로시간
     ws.mergeCells(1,1,1,colCount);
     const t = ws.getCell(1,1);
@@ -3358,6 +3478,7 @@ async function buildLaborAuditWorkbook(staffList, startDs){
   // ④ ERP 업로드 — 직원별 1일 1행(91일 전부 포함)
   {
     const ws = wb.addWorksheet('4.ERP 업로드');
+    applyA4LandscapePrint(ws);
     const headers = ['구분','근태','UPL','사번','성명','근태유형','시작일자','시작시간','종료일자','종료시간','사유','구분','메시지'];
     ws.mergeCells(1,1,1,headers.length);
     const t = ws.getCell(1,1);
@@ -3532,7 +3653,7 @@ initLaborAuditPreview({
   getStaffAndStart: getLaborAuditAllBranchStaff,
 });
 
-document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
+async function downloadRosterExcel(){
   // SheetJS 무료판은 셀 테두리 스타일을 저장하지 못해서(borders/fills가 무시됨),
   // 실제로 테두리가 보이는 파일을 만들기 위해 이 내보내기만 ExcelJS를 씁니다.
   const branch = document.getElementById('rosterBranch').value || branches[0];
@@ -3560,20 +3681,7 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   // 엑셀 기본 눈금선을 끄고(PDF처럼 표선만 깔끔하게 보이도록), 열어보면 바로 페이지 나누기
   // 미리보기로 보이게 한다(인쇄 범위/페이지 경계를 바로 확인할 수 있게).
   ws.views = [{ showGridLines: false, state: 'normal', style: 'pageBreakPreview' }];
-  // 인쇄 설정 — 가로 방향, 가로 폭을 1페이지에 자동으로 맞추고(세로는 필요한 만큼),
-  // 여백은 위 1.4 / 아래 0.5 / 좌우 0.8인치로 지정.
-  ws.pageSetup = {
-    orientation: 'landscape',
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 0,
-    // OOXML/ExcelJS의 여백 값은 항상 "인치" 단위로 저장된다(엑셀 화면에 인치로
-    // 보이든 cm로 보이든, 파일 안에는 무조건 인치로 들어감). 한국어 엑셀은 페이지
-    // 설정 단위가 기본 cm라, 요청하신 1.4/0.5/0.8/0.8을 cm로 보고 인치로 환산해서
-    // 넣어야 실제로 열었을 때 딱 그 cm 값으로 보인다(그냥 1.4를 인치로 넣으면
-    // 화면엔 3.56cm처럼 훨씬 크게 보여서 "적용 안 된 것처럼" 보였음).
-    margins: { top: 1.4/2.54, bottom: 0.5/2.54, left: 0.8/2.54, right: 0.8/2.54, header: 0.3/2.54, footer: 0.3/2.54 },
-  };
+  applyA4LandscapePrint(ws);
 
   const thin = { style:'thin', color:{argb:'FF94A3B8'} };
   const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
@@ -3622,6 +3730,17 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   });
   for(let i=0;i<3;i++) ws.mergeCells(2, apprColStart+i, apprSignEndRow, apprColStart+i);
   borderRange(1, apprColStart, apprSignEndRow, apprColStart+2);
+  // 미리보기(renderRosterPreview)에서 담당/팀장/지사장으로 서명한 게 있으면 그대로 삽입 —
+  // 근무자 확인 서명(sigCol)과 같은 방식으로 결재란 병합 칸(2~5행) 안에 이미지를 넣는다.
+  ['담당','팀장','지사장'].forEach((role,i)=>{
+    const sig = branchApprovals[branch] && branchApprovals[branch][sigYM] && branchApprovals[branch][sigYM][role];
+    if(!sig) return;
+    try{
+      const base64 = sig.split(',')[1] || sig;
+      const imgId = wb.addImage({ base64, extension:'png' });
+      ws.addImage(imgId, { tl:{ col:apprColStart+i-1+0.15, row:1+0.3 }, ext:{ width:70, height:40 } });
+    }catch(err){ /* 서명 이미지가 손상됐어도 표 자체는 계속 만들어야 하므로 조용히 넘어감 */ }
+  });
 
   // ---------- ③ 제목 + 시작일/종료일(가운데, 6열부터 결재란 바로 앞 열까지) ----------
   // 제목/기간 칸은 테두리 없이 텍스트만 둔다(PDF의 제목 박스는 표 형태가 아니라 글자만
@@ -3768,7 +3887,8 @@ document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   a.href = url; a.download = `${branch}${zoneSuffix}_근무표_${titleRange.replace(/[~\s]/g,'_')}.xlsx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
-});
+}
+document.getElementById('btnRosterExcel').addEventListener('click', downloadRosterExcel);
 document.getElementById('btnErpSummaryExcel').addEventListener('click', async ()=>{
   // renderErpSummary()와 완전히 같은 데이터를 그대로 엑셀로 내보내, 화면에서 보는 표와
   // 파일 안 내용이 항상 일치하도록 한다.
@@ -3781,6 +3901,7 @@ document.getElementById('btnErpSummaryExcel').addEventListener('click', async ()
   const wb = new ExcelJS.Workbook();
   const sheetName = (`${branch}_${ym}_근태집계`).replace(/[\\/*?:[\]]/g,'_').slice(0,31);
   const ws = wb.addWorksheet(sheetName);
+  applyA4LandscapePrint(ws);
   const colCount = 2 + ERP_SUMMARY_CODES.length + 1;
 
   ws.mergeCells(1,1,1,colCount);
@@ -3830,6 +3951,7 @@ document.getElementById('btnErpSummaryExcel').addEventListener('click', async ()
   // 두 번째 시트: 일자별 상세(범례 코드) — renderErpDaily()와 같은 데이터를 그대로 내보냄.
   const dailySheetName = (`${branch}_${ym}_일자별상세`).replace(/[\\/*?:[\]]/g,'_').slice(0,31);
   const wsDaily = wb.addWorksheet(dailySheetName);
+  applyA4LandscapePrint(wsDaily);
   const dailyColCount = 2 + coreDateList.length;
   wsDaily.mergeCells(1,1,1,dailyColCount);
   const dailyTitleCell = wsDaily.getCell(1,1);
@@ -4495,9 +4617,22 @@ function renderZonePwAdmin(){
   if(curZone && zones.includes(curZone)) zoneSel.value = curZone;
   const z = zoneSel.value;
   document.getElementById('zonePwCurrent').textContent = (b && z) ? `현재: ${effectiveZonePassword(b, z)}` : '';
+
+  // 사번별 비밀번호 — 구역과 무관하게 그 지사 전체 직원 중에서 고른다(구역 비밀번호와
+  // 달리 사번은 그 자체로 이미 특정 인원을 가리키므로 구역으로 한 번 더 좁힐 필요가 없음).
+  const empnoSel = document.getElementById('empnoPwEmpno');
+  const empList = employees.filter(e=>e.branch===b && e.empno).sort((a,c)=>a.empno.localeCompare(c.empno));
+  const curEmpno = empnoSel.value;
+  empnoSel.innerHTML = empList.length
+    ? empList.map(e=>`<option value="${esc(e.empno)}">${esc(e.empno)} · ${esc(e.name)}</option>`).join('')
+    : '<option value="">(등록된 사번 없음)</option>';
+  if(curEmpno && empList.some(e=>e.empno===curEmpno)) empnoSel.value = curEmpno;
+  const empno = empnoSel.value;
+  document.getElementById('empnoPwCurrent').textContent = (b && empno) ? `현재: ${effectiveEmpnoPassword(b, empno)}` : '';
 }
 document.getElementById('zonePwBranch').addEventListener('change', renderZonePwAdmin);
 document.getElementById('zonePwZone').addEventListener('change', renderZonePwAdmin);
+document.getElementById('empnoPwEmpno').addEventListener('change', renderZonePwAdmin);
 document.getElementById('btnZonePwSave').addEventListener('click', ()=>{
   const b = document.getElementById('zonePwBranch').value;
   const z = document.getElementById('zonePwZone').value;
@@ -4516,6 +4651,26 @@ document.getElementById('btnZonePwReset').addEventListener('click', ()=>{
   if(!b || !z) return;
   resetZonePasswordOverride(b, z);
   logEvent(`${b}지사 ${z} 구역 비밀번호 기본값으로 초기화`);
+  renderZonePwAdmin();
+});
+document.getElementById('btnEmpnoPwSave').addEventListener('click', ()=>{
+  const b = document.getElementById('zonePwBranch').value;
+  const empno = document.getElementById('empnoPwEmpno').value;
+  const val = document.getElementById('empnoPwNew').value.trim();
+  if(!b || !empno){ alert('지사와 사번을 선택하세요.'); return; }
+  if(!val){ alert('새 비밀번호를 입력하세요.'); return; }
+  setEmpnoPasswordOverride(b, empno, val);
+  logEvent(`${b}지사 사번 ${empno} 비밀번호 변경`);
+  document.getElementById('empnoPwNew').value = '';
+  renderZonePwAdmin();
+  alert(`사번 ${empno} 비밀번호가 변경되었습니다.`);
+});
+document.getElementById('btnEmpnoPwReset').addEventListener('click', ()=>{
+  const b = document.getElementById('zonePwBranch').value;
+  const empno = document.getElementById('empnoPwEmpno').value;
+  if(!b || !empno) return;
+  resetEmpnoPasswordOverride(b, empno);
+  logEvent(`${b}지사 사번 ${empno} 비밀번호 기본값으로 초기화`);
   renderZonePwAdmin();
 });
 function renderLicenseAdmin(){
@@ -5088,6 +5243,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   refreshSelects();
   refreshLoginBranchOptions(); // loadState() 완료 후 실제 지사 목록(관리자가 나중에 추가한 지사 포함)으로 로그인 화면 갱신
   refreshLoginZoneOptions(); // 위와 같은 이유로 구역 선택칸도 실제 employees 데이터 기준으로 갱신
+  refreshLoginEmpnoOptions(); // 사번 선택칸도 동일한 이유로 갱신
   document.getElementById('refDate').value = currentMonth + '-24';
   renderTableHead();
   renderTableBody();
