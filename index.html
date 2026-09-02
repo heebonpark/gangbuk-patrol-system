@@ -563,6 +563,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <button class="btn btn-danger" id="btnRosterRequest" style="display:none;">수정 요청</button>
         <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
+        <input type="date" id="laborAuditStartDate" title="근로시간 검증시트의 13주(91일) 시작일" style="width:140px;">
+        <button class="btn btn-outline" id="btnLaborAuditExcel" title="선택된 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
       </div>
       <div class="no-print" id="zoneFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>
@@ -800,6 +802,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="toolbar no-print" style="margin-bottom:14px;">
         <label style="font-size:11.5px;color:var(--text-mute);">기준월</label>
         <select id="dashOvertimeMonth"></select>
+        <label style="font-size:11.5px;color:var(--text-mute);margin-left:10px;">검증 시작일</label>
+        <input type="date" id="dashLaborAuditStartDate" title="근로시간 검증시트의 13주(91일) 시작일" style="width:140px;">
+        <button class="btn btn-outline" id="btnDashLaborAuditExcel" title="전체 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트(전체 지사)</button>
       </div>
       <div class="table-scroll">
         <table class="grid" id="dashOvertimeTable"><thead></thead><tbody></tbody></table>
@@ -3045,6 +3050,198 @@ const ROSTER_ZONE_COLORS = [
   {bg:'FFD6EEDD', fg:'FF276749'},
   {bg:'FFE1E5EC', fg:'FF3F4A5E'},
 ];
+
+/* ---------- 근로시간 검증시트 (13주/91일 단위 근태·근로시간 감사용 다운로드) ----------
+   사용자가 지정한 시작일부터 91일(13주)간 effectiveCode()로 실제 배정된 근태를 기준으로
+   4개 시트를 한 파일에 담는다.
+   ① 근무자별 근무실적표 — 날짜별 근태 코드(범례 문자) 원본
+   ② 근무자별 근무수당 시간 — 주차별/평균 근로시간, 주64h·분기평균52h 초과 시 색상 표시
+      (근무표 탭의 WEEKLY_HOUR_LIMIT/QUARTER_AVG_LIMIT 판정 기준과 동일)
+   ③ 근무자별 근무시간 — ①과 같은 날짜 그리드를 코드 대신 codeHours() 환산 시간(숫자)로 표시
+   ④ ERP 업로드 — 직원별 1일 1행(사번/성명/근태유형/시작·종료 일시)의 ERP 근태 업로드 양식.
+      시작/종료 시각은 주/야/전일/교육처럼 실제 근무시간이 정해진 코드만 채우고(휴가성
+      코드는 시간 개념이 없으므로 비움), 여러 날짜에 걸치는 야간/전일 근무는 종료일자를
+      다음날로 자동 계산한다. */
+const AUDIT_WEEKS = 13;
+const AUDIT_DAYS = AUDIT_WEEKS * 7; // 91
+const AUDIT_TIME_MAP = {
+  '주': { start:'09:00', end:'18:00', crossesDay:false },
+  '야': { start:'18:00', end:'09:00', crossesDay:true },
+  '전일': { start:'09:00', end:'09:00', crossesDay:true },
+  '교육': { start:'09:00', end:'18:00', crossesDay:false },
+};
+function auditCodeLabel(code){
+  if(!code) return '';
+  const base = baseCodeOf(code);
+  const info = CODE_LEGEND[base];
+  return (info && info.letter) ? info.letter : base;
+}
+async function buildLaborAuditWorkbook(staffList, startDs){
+  const dateList = []; for(let i=0;i<AUDIT_DAYS;i++) dateList.push(addDaysStr(startDs,i));
+  const endDs = dateList[dateList.length-1];
+  const dowNames = ['일','월','화','수','목','금','토'];
+  const thin = { style:'thin', color:{argb:'FF94A3B8'} };
+  const grayFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF1F5F9'} };
+  const warnFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFD6EEDD'} };
+  const overFont = { bold:true, color:{argb:'FFC0392B'} };
+  const fixedHeaders = ['순번','지사','근무자명','사번'];
+  const wb = new ExcelJS.Workbook();
+
+  function borderAll(ws, r1,c1,r2,c2){
+    for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) ws.getCell(r,c).border = { top:thin, left:thin, bottom:thin, right:thin };
+  }
+
+  // ①③ 공통: "N주차" 밴드 + 요일 + 날짜 3단 헤더를 가진 91일 그리드 시트.
+  function buildDailyGridSheet(name, title, valueFn){
+    const ws = wb.addWorksheet(name);
+    const colCount = fixedHeaders.length + AUDIT_DAYS;
+    ws.mergeCells(1,1,1,colCount);
+    const t = ws.getCell(1,1); t.value = title; t.font = { bold:true, size:13 }; t.alignment = { horizontal:'center', vertical:'middle' };
+    ws.getRow(1).height = 22;
+
+    const bandRow = 2, dowRow = 3, dateRow = 4;
+    // 병합 전에 값부터 채워야 한다 — 이미 병합된 셀에 나중에 값을 대입하면 병합이
+    // 풀리는 ExcelJS 저장 버그가 있어(근무표 엑셀 구역호수 병합에서 실제로 겪은 문제),
+    // 항상 "값 먼저, 병합은 그 다음" 순서를 지킨다.
+    fixedHeaders.forEach((label,i)=>{ ws.getCell(bandRow, i+1).value = label; ws.mergeCells(bandRow, i+1, dateRow, i+1); });
+    for(let w=0; w<AUDIT_WEEKS; w++){
+      const c1 = fixedHeaders.length + w*7 + 1, c2 = c1 + 6;
+      ws.getCell(bandRow, c1).value = `${w+1}주차`;
+      ws.mergeCells(bandRow, c1, bandRow, c2);
+      for(let d=0; d<7; d++){
+        const ds = dateList[w*7+d];
+        ws.getCell(dowRow, c1+d).value = dowNames[new Date(ds+'T00:00:00').getDay()];
+        ws.getCell(dateRow, c1+d).value = shortLabel(ds);
+      }
+    }
+    [bandRow,dowRow,dateRow].forEach(r=> ws.getRow(r).eachCell(cell=>{
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      cell.font = { bold:true };
+      cell.fill = grayFill;
+    }));
+
+    staffList.forEach((e,i)=>{
+      const r = dateRow + 1 + i;
+      ws.getRow(r).values = [i+1, e.branch, e.name, e.empno, ...dateList.map(ds=>valueFn(e,ds))];
+    });
+    const lastRow = dateRow + staffList.length;
+    borderAll(ws, bandRow, 1, lastRow, colCount);
+    for(let r=dateRow+1; r<=lastRow; r++) ws.getRow(r).eachCell(cell=>{ cell.alignment = { horizontal:'center', vertical:'middle' }; });
+    const widths = fixedHeaders.map((_,i)=> i===2 ? 12 : 8);
+    dateList.forEach(()=> widths.push(5));
+    ws.columns = widths.map(w=>({width:w})); // 주의: 정확히 9는 저장 시 사라지는 ExcelJS 버그가 있어 사용하지 않음
+    ws.views = [{ state:'frozen', xSplit:4, ySplit:4 }];
+    return ws;
+  }
+
+  buildDailyGridSheet('1.근무자별 근무실적표', `근무자별 근무실적표 (${startDs} ~ ${endDs}, 13주)`,
+    (e,ds)=> auditCodeLabel(effectiveCode(e,ds)) || '·');
+
+  // ② 근무자별 근무수당 시간
+  {
+    const ws = wb.addWorksheet('2.근무자별 근무수당 시간');
+    const colCount = fixedHeaders.length + 1 + AUDIT_WEEKS; // +평균 근로시간
+    ws.mergeCells(1,1,1,colCount);
+    const t = ws.getCell(1,1);
+    t.value = `근무자별 근무수당 시간 (${startDs} ~ ${endDs}, 13주 · 주 ${WEEKLY_HOUR_LIMIT}h 초과는 빨간 글씨, 분기평균 ${QUARTER_AVG_LIMIT}h 초과 주는 색상 표시)`;
+    t.font = { bold:true, size:13 }; t.alignment = { horizontal:'center', vertical:'middle' };
+    ws.getRow(1).height = 22;
+    ws.getRow(2).values = [...fixedHeaders, '평균 근로시간', ...Array.from({length:AUDIT_WEEKS},(_,w)=>`${w+1}주차`)];
+    ws.getRow(2).eachCell(cell=>{ cell.font = {bold:true}; cell.fill = grayFill; cell.alignment = {horizontal:'center',vertical:'middle'}; });
+
+    staffList.forEach((e,i)=>{
+      const weekHours = [];
+      for(let w=0; w<AUDIT_WEEKS; w++){
+        let sum = 0;
+        for(let d=0; d<7; d++) sum += codeHours(effectiveCode(e, dateList[w*7+d]));
+        weekHours.push(sum);
+      }
+      const avg = weekHours.reduce((a,b)=>a+b,0) / AUDIT_WEEKS;
+      const r = 3 + i;
+      ws.getRow(r).values = [i+1, e.branch, e.name, e.empno, Number(avg.toFixed(2)), ...weekHours];
+      weekHours.forEach((h,w)=>{
+        const cell = ws.getCell(r, fixedHeaders.length + 2 + w);
+        if(h > WEEKLY_HOUR_LIMIT){ cell.fill = warnFill; cell.font = overFont; }
+        else if(h > QUARTER_AVG_LIMIT){ cell.fill = warnFill; }
+      });
+    });
+    const lastRow = 2 + staffList.length;
+    borderAll(ws, 2, 1, lastRow, colCount);
+    for(let r=3;r<=lastRow;r++) ws.getRow(r).eachCell(cell=>{ cell.alignment = {horizontal:'center',vertical:'middle'}; });
+    ws.columns = [8,10,12,10,12, ...Array(AUDIT_WEEKS).fill(9.5)].map(w=>({width:w}));
+  }
+
+  buildDailyGridSheet('3.근무자별 근무시간', `근무자별 근무시간 (${startDs} ~ ${endDs}, 13주 · 코드별 시간 환산)`,
+    (e,ds)=> codeHours(effectiveCode(e,ds)));
+
+  // ④ ERP 업로드 — 직원별 1일 1행(91일 전부 포함)
+  {
+    const ws = wb.addWorksheet('4.ERP 업로드');
+    const headers = ['구분','근태','UPL','사번','성명','근태유형','시작일자','시작시간','종료일자','종료시간','사유','구분','메시지'];
+    ws.mergeCells(1,1,1,headers.length);
+    const t = ws.getCell(1,1);
+    t.value = `교대근무자 일근태 Up-load 양식 (${startDs} ~ ${endDs})`;
+    t.font = { bold:true, size:13 }; t.alignment = { horizontal:'center', vertical:'middle' };
+    ws.getRow(1).height = 22;
+    ws.getRow(2).values = headers;
+    ws.getRow(2).eachCell(cell=>{ cell.font = {bold:true}; cell.fill = grayFill; cell.alignment = {horizontal:'center',vertical:'middle'}; });
+
+    let r = 3;
+    staffList.forEach((e,i)=>{
+      dateList.forEach(ds=>{
+        const code = effectiveCode(e, ds);
+        const base = baseCodeOf(code);
+        const info = CODE_LEGEND[base];
+        const time = AUDIT_TIME_MAP[base];
+        const endDate = time ? (time.crossesDay ? addDaysStr(ds,1) : ds) : '';
+        ws.getRow(r).values = [
+          i+1, auditCodeLabel(code), '', e.empno, e.name,
+          info ? info.label : (base || ''),
+          ds, time ? time.start : '',
+          endDate, time ? time.end : '',
+          '', '실적', '',
+        ];
+        r++;
+      });
+    });
+    const lastRow = r - 1;
+    borderAll(ws, 2, 1, lastRow, headers.length);
+    for(let rr=3; rr<=lastRow; rr++) ws.getRow(rr).eachCell(cell=>{ cell.alignment = {horizontal:'center',vertical:'middle'}; });
+    ws.columns = [7,7,7,9.5,10,10,11,9.5,11,9.5,12,7,14].map(w=>({width:w}));
+  }
+
+  return wb;
+}
+async function downloadLaborAuditWorkbook(staffList, startDs, filenamePrefix){
+  if(staffList.length===0){ alert('내보낼 직원이 없습니다.'); return; }
+  const wb = await buildLaborAuditWorkbook(staffList, startDs);
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${filenamePrefix}_근로시간검증시트_${startDs}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+document.getElementById('btnLaborAuditExcel').addEventListener('click', async ()=>{
+  const branch = document.getElementById('rosterBranch').value || branches[0];
+  const startDs = document.getElementById('laborAuditStartDate').value || getWeekMonday(todayStr());
+  document.getElementById('laborAuditStartDate').value = startDs;
+  const staff = sortRosterStaff(getRosterStaffFiltered(branch));
+  await downloadLaborAuditWorkbook(staff, startDs, branch);
+});
+document.getElementById('btnDashLaborAuditExcel').addEventListener('click', async ()=>{
+  const startDs = document.getElementById('dashLaborAuditStartDate').value || getWeekMonday(todayStr());
+  document.getElementById('dashLaborAuditStartDate').value = startDs;
+  // 대시보드는 근무표 탭의 구역 필터(rosterZoneFilter) 상태와 무관하게 전체 지사·
+  // 전체 직원을 그대로 담아야 하므로, 그 필터를 반영하는 getRosterStaffFiltered 대신
+  // employees를 지사별로 직접 필터링해서 쓴다.
+  const staff = branches.flatMap(b=> sortRosterStaff(employees.filter(e=>e.branch===b)));
+  await downloadLaborAuditWorkbook(staff, startDs, '전체지사');
+});
+document.getElementById('laborAuditStartDate').value = getWeekMonday(todayStr());
+document.getElementById('dashLaborAuditStartDate').value = getWeekMonday(todayStr());
+
 document.getElementById('btnRosterExcel').addEventListener('click', async ()=>{
   // SheetJS 무료판은 셀 테두리 스타일을 저장하지 못해서(borders/fills가 무시됨),
   // 실제로 테두리가 보이는 파일을 만들기 위해 이 내보내기만 ExcelJS를 씁니다.
