@@ -431,6 +431,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <label>지사</label>
       <select id="loginBranch"></select>
     </div>
+    <div class="login-field" id="loginZoneField">
+      <label>구역(선택)</label>
+      <select id="loginZone"><option value="">지사 전체(구역 선택 안 함)</option></select>
+    </div>
     <div class="login-field login-hidden" id="loginNewBranchField">
       <label>새 지사명</label>
       <input type="text" id="loginNewBranchName" placeholder="예: 부천" autocomplete="off">
@@ -976,6 +980,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
+    <div class="card" id="zonePwManageCard">
+      <h2>구역별 비밀번호 관리</h2>
+      <p class="sub">구역(예: 401호) 단위로 따로 로그인할 수 있는 비밀번호를 관리합니다. 기본 비밀번호는 "구역명+1234+!"(예: 401호1234+!)이며, 지사 로그인 화면에서 지사 선택 후 구역을 골라 로그인합니다. 구역으로 로그인하면 그 구역 직원만 보이고 수정할 수 있습니다. 이 카드는 지사 로그인(구역 로그인 제외)과 관리자만 볼 수 있습니다.</p>
+      <div class="toolbar no-print" style="margin-bottom:8px;">
+        <select id="zonePwBranch"></select>
+        <select id="zonePwZone"></select>
+        <input type="text" id="zonePwNew" placeholder="새 비밀번호">
+        <button class="btn btn-primary" id="btnZonePwSave">변경</button>
+        <button class="btn btn-outline" id="btnZonePwReset">기본값으로</button>
+        <span id="zonePwCurrent" class="sub" style="margin:0;"></span>
+      </div>
+    </div>
+
     <div class="card admin-only-card">
       <h2>변경 이력 로그</h2>
       <p class="sub">지도사/지사 변경, 인계, 월 롤오버 등 관리자 이벤트가 자동 기록됩니다.</p>
@@ -1444,11 +1461,23 @@ function getPasswordOverrides(){ try{ return JSON.parse(safeLocalGet('patrol_pw_
 function savePasswordOverrides(o){ safeLocalSet('patrol_pw_overrides', JSON.stringify(o)); }
 function effectiveAdminPassword(){ const o=getPasswordOverrides(); return o.admin || ADMIN_PASSWORD; }
 function effectiveBranchPassword(b){ const o=getPasswordOverrides(); return (o.branches && o.branches[b]) || branchPassword(b); }
+/* 구역(예: 401호) 단위 로그인 비밀번호 — 지사 비밀번호와 같은 규칙(구역명+1234+!)이고,
+   지사별로 구역명이 겹칠 수 있어(예: 여러 지사에 401호가 있을 수 있음) 재정의(override)는
+   지사+구역 조합으로 따로 저장한다. */
+function zonePassword(z){ return z.replace(/[^가-힣a-zA-Z0-9]/g,'') + '1234+!'; }
+function effectiveZonePassword(b, z){ const o=getPasswordOverrides(); return (o.zones && o.zones[b] && o.zones[b][z]) || zonePassword(z); }
+function setZonePasswordOverride(b, z, val){ const o=getPasswordOverrides(); o.zones=o.zones||{}; o.zones[b]=o.zones[b]||{}; o.zones[b][z]=val; savePasswordOverrides(o); }
+function resetZonePasswordOverride(b, z){ const o=getPasswordOverrides(); if(o.zones && o.zones[b]) delete o.zones[b][z]; savePasswordOverrides(o); }
+/* 지사 안의 구역/호수 목록(로그인 화면의 구역 선택칸, 구역별 비밀번호 관리 모두에서 재사용) —
+   빈 값은 제외하고, 등록된 순서가 아니라 보기 좋게 가나다순으로 정렬한다. */
+function zonesOfBranch(b){
+  return [...new Set(employees.filter(e=>e.branch===b && e.zone).map(e=>e.zone))].sort((a,c)=>a.localeCompare(c));
+}
 const LOGIN_MAX_FAILS = 5, LOGIN_LOCK_MS = 5*60*1000;
 function getLoginFailState(){ try{ return JSON.parse(safeLocalGet('patrol_login_fails')||'{}'); }catch(e){ return {}; } }
 function saveLoginFailState(s){ safeLocalSet('patrol_login_fails', JSON.stringify(s)); }
 function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
-function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사') : ''; }
+function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사' + (a.zone ? ` · ${a.zone}` : '')) : ''; }
 function applyLoginBranchDefault(){
   const a = currentAuth();
   if(a && !a.isAdmin && a.branch){ const rb = document.getElementById('rosterBranch'); if(rb && [...rb.options].some(o=>o.value===a.branch)) rb.value = a.branch; }
@@ -1538,12 +1567,29 @@ function refreshLoginBranchOptions(){
   sel.innerHTML = list.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('') + '<option value="__new__">+ 새 지사 등록</option>';
   if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
 }
+/* 지사를 고르면 그 지사에 등록된 구역/호수 목록으로 구역 선택칸을 채운다. 구역이 하나도
+   없는 지사를 고르면 "지사 전체" 옵션만 남아 자연스럽게 지사 로그인만 가능해진다.
+   initLoginGate()는 loadState()가 끝나기 전(employees가 아직 비어있을 때) 실행되므로,
+   이 함수를 전역으로 빼서 loadState() 완료 후 refreshLoginBranchOptions()와 함께 다시
+   불러 실제 구역 목록으로 갱신할 수 있게 한다. */
+function refreshLoginZoneOptions(){
+  const sel = document.getElementById('loginBranch');
+  const zoneSel = document.getElementById('loginZone');
+  if(!sel || !zoneSel) return;
+  const b = sel.value;
+  const zones = (b && b!=='__new__' && typeof employees!=='undefined' && employees) ? zonesOfBranch(b) : [];
+  const cur = zoneSel.value;
+  zoneSel.innerHTML = '<option value="">지사 전체(구역 선택 안 함)</option>' + zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('');
+  if(cur && [...zoneSel.options].some(o=>o.value===cur)) zoneSel.value = cur; else zoneSel.value = '';
+}
 function initLoginGate(){
   const gate = document.getElementById('loginGate');
   const sel = document.getElementById('loginBranch');
   refreshLoginBranchOptions();
   const adminChk = document.getElementById('loginAsAdmin');
   const branchField = document.getElementById('loginBranchField');
+  const zoneField = document.getElementById('loginZoneField');
+  const zoneSel = document.getElementById('loginZone');
   const newBranchField = document.getElementById('loginNewBranchField');
   const newBranchInput = document.getElementById('loginNewBranchName');
   const pwField = document.getElementById('loginPwField');
@@ -1555,11 +1601,14 @@ function initLoginGate(){
     const isNew = sel.value === '__new__';
     newBranchField.classList.toggle('login-hidden', !isNew);
     pwField.classList.toggle('login-hidden', isNew);
+    zoneField.classList.toggle('login-hidden', isNew);
+    if(!isNew) refreshLoginZoneOptions();
   }
   sel.addEventListener('change', syncNewBranchUI);
   syncNewBranchUI();
   adminChk.addEventListener('change', ()=>{
     branchField.classList.toggle('login-hidden', adminChk.checked);
+    zoneField.classList.toggle('login-hidden', adminChk.checked);
     if(adminChk.checked){ newBranchField.classList.add('login-hidden'); pwField.classList.remove('login-hidden'); }
     else syncNewBranchUI();
   });
@@ -1615,13 +1664,17 @@ function initLoginGate(){
     if(updateLockUI()) return;
     errBox.style.display = 'none';
     const isAdmin = adminChk.checked;
-    const ok = isAdmin ? (pwInput.value === effectiveAdminPassword()) : (pwInput.value === effectiveBranchPassword(sel.value));
+    // 구역을 골랐으면 지사 비밀번호가 아니라 그 구역의 비밀번호(기본값: 구역명+1234+!)로 확인.
+    const zone = (!isAdmin && zoneSel.value) ? zoneSel.value : null;
+    const ok = isAdmin ? (pwInput.value === effectiveAdminPassword())
+      : zone ? (pwInput.value === effectiveZonePassword(sel.value, zone))
+      : (pwInput.value === effectiveBranchPassword(sel.value));
     if(ok){
       saveLoginFailState({count:0, lockUntil:0});
       if(isAdmin){
-        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null}));
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:true, branch:null, zone:null}));
       } else {
-        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value}));
+        sessionStorage.setItem('patrol_auth', JSON.stringify({isAdmin:false, branch:sel.value, zone}));
       }
       gate.classList.add('login-hidden'); updateLoginStatusPill(); refreshSelects(); applyLoginBranchDefault(); applyTabRestriction();
     } else {
@@ -2038,6 +2091,11 @@ function zoneSubregionOf(zone, subregions){
 }
 function getRosterStaffFiltered(branch){
   let staff = employees.filter(e=>e.branch===branch);
+  // 구역 로그인(예: 401호)이면 그 구역 직원만 보이게 한다 — 이 함수가 근무표 편집표·
+  // 미리보기·엑셀 출력·근로시간 검증시트 등 거의 모든 화면이 거쳐가는 단일 진입점이라,
+  // 여기 한 곳만 고치면 전부 자동으로 구역 단위로 좁혀진다.
+  const auth = currentAuth();
+  if(auth && !auth.isAdmin && auth.zone) staff = staff.filter(e=> e.zone===auth.zone);
   const subregions = BRANCH_SUBREGIONS[branch];
   if(subregions && rosterZoneFilter !== 'all'){
     if(rosterZoneFilter === '__main__') staff = staff.filter(e=> !zoneSubregionOf(e.zone, subregions));
@@ -4407,6 +4465,59 @@ document.getElementById('btnPwAdminReset').addEventListener('click', ()=>{
   logEvent('관리자 비밀번호 기본값으로 초기화');
   renderPasswordAdmin();
 });
+/* 구역별 비밀번호 관리 — 지사 로그인(구역 로그인 본인은 제외)과 관리자만 볼 수 있다.
+   구역 로그인 스스로 자기 구역 비밀번호를 바꿀 수 있게 하면, 나중에 지사 담당자가
+   그 비밀번호를 몰라 구역을 다시 잠그지 못하는 상황이 생길 수 있어 막아둔다. */
+function renderZonePwAdmin(){
+  const card = document.getElementById('zonePwManageCard');
+  if(!card) return;
+  const auth = currentAuth();
+  const isAdmin = !!(auth && auth.isAdmin);
+  const hidden = !isAdmin && !!(auth && auth.zone);
+  card.classList.toggle('login-hidden', hidden);
+  if(hidden || !auth) return;
+  const branchSel = document.getElementById('zonePwBranch');
+  const zoneSel = document.getElementById('zonePwZone');
+  const curBranch = branchSel.value;
+  if(isAdmin){
+    branchSel.innerHTML = branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    if(curBranch && branches.includes(curBranch)) branchSel.value = curBranch;
+    branchSel.disabled = false;
+  } else {
+    branchSel.innerHTML = `<option value="${esc(auth.branch)}">${esc(auth.branch)}</option>`;
+    branchSel.value = auth.branch;
+    branchSel.disabled = true;
+  }
+  const b = branchSel.value || (isAdmin ? branches[0] : auth.branch);
+  const zones = b ? zonesOfBranch(b) : [];
+  const curZone = zoneSel.value;
+  zoneSel.innerHTML = zones.length ? zones.map(z=>`<option value="${esc(z)}">${esc(z)}</option>`).join('') : '<option value="">(등록된 구역 없음)</option>';
+  if(curZone && zones.includes(curZone)) zoneSel.value = curZone;
+  const z = zoneSel.value;
+  document.getElementById('zonePwCurrent').textContent = (b && z) ? `현재: ${effectiveZonePassword(b, z)}` : '';
+}
+document.getElementById('zonePwBranch').addEventListener('change', renderZonePwAdmin);
+document.getElementById('zonePwZone').addEventListener('change', renderZonePwAdmin);
+document.getElementById('btnZonePwSave').addEventListener('click', ()=>{
+  const b = document.getElementById('zonePwBranch').value;
+  const z = document.getElementById('zonePwZone').value;
+  const val = document.getElementById('zonePwNew').value.trim();
+  if(!b || !z){ alert('지사와 구역을 선택하세요.'); return; }
+  if(!val){ alert('새 비밀번호를 입력하세요.'); return; }
+  setZonePasswordOverride(b, z, val);
+  logEvent(`${b}지사 ${z} 구역 비밀번호 변경`);
+  document.getElementById('zonePwNew').value = '';
+  renderZonePwAdmin();
+  alert(`${b}지사 ${z} 구역 비밀번호가 변경되었습니다.`);
+});
+document.getElementById('btnZonePwReset').addEventListener('click', ()=>{
+  const b = document.getElementById('zonePwBranch').value;
+  const z = document.getElementById('zonePwZone').value;
+  if(!b || !z) return;
+  resetZonePasswordOverride(b, z);
+  logEvent(`${b}지사 ${z} 구역 비밀번호 기본값으로 초기화`);
+  renderZonePwAdmin();
+});
 function renderLicenseAdmin(){
   const label = document.getElementById('licenseStatusLabel');
   const input = document.getElementById('licenseExpiryInput');
@@ -4475,8 +4586,9 @@ function renderZoneAdmin(){
     sel.disabled = true;
   }
   const filterBranch = sel.value || 'all';
-  const list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch)
-    .slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
+  let list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch);
+  if(!isAdmin && auth.zone) list = list.filter(e=> e.zone===auth.zone); // 구역 로그인은 자기 구역만
+  list = list.slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
   const thead = document.querySelector('#zoneAdminTable thead');
   thead.innerHTML = '<tr><th>지사</th><th>사번</th><th style="text-align:left;">성명</th><th>직급</th><th>구역/호수</th><th>연락처</th></tr>';
   const tbody = document.querySelector('#zoneAdminTable tbody');
@@ -4492,8 +4604,11 @@ document.getElementById('zoneAdminBranch').addEventListener('change', renderZone
    지사 로그인은 항상 자기 지사만 포함됨(zoneAdminBranch가 잠겨 있으므로). */
 document.getElementById('btnZoneAdminExcel').addEventListener('click', ()=>{
   const filterBranch = document.getElementById('zoneAdminBranch').value || 'all';
-  const list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch)
-    .slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
+  const auth = currentAuth();
+  const isAdmin = !!(auth && auth.isAdmin);
+  let list = employees.filter(e=> filterBranch==='all' || e.branch===filterBranch);
+  if(!isAdmin && auth && auth.zone) list = list.filter(e=> e.zone===auth.zone);
+  list = list.slice().sort((a,b)=> a.branch.localeCompare(b.branch) || (a.zone||'').localeCompare(b.zone||'') || a.name.localeCompare(b.name));
   const rows = [['지사','사번','성명','직급','구역/호수','연락처'], ...list.map(e=>[e.branch, e.empno, e.name, e.rank, e.zone||'', e.phone||''])];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -4526,6 +4641,9 @@ document.getElementById('zoneAdminUploadInput').addEventListener('change', (evt)
       const auth = currentAuth();
       const isAdmin = !!(auth && auth.isAdmin);
       const scopeBranch = isAdmin ? null : auth.branch;
+      // 구역 로그인은 자기 구역 소속 직원만 업로드로 건드릴 수 있게(사번만 맞으면 다른
+      // 구역 직원도 고칠 수 있는 구멍을 막음).
+      const scopeZone = (!isAdmin && auth.zone) ? auth.zone : null;
       let updated = 0, notFound = 0, skipped = 0, renamed = 0;
       for(let i=1;i<rows.length;i++){
         const row = rows[i];
@@ -4534,9 +4652,10 @@ document.getElementById('zoneAdminUploadInput').addEventListener('change', (evt)
         const rowBranch = branchIdx>=0 ? String(row[branchIdx]||'').trim() : '';
         const candidates = employees.filter(x=> x.empno===empno
           && (!scopeBranch || x.branch===scopeBranch)
+          && (!scopeZone || x.zone===scopeZone)
           && (!rowBranch || x.branch===rowBranch));
         if(candidates.length===0){
-          if(scopeBranch && employees.some(x=>x.empno===empno)) skipped++; else notFound++;
+          if((scopeBranch || scopeZone) && employees.some(x=>x.empno===empno)) skipped++; else notFound++;
           continue;
         }
         candidates.forEach(emp=>{
@@ -4780,6 +4899,7 @@ function renderAdmin(){
   renderPasswordAdmin();
   renderLicenseAdmin();
   renderZoneAdmin();
+  renderZonePwAdmin();
   const gArea = document.getElementById('guideAdminList');
   gArea.innerHTML = guides.map(g=>{
     const used = records.filter(r=>r.guide_name===g.name).length;
@@ -4967,6 +5087,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   await loadState();
   refreshSelects();
   refreshLoginBranchOptions(); // loadState() 완료 후 실제 지사 목록(관리자가 나중에 추가한 지사 포함)으로 로그인 화면 갱신
+  refreshLoginZoneOptions(); // 위와 같은 이유로 구역 선택칸도 실제 employees 데이터 기준으로 갱신
   document.getElementById('refDate').value = currentMonth + '-24';
   renderTableHead();
   renderTableBody();
