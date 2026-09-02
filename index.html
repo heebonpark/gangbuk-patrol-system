@@ -567,7 +567,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <button class="btn btn-outline" id="btnRosterPreview">미리보기</button>
         <button class="btn btn-outline" id="btnRosterExcel">엑셀로 출력</button>
         <input type="date" id="laborAuditStartDate" title="근로시간 검증시트의 13주(91일) 시작일" style="width:140px;">
-        <button class="btn btn-outline" id="btnLaborAuditExcel" title="선택된 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트</button>
+        <button class="btn btn-outline" id="btnLaborAuditExcel" title="선택된 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트 다운로드</button>
         <button class="btn btn-outline" id="btnLaborAuditPreview" title="엑셀로 내려받지 않고 화면에서 바로 ①~④ 항목을 확인합니다.">근로시간 검증시트 미리보기</button>
         <button class="btn btn-warm" id="btnRosterPDF">PDF 출력</button>
       </div>
@@ -694,6 +694,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="2">② 근무수당 시간</button>
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="3">③ 근무시간</button>
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="4">④ ERP 업로드</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-warm" id="btnLaborAuditPreviewExcel">엑셀 다운로드</button>
         </div>
         <div id="laborAuditPreviewBody"></div>
       </div>
@@ -822,7 +824,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <select id="dashOvertimeMonth"></select>
         <label style="font-size:11.5px;color:var(--text-mute);margin-left:10px;">검증 시작일</label>
         <input type="date" id="dashLaborAuditStartDate" title="근로시간 검증시트의 13주(91일) 시작일" style="width:140px;">
-        <button class="btn btn-outline" id="btnDashLaborAuditExcel" title="전체 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트(전체 지사)</button>
+        <button class="btn btn-outline" id="btnDashLaborAuditExcel" title="전체 지사 직원을 대상으로 시작일부터 91일(13주)간의 근무실적표/근무수당 시간/근무시간/ERP 업로드 자료를 한 파일로 내려받습니다.">근로시간 검증시트 다운로드(전체 지사)</button>
         <button class="btn btn-outline" id="btnDashLaborAuditPreview" title="엑셀로 내려받지 않고 화면에서 바로 ①~④ 항목을 확인합니다(전체 지사).">근로시간 검증시트 미리보기(전체 지사)</button>
       </div>
       <div class="table-scroll">
@@ -839,6 +841,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="2">② 근무수당 시간</button>
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="3">③ 근무시간</button>
           <button type="button" class="btn btn-outline audit-tab-btn" data-tab="4">④ ERP 업로드</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-warm" id="btnDashLaborAuditPreviewExcel">엑셀 다운로드</button>
         </div>
         <div id="dashLaborAuditPreviewBody"></div>
       </div>
@@ -1064,6 +1068,8 @@ let rosterCodeDisplayMode = 'text'; // 'text' | 'letter'
 function codeLetterLabel(code){
   if(!code) return '·';
   const base = baseCodeOf(code);
+  // 휴(휴무)는 범례 코드로는 K(숙명)로 표시한다(요청사항) — 저장값·근태유형 라벨은 그대로 둠.
+  if(base==='휴') return code===base ? 'K' : `K(${code})`;
   const info = CODE_LEGEND[base];
   if(!info || !info.letter) return code;
   return code===base ? info.letter : `${info.letter}(${code})`;
@@ -3427,7 +3433,7 @@ function renderLaborAuditPreviewTab(bodyElId, staffList, dateList, tab){
     body.innerHTML = h;
   }
 }
-function initLaborAuditPreview({toggleBtnId, openLabel, closeLabel, containerElId, tabsElId, bodyElId, getStaffAndStart}){
+function initLaborAuditPreview({toggleBtnId, openLabel, closeLabel, containerElId, tabsElId, bodyElId, downloadBtnId, getStaffAndStart}){
   let currentTab = '1';
   const container = document.getElementById(containerElId);
   const toggleBtn = document.getElementById(toggleBtnId);
@@ -3447,15 +3453,23 @@ function initLaborAuditPreview({toggleBtnId, openLabel, closeLabel, containerElI
     if(container.style.display==='none'){ draw(); container.style.display='block'; toggleBtn.textContent = closeLabel; }
     else { container.style.display='none'; toggleBtn.textContent = openLabel; }
   });
+  // 미리보기를 닫지 않고 바로 엑셀로 받을 수 있게, 지금 보고 있는 것과 완전히 같은
+  // 대상 직원·시작일로 downloadLaborAuditWorkbook을 그대로 재사용한다.
+  document.getElementById(downloadBtnId).addEventListener('click', async ()=>{
+    const { staff, startDs, filenamePrefix } = getStaffAndStart();
+    await downloadLaborAuditWorkbook(staff, startDs, filenamePrefix);
+  });
 }
 initLaborAuditPreview({
   toggleBtnId:'btnLaborAuditPreview', openLabel:'근로시간 검증시트 미리보기', closeLabel:'미리보기 닫기',
   containerElId:'laborAuditPreviewContainer', tabsElId:'laborAuditPreviewTabs', bodyElId:'laborAuditPreviewBody',
+  downloadBtnId:'btnLaborAuditPreviewExcel',
   getStaffAndStart: getLaborAuditBranchStaff,
 });
 initLaborAuditPreview({
   toggleBtnId:'btnDashLaborAuditPreview', openLabel:'근로시간 검증시트 미리보기(전체 지사)', closeLabel:'미리보기 닫기',
   containerElId:'dashLaborAuditPreviewContainer', tabsElId:'dashLaborAuditPreviewTabs', bodyElId:'dashLaborAuditPreviewBody',
+  downloadBtnId:'btnDashLaborAuditPreviewExcel',
   getStaffAndStart: getLaborAuditAllBranchStaff,
 });
 
