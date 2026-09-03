@@ -402,6 +402,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .login-box{background:#fff;border-radius:16px;padding:34px 30px;width:100%;max-width:340px;box-shadow:var(--shadow-lg), 0 20px 60px rgba(0,0,0,0.35);position:relative;}
   .login-box h1{margin:0 0 4px;font-family:var(--display);font-size:18px;font-weight:700;color:var(--text);text-align:center;}
   .login-box .sub{margin:0 0 20px;font-size:12px;color:var(--text-mute);text-align:center;}
+  /* 로그인 직후 "근태관리/차량관리" 선택 화면 — 기존 로그인 게이트 스타일(.login-gate/.login-box)을
+     그대로 재사용하고, 여기 버튼 그리드만 추가한다. 근태관리 쪽 로직/화면은 전혀 건드리지 않고
+     이 화면이 그 위에 한 겹 얹혔다가 "근태관리"를 누르면 사라지는 방식. */
+  .hub-btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px;}
+  @media (max-width:420px){ .hub-btn-grid{grid-template-columns:1fr;} }
+  .hub-btn{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
+  .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
+  .hub-btn-icon{font-size:26px;}
+  .hub-btn-title{font-size:14.5px;font-weight:700;color:var(--text);}
+  .hub-btn-desc{font-size:11px;color:var(--text-mute);text-align:center;line-height:1.5;}
   .login-field{margin-bottom:12px;}
   .login-field label{display:block;font-size:11.5px;font-weight:600;color:var(--text-mute);margin-bottom:5px;}
   .login-field select, .login-field input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);}
@@ -460,6 +470,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div class="login-error" id="loginError">비밀번호가 올바르지 않습니다.</div>
     <button class="btn btn-primary" id="btnLoginSubmit">로그인</button>
     <p class="sub" id="loginCopyright" style="margin:16px 0 0;text-align:center;font-size:10.5px;"></p>
+  </div>
+</div>
+
+<!-- 로그인 성공 직후 잠깐 뜨는 선택 화면. 근태관리 탭/데이터는 이 화면 뒤에 이미 그대로
+     렌더링되어 있고, "근태관리"를 누르면 이 화면만 사라진다(기존 로직 변경 없음).
+     "차량관리"는 완전히 별도 파일(vehicle-management.html)로 이동한다. -->
+<div class="login-gate login-hidden" id="systemHub">
+  <div class="login-box" style="max-width:420px;text-align:center;">
+    <h1>어떤 업무를 여시겠어요?</h1>
+    <p class="sub" id="hubLoginLabel"></p>
+    <div class="hub-btn-grid">
+      <button type="button" class="hub-btn" id="btnHubAttendance">
+        <span class="hub-btn-icon">🗓️</span>
+        <span class="hub-btn-title">근태관리</span>
+        <span class="hub-btn-desc">근무표 · 순회감독 일정</span>
+      </button>
+      <button type="button" class="hub-btn" id="btnHubVehicle">
+        <span class="hub-btn-icon">🚗</span>
+        <span class="hub-btn-title">차량관리</span>
+        <span class="hub-btn-desc">차량월마감 · 점검 · 사고/과태료</span>
+      </button>
+    </div>
+    <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;margin-top:18px;text-decoration:underline;cursor:pointer;">로그아웃</a>
   </div>
 </div>
 
@@ -5389,6 +5422,38 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   renderDoc();
   applyLoginBranchDefault();
   applyTabRestriction();
+})();
+</script>
+
+<!-- 근태관리/차량관리 허브. 위 스크립트(근태관리 본체)는 전혀 수정하지 않고, 이 블록만
+     새로 추가했다 — 로그인 게이트가 숨겨지는 순간(로그인 성공/세션 복원)을 밖에서 지켜보다가
+     선택 화면을 한 번 띄워주는 역할만 한다. -->
+<script>
+(function initSystemHub(){
+  const gate = document.getElementById('loginGate');
+  const hub = document.getElementById('systemHub');
+  const hubLabel = document.getElementById('hubLoginLabel');
+  if(!gate || !hub) return;
+  function showHubIfLoggedIn(){
+    if(!gate.classList.contains('login-hidden')) return; // 아직 로그인 전
+    hubLabel.textContent = (typeof loginLabel==='function' && loginLabel()) ? ('로그인: ' + loginLabel()) : '';
+    hub.classList.remove('login-hidden');
+  }
+  showHubIfLoggedIn(); // 세션이 이미 복원되어 있던 경우(새로고침 등)를 위한 즉시 확인
+  new MutationObserver(showHubIfLoggedIn).observe(gate, {attributes:true, attributeFilter:['class']});
+
+  document.getElementById('btnHubAttendance').addEventListener('click', ()=>{
+    hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
+  });
+  document.getElementById('btnHubVehicle').addEventListener('click', ()=>{
+    location.href = 'vehicle-management.html';
+  });
+  document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
+    e.preventDefault();
+    hub.classList.add('login-hidden');
+    const logoutBtn = document.getElementById('btnLogout');
+    if(logoutBtn) logoutBtn.click(); // 기존 로그아웃 로직 그대로 재사용
+  });
 })();
 </script>
 </body>
