@@ -4071,14 +4071,20 @@ function showCalDayDetail(ds){
   if(items.length===0){ wrap.style.display='none'; return; }
   const branchesToday = [...new Set(items.map(r=>r.branch))];
   let html = `<h3 style="font-size:14.5px;margin:0 0 8px;">${ds} 순회 대상 지사 배치 인원</h3>`;
+  // 배치인원(순회감독 대상)은 그날 실제로 현장에서 주/야 근무 중인 인원만 해당 — 숙(대기)·휴·연차 등은
+  // 그 지사 소속이라도 현장에 없거나 순회 대상이 아니므로 제외한다. (대체근무·지역태그 코드는
+  // baseCodeOf로 원래 코드로 환원해 같은 기준으로 판정.)
   branchesToday.forEach(b=>{
     const staff = employees.filter(e=>e.branch===b).slice().sort((a,c)=> (a.zone||'').localeCompare(c.zone||'') || a.empno.localeCompare(c.empno));
-    html += `<p class="sub" style="margin:10px 0 4px;">${esc(b)}지사 (${staff.length}명)</p>`;
+    const onDuty = staff.filter(e=> ['주','야'].includes(baseCodeOf(effectiveCode(e, ds))));
+    html += `<p class="sub" style="margin:10px 0 4px;">${esc(b)}지사 · 배치인원(주/야) <b>${onDuty.length}명</b> <span style="color:var(--text-mute);">(전체 등록 ${staff.length}명, 숙·휴·연차 등 제외)</span></p>`;
     if(staff.length===0){ html += `<p class="sub" style="margin:0 0 8px;">등록된 직원이 없습니다.</p>`; }
     else{
       html += '<div class="table-scroll"><table class="grid"><thead><tr><th>지사</th><th>사번</th><th style="text-align:left;">성명</th><th>근무유형</th></tr></thead><tbody>';
       staff.forEach(e=>{
-        html += `<tr><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td style="text-align:left;">${esc(e.name)}</td><td>${esc(effectiveCode(e, ds) || '-')}</td></tr>`;
+        const code = effectiveCode(e, ds) || '';
+        const counted = ['주','야'].includes(baseCodeOf(code));
+        html += `<tr${counted?'':' style="opacity:.5;"'}><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td style="text-align:left;">${esc(e.name)}</td><td class="code-${esc(baseCodeOf(code))}">${esc(code) || '-'}</td></tr>`;
       });
       html += '</tbody></table></div>';
     }
