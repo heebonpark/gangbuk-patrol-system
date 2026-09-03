@@ -105,6 +105,18 @@ thead th{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.06em;
 .faq-item .q{ font-weight:700; font-size:13.5px; margin-bottom:4px; }
 .faq-item .a{ font-size:13px; color:var(--ink-soft); }
 
+figure.shot{ margin:16px 0; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--surface); }
+figure.shot img{ display:block; width:100%; height:auto; }
+figure.shot figcaption{ padding:8px 14px; font-size:12px; color:var(--ink-soft); border-top:1px solid var(--line-soft); font-family:var(--font-mono); }
+.shot-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.shot-row figure.shot{ margin:16px 0 0; }
+@media (max-width:640px){ .shot-row{ grid-template-columns:1fr; } }
+
+.video-cta{ display:inline-flex; align-items:center; gap:8px; margin-top:12px; padding:10px 16px; border-radius:8px; background:var(--navy); color:#fff !important; text-decoration:none; font-size:13px; font-weight:600; }
+.video-cta:hover{ opacity:0.9; }
+:root[data-theme="dark"] .video-cta{ background:var(--accent); color:var(--navy-deep) !important; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .video-cta{ background:var(--accent); color:var(--navy-deep) !important; } }
+
 footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-size:12px; border-top:1px solid var(--line); margin-top:20px; }
 
 @media (max-width:880px){
@@ -123,9 +135,11 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
     <div class="toc-brand"><span class="mark">Manual</span><span class="name">PatrolOps</span></div>
     <nav id="tocNav">
       <a href="#start">시작하기</a>
+      <a href="#demo-video">전체 기능 시연 영상</a>
       <div class="grp">지사 담당자</div>
       <a href="#branch-view">근무표 확인</a>
       <a href="#branch-pattern">패턴 설정</a>
+      <a href="#branch-import">엑셀 가져오기·사전등록</a>
       <a href="#branch-preview">미리보기·서명</a>
       <a href="#branch-export">엑셀·PDF 출력</a>
       <a href="#branch-finalize">근무표 확정·수정요청</a>
@@ -155,16 +169,31 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
       <ol class="step-list">
         <li class="step"><span class="idx">1</span><div><div class="h">접속</div><div class="d">배포된 주소로 접속하면 로그인 화면이 먼저 나타납니다.</div></div></li>
         <li class="step"><span class="idx">2</span><div><div class="h">지사 담당자</div><div class="d"><code>지사</code> 드롭다운에서 소속 지사를 선택하고 비밀번호를 입력한 뒤 <code>로그인</code>을 누릅니다. 로그인 후에는 <b>근무표 관리</b> 화면만 보이며, 다른 지사 데이터는 볼 수 없습니다.</div></div></li>
-        <li class="step"><span class="idx">3</span><div><div class="h">관리자</div><div class="d"><code>관리자로 로그인</code>을 체크하고 관리자 비밀번호를 입력합니다. 관리자는 전체 지사와 모든 메뉴에 접근할 수 있습니다.</div></div></li>
-        <li class="step"><span class="idx">4</span><div><div class="h">비밀번호를 모를 때</div><div class="d">비밀번호 칸 옆 눈 아이콘으로 입력 내용을 확인할 수 있습니다. 그래도 모르면 관리자에게 문의하세요. 5회 이상 틀리면 5분간 로그인이 잠깁니다.</div></div></li>
+        <li class="step"><span class="idx">3</span><div><div class="h">구역 단위 로그인(선택)</div><div class="d">지사를 고른 뒤 <code>구역(선택)</code> 드롭다운에서 특정 구역/호수를 고르면, 그 구역 직원 데이터만 보이는 좁은 범위로 로그인할 수 있습니다. 기본값인 <code>지사 전체(구역 선택 안 함)</code>를 두면 지금까지와 같이 지사 전체가 보입니다.</div></div></li>
+        <li class="step"><span class="idx">4</span><div><div class="h">관리자</div><div class="d"><code>관리자로 로그인</code>을 체크하고 관리자 비밀번호를 입력합니다. 관리자는 전체 지사와 모든 메뉴에 접근할 수 있습니다.</div></div></li>
+        <li class="step"><span class="idx">5</span><div><div class="h">비밀번호를 모를 때</div><div class="d">비밀번호 칸 옆 눈 아이콘으로 입력 내용을 확인할 수 있습니다. 그래도 모르면 관리자에게 문의하세요. 5회 이상 틀리면 5분간 로그인이 잠깁니다.</div></div></li>
       </ol>
+      <figure class="shot">
+        <img src="images/01-login.jpg" alt="로그인 화면 — 지사 선택, 구역(선택), 관리자로 로그인, 비밀번호 입력">
+        <figcaption>로그인 화면 · 지사 선택 → 구역(선택, 필요할 때만) → 비밀번호</figcaption>
+      </figure>
       <div class="callout warn"><b>참고.</b> 이 로그인은 서버 없는 정적 페이지 특성상 오조작 방지용 접근 제한입니다. 실제 인사·급여 데이터를 다루기 전에는 관리자와 먼저 상의하세요.</div>
+    </section>
+
+    <section id="demo-video">
+      <div class="section-head"><div class="num">시작하기</div><h2>전체 기능 시연 영상</h2><p class="desc">로그인부터 근무표 확정까지 실제 화면으로 보여주는 짧은 영상입니다.</p></div>
+      <p>글로 읽는 것보다 화면 흐름을 눈으로 먼저 보고 싶다면 아래 영상을 먼저 보세요. 이후 각 장의 스크린샷은 이 영상에서 다루는 화면을 순서대로 다시 짚어줍니다.</p>
+      <a class="video-cta" href="https://www.youtube.com/watch?v=h2v5EktavqM" target="_blank" rel="noopener">▶ 유튜브에서 시연 영상 보기</a>
     </section>
 
     <section id="branch-view">
       <div class="section-head"><div class="num">지사 담당자 · 01</div><h2>근무표 확인</h2><p class="desc">근무표 관리 화면에서 이번 달 일정을 확인합니다.</p></div>
       <p>화면 상단에서 <code>지사</code>·<code>보기 모드</code>(이번 달 전체 / 기준일 ±7일)·<code>월</code>을 선택합니다. 각 직원의 날짜별 칸은 기본적으로 <code>자동</code>(패턴 기반) 상태이며, 연차·병가 등 예외가 있는 날짜만 드롭다운에서 코드를 직접 선택하면 그 칸이 <b>주황 배경</b>으로 바뀌어 예외임을 표시합니다.</p>
       <p style="margin-top:10px;">표 상단에는 이번 달 <b>서명 미완료 인원</b>이 자동으로 집계되어 표시됩니다.</p>
+      <figure class="shot">
+        <img src="images/02-main.jpg" alt="근무표 관리 메인 화면 — 지사별 근무표, 주당·분기 근로시간 모니터링, 빠른 미리보기">
+        <figcaption>근무표 관리 메인 화면 · 근무표 표 + 근로시간 모니터링 + 빠른 미리보기</figcaption>
+      </figure>
     </section>
 
     <section id="branch-pattern">
@@ -182,23 +211,58 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
       <p>새 직원을 등록할 때도 하단 <code>+ 직원 추가</code> 입력줄의 <code>패턴 선택</code> 드롭다운에서 같은 프리셋을 바로 지정할 수 있습니다.</p>
     </section>
 
+    <section id="branch-import">
+      <div class="section-head"><div class="num">지사 담당자 · 03</div><h2>엑셀 가져오기 · 사전 등록 · 구역 관리</h2><p class="desc">근무표 관리 화면 상단의 <code>엑셀 가져오기</code>, <code>관리자 설정</code> 탭에서 지사 담당자가 직접 쓸 수 있는 기능입니다.</p></div>
+
+      <h3 class="sub-h">엑셀 가져오기</h3>
+      <p><code>엑셀 가져오기</code> 탭으로 이동하면 지사 로그인 상태에서는 <b>② 근무표(근태) 엑셀 가져오기</b>만 보입니다. 기존에 쓰던 엑셀 근무계획표는 시트 구성과 헤더 위치가 제각각이라, <code>업로드 예시 양식 다운로드</code>로 표준 양식을 먼저 받아 그 형식대로 채운 뒤 <code>파일 선택</code>으로 업로드하면 자동으로 인식되어 반영됩니다.</p>
+      <figure class="shot">
+        <img src="images/04-excel-import.jpg" alt="엑셀 가져오기 화면 — 업로드 예시 양식 다운로드, 파일 선택">
+        <figcaption>엑셀 가져오기 · 지사 로그인에서는 근무표(근태) 가져오기만 노출</figcaption>
+      </figure>
+
+      <h3 class="sub-h">연차 · 교육 · 청원 등 사전 등록</h3>
+      <p><code>관리자 설정</code> 탭의 <b>연차·교육·청원 등 사전 등록</b> 카드에서 직원과 근태유형(연차/교육/청원 등), 시작일~종료일을 지정해 <code>일괄 등록</code>하면, 그 기간이 도래했을 때 근무표에 자동으로 반영됩니다. 미리 확정된 연차·교육 일정을 매번 날짜별로 찾아 입력할 필요가 없습니다.</p>
+
+      <h3 class="sub-h">구역/호수 관리(지사용)</h3>
+      <p>같은 탭의 <b>구역/호수 관리</b> 카드에서는 소속 지사 직원의 사번·성명·직무·구역/호수·연락처·비고를 표 형태로 보고 바로 수정할 수 있습니다. 지사 로그인 시에는 자기 지사 인원만 보이고 수정도 그 범위로 제한됩니다. 연락처·비고는 근무표 미리보기 화면의 같은 칸과 값을 공유합니다.</p>
+      <figure class="shot">
+        <img src="images/03-leave-zone.jpg" alt="연차·교육·청원 사전 등록, 구역/호수 관리 화면(지사용)">
+        <figcaption>관리자 설정 탭(지사 로그인) · 사전 등록 + 구역/호수 관리</figcaption>
+      </figure>
+    </section>
+
     <section id="branch-preview">
-      <div class="section-head"><div class="num">지사 담당자 · 03</div><h2>미리보기 · 서명</h2><p class="desc">서명은 이 화면에서만 할 수 있습니다.</p></div>
+      <div class="section-head"><div class="num">지사 담당자 · 04</div><h2>미리보기 · 서명</h2><p class="desc">서명은 이 화면에서만 할 수 있습니다.</p></div>
       <ol class="step-list">
         <li class="step"><span class="idx">1</span><div><div class="h">미리보기 열기</div><div class="d"><code>미리보기</code> 버튼을 누르면 범례·결재란·근무시간 합계·서명란이 포함된 최종 문서가 아래에 나타납니다.</div></div></li>
         <li class="step"><span class="idx">2</span><div><div class="h">내 이름 찾기</div><div class="d">표 위쪽 <code>성명으로 찾기</code> 검색창에 이름을 입력하면 해당 행으로 자동 스크롤·강조됩니다. 모바일에서는 성명·합계·서명 칸이 화면 좌우에 고정되어, 스크롤해도 항상 보입니다.</div></div></li>
         <li class="step"><span class="idx">3</span><div><div class="h">서명하기</div><div class="d">본인 행의 <code>서명하기</code> 버튼을 눌러 나타나는 캔버스에 손가락(모바일)이나 마우스로 직접 서명하고 <code>서명 저장</code>을 누릅니다. 저장된 서명은 그 직원·그 달에 계속 남습니다.</div></div></li>
         <li class="step"><span class="idx">4</span><div><div class="h">초과근무 확인</div><div class="d"><code>합계(시간)</code> 열이 기준치(월 240시간)를 넘으면 빨간색으로 표시됩니다.</div></div></li>
       </ol>
+      <div class="shot-row">
+        <figure class="shot">
+          <img src="images/05-preview.jpg" alt="근무실적(계획) 미리보기 — 범례, 결재란, 합계(시간), 근무자 확인 서명 열">
+          <figcaption>미리보기 · 범례 + 결재란 + 합계(시간) + 서명 열</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="images/06-signature.jpg" alt="근무자 확인 서명 캔버스 팝업 — 지우기, 취소, 서명 저장">
+          <figcaption>서명하기 · 캔버스에 직접 그려 저장</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section id="branch-export">
-      <div class="section-head"><div class="num">지사 담당자 · 04</div><h2>엑셀 · PDF 출력</h2></div>
+      <div class="section-head"><div class="num">지사 담당자 · 05</div><h2>엑셀 · PDF 출력</h2></div>
       <p><code>엑셀로 출력</code>은 현재 화면의 근무표를 그대로 엑셀 파일로 내려받습니다. <code>PDF 출력</code>은 A4 가로 용지 <b>한 장</b>에 맞춰 자동으로 축소해 인쇄/저장합니다 — 별도로 용지 크기를 맞출 필요가 없습니다.</p>
+      <figure class="shot">
+        <img src="images/07-pdf-export.jpg" alt="PDF 출력화면 — 브라우저 인쇄 대화상자, 대상: PDF로 저장, 페이지: 전체, 시트당 페이지 수: 1">
+        <figcaption>PDF 출력 · 대상 "PDF로 저장" 선택 후 저장하면 A4 한 장으로 정리됩니다</figcaption>
+      </figure>
     </section>
 
     <section id="branch-finalize">
-      <div class="section-head"><div class="num">지사 담당자 · 05</div><h2>근무표 확정 · 수정 요청</h2></div>
+      <div class="section-head"><div class="num">지사 담당자 · 06</div><h2>근무표 확정 · 수정 요청</h2></div>
       <ol class="step-list">
         <li class="step"><span class="idx">1</span><div><div class="h">확정</div><div class="d">이번 달 입력이 끝나면 <code>근무표 확정</code>을 누릅니다. 확정하면 상단에 <span class="pill">확정됨</span> 표시가 뜨고, 이 지사에서는 더 이상 날짜 칸·프리셋·직원 추가/삭제를 직접 수정할 수 없습니다.</div></div></li>
         <li class="step"><span class="idx">2</span><div><div class="h">수정이 필요하면</div><div class="d">확정 후 나타나는 <code>수정 요청</code> 버튼을 눌러 대상 직원(선택)과 요청 내용을 적어 보냅니다. 관리자가 확인 후 처리합니다.</div></div></li>
@@ -207,7 +271,7 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
     </section>
 
     <section id="branch-audit">
-      <div class="section-head"><div class="num">지사 담당자 · 06</div><h2>근로시간 검증시트</h2><p class="desc">노동시간 준수 여부를 점검하고 ERP 등록용 자료를 만드는 감사용 자료입니다.</p></div>
+      <div class="section-head"><div class="num">지사 담당자 · 07</div><h2>근로시간 검증시트</h2><p class="desc">노동시간 준수 여부를 점검하고 ERP 등록용 자료를 만드는 감사용 자료입니다.</p></div>
       <p>근무표 화면 상단의 <code>검증 시작일</code>을 지정하고 <code>근로시간 검증시트</code>를 누르면, 그 날부터 91일(13주)간 소속 지사 전체 직원의 근태를 4개 시트로 담은 엑셀 파일을 내려받습니다. 파일을 내려받지 않고 화면에서 바로 확인하려면 <code>근로시간 검증시트 미리보기</code>를 누르세요 — 미리보기 화면 안에서도 바로 엑셀로 내려받을 수 있습니다.</p>
       <div class="tbl-scroll"><table>
         <thead><tr><th>시트</th><th>내용</th></tr></thead>
@@ -219,6 +283,24 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
         </tbody>
       </table></div>
       <div class="callout"><b>참고.</b> 시작일은 굳이 월요일이 아니어도 되며, 지정한 날부터 정확히 91일이 조회됩니다.</div>
+      <div class="shot-row">
+        <figure class="shot">
+          <img src="images/09-audit-performance.jpg" alt="근로시간 검증시트 미리보기 — ① 근무실적표 탭">
+          <figcaption>① 근무실적표 · 91일 근태 코드</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="images/10-audit-hours.jpg" alt="근로시간 검증시트 미리보기 — ② 근무수당 시간 탭, 64시간·52시간 초과 강조 표시">
+          <figcaption>② 근무수당 시간 · 64h 초과(빨강)·분기평균 52h 초과(연두)</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="images/11-audit-time.jpg" alt="근로시간 검증시트 미리보기 — ③ 근무시간 탭, 날짜별 시간 숫자">
+          <figcaption>③ 근무시간 · 코드 대신 시간(숫자)으로 환산</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="images/12-audit-erp.jpg" alt="근로시간 검증시트 미리보기 — ④ ERP 업로드 탭, 1일 1행 형식">
+          <figcaption>④ ERP 업로드 · 사번·근태유형·시작/종료 일시(1일 1행)</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section id="admin-request">
@@ -229,12 +311,19 @@ footer{ padding:36px 52px 56px; max-width:800px; color:var(--ink-soft); font-siz
     <section id="admin-password">
       <div class="section-head"><div class="num">관리자 · 02</div><h2>비밀번호 관리</h2></div>
       <p><code>관리자 설정</code> 탭 <b>비밀번호 관리</b> 카드에서 지사별 비밀번호와 관리자 비밀번호를 코드 수정 없이 바꿀 수 있습니다. <code>기본값으로</code>를 누르면 기본 규칙(지사명+1234+!)으로 되돌아갑니다.</p>
+      <p>지사 전체 비밀번호와 별도로, <b>구역·사번별 비밀번호</b>도 관리할 수 있습니다 — <a href="#admin-zone">지사·구역 관리</a> 장을 참고하세요.</p>
       <div class="callout warn"><b>참고.</b> 여기서 바꾼 비밀번호는 이 브라우저에만 저장됩니다 — 다른 관리자 기기와 자동으로 공유되지 않으니, 바꾼 뒤에는 담당자들에게 직접 전달해야 합니다.</div>
     </section>
 
     <section id="admin-zone">
       <div class="section-head"><div class="num">관리자 · 03</div><h2>지사 · 구역/호수 관리</h2></div>
-      <p><code>관리자 설정</code> 탭에서 지사 추가/삭제, 경비지도사 정보 수정을 할 수 있습니다. <b>직원 구역/호수 관리</b> 카드에서는 지사를 선택해 소속 직원 전체의 구역/호수 값을 표로 보고 바로 수정할 수 있습니다 — 이 값이 근무표 미리보기에서 직원을 묶어 보여주는 기준입니다.</p>
+      <p><code>관리자 설정</code> 탭에서 지사 추가/삭제, 경비지도사 정보 수정을 할 수 있습니다. <b>직원 구역/호수 관리</b> 카드에서는 지사를 선택해 소속 직원 전체의 사번·성명·직급·구역/호수·연락처를 표로 보고 바로 수정할 수 있습니다 — 이 값이 근무표 미리보기에서 직원을 묶어 보여주는 기준입니다. <code>엑셀로 다운로드</code> / <code>엑셀로 일괄 업로드</code>로 여러 명을 한 번에 갱신할 수도 있습니다(업로드 형식: 사번·성명·구역/호수·연락처, 성명 칸을 비워두면 이름은 바뀌지 않음).</p>
+      <h3 class="sub-h">구역 · 사번별 로그인 비밀번호</h3>
+      <p>같은 탭 아래쪽 <b>구역·사번별 비밀번호 관리</b> 카드에서는 구역(예: 401호) 단위나 사번 단위로 따로 로그인할 수 있는 비밀번호를 관리합니다. 기본 비밀번호는 각각 "구역명+1234+!", "사번+1234+!"이며, 로그인 화면에서 지사 선택 후 구역(→사번)을 골라 로그인합니다. 이 카드는 지사 로그인(구역·사번 로그인 제외)과 관리자만 볼 수 있습니다.</p>
+      <figure class="shot">
+        <img src="images/08-zone-password.jpg" alt="관리자 설정 탭 — 직원 구역/호수 관리 표, 구역·사번별 비밀번호 관리">
+        <figcaption>관리자 설정 · 직원 구역/호수 관리 + 구역·사번별 비밀번호 관리</figcaption>
+      </figure>
     </section>
 
     <section id="admin-backup">
