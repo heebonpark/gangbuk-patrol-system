@@ -288,7 +288,7 @@ footer .line{ border-top:1px solid var(--line); padding-top:20px; }
     </nav>
     <div class="toc-meta">
       <div><b>대상</b> — 경영진 검토용</div>
-      <div><b>기준일</b> — 2026-08-26</div>
+      <div><b>기준일</b> — 2026-09-03</div>
       <div><b>현재 단계</b> — Phase 0 (프로토타입)</div>
     </div>
   </aside>
@@ -300,7 +300,7 @@ footer .line{ border-top:1px solid var(--line); padding-top:20px; }
       <p class="sub">17개 지사·156명 규모 시범 데이터로 검증된 프로토타입을, 전사 1,000명 규모 표준 운영도구이자 판매 가능한 소프트웨어 자산으로 발전시키는 단계별 계획.</p>
       <div class="meta-row">
         <div class="meta-item"><div class="k">현재 규모</div><div class="v">17개 지사 · 156명</div></div>
-        <div class="meta-item"><div class="k">코드 규모</div><div class="v">2,176줄 · 18 commits</div></div>
+        <div class="meta-item"><div class="k">코드 규모</div><div class="v">5,385줄 · 170 commits</div></div>
         <div class="meta-item"><div class="k">배포 주소</div><div class="v">heebonpark.github.io/gangbuk-patrol-system</div></div>
         <div class="meta-item"><div class="k">현재 단계</div><div class="v">Phase 0 · 프로토타입</div></div>
       </div>
@@ -320,8 +320,11 @@ footer .line{ border-top:1px solid var(--line); padding-top:20px; }
         <div class="feature-card"><div class="t">근무시간 자동 집계</div><div class="d">근태유형별 시간표(일근 8h·석근 14h 등)를 기준으로 월 합계를 자동 계산, 기준 초과 시 경고.</div></div>
         <div class="feature-card"><div class="t">전자서명</div><div class="d">근무자가 화면에서 직접 서명하여 종이 결재 없이 근무표 확인 절차를 완결.</div></div>
         <div class="feature-card"><div class="t">근무표 확정 · 수정요청</div><div class="d">지사가 근무표를 확정하면 임의 수정이 막히고, 이후 변경은 관리자 승인 절차를 거침.</div></div>
-        <div class="feature-card"><div class="t">지사별 접근 제한</div><div class="d">지사는 자기 지사 근무표만, 관리자는 전체를 볼 수 있도록 로그인 단계에서 구분.</div></div>
+        <div class="feature-card"><div class="t">지사·구역·사번별 접근 제한</div><div class="d">지사 단위뿐 아니라 구역(호수)·사번 단위로도 별도 비밀번호를 두어 좁은 범위로 로그인 가능.</div></div>
         <div class="feature-card"><div class="t">경찰서 제출 서식 자동화</div><div class="d">순회 일정 데이터로 별지1 서식을 자동 생성해 수기 작성 시간을 제거.</div></div>
+        <div class="feature-card"><div class="t">기존 엑셀 근무표 가져오기</div><div class="d">지사마다 다르던 엑셀 근무계획표를 업로드하면 헤더 위치를 지정해 그대로 인식·이관.</div></div>
+        <div class="feature-card"><div class="t">연차·교육·청원 사전 등록</div><div class="d">앞으로 예정된 연차·교육 등을 미리 등록해두면 해당 월 근무표에 자동으로 반영.</div></div>
+        <div class="feature-card"><div class="t">근로시간 검증시트 · ERP 연동</div><div class="d">91일(13주) 단위 주64h·분기평균52h 초과 여부를 자동 점검하고, ERP 업로드용 양식까지 생성.</div></div>
       </div>
     </section>
 
@@ -391,20 +394,23 @@ footer .line{ border-top:1px solid var(--line); padding-top:20px; }
 
       <h3 style="font-size:15px;margin-bottom:4px;">지사 담당자</h3>
       <ol class="step-list">
-        <li class="step"><span class="idx">01</span><div><div class="h">로그인</div><div class="d">접속 후 <code>지사</code> 드롭다운에서 소속 지사를 선택하고 비밀번호를 입력합니다. 로그인하면 <b>근무표 관리</b> 화면만 표시되며, 다른 지사 데이터는 보이지 않습니다.</div></div></li>
+        <li class="step"><span class="idx">01</span><div><div class="h">로그인</div><div class="d">접속 후 <code>지사</code> 드롭다운에서 소속 지사를 선택하고 비밀번호를 입력합니다. 필요하면 <code>구역(선택)</code> 드롭다운으로 특정 구역/호수만 보이는 좁은 범위로도 로그인할 수 있습니다. 로그인하면 <b>근무표 관리</b> 화면만 표시되며, 다른 지사 데이터는 보이지 않습니다.</div></div></li>
         <li class="step"><span class="idx">02</span><div><div class="h">근무표 확인</div><div class="d">각 직원 행의 날짜별 칸은 기본적으로 <code>자동</code>(패턴 기반) 상태입니다. 연차·병가 등 예외가 있는 날짜만 드롭다운에서 직접 코드를 선택하면 자동으로 <code>주황 배경</code>으로 표시되어 구분됩니다.</div></div></li>
         <li class="step"><span class="idx">03</span><div><div class="h">근무 패턴 설정</div><div class="d">신규 직원이나 패턴이 바뀐 직원은 이름 아래 프리셋 버튼(야시작 · 주시작 · 상시 · 주주야휴숙숙)을 눌러 반복 패턴을 한 번에 지정합니다.</div></div></li>
-        <li class="step"><span class="idx">04</span><div><div class="h">미리보기 · 출력</div><div class="d"><code>미리보기</code>로 범례·서명란·근무시간 합계가 포함된 최종 문서를 확인하고, <code>엑셀로 출력</code> 또는 <code>PDF 출력</code>으로 내려받습니다. PDF는 A3 가로 한 장에 맞춰 자동 축소됩니다.</div></div></li>
-        <li class="step"><span class="idx">05</span><div><div class="h">근무자 서명</div><div class="d">미리보기의 <code>서명하기</code> 버튼을 눌러 화면에 직접 서명하면 해당 직원·해당 월에 서명이 저장되고, 상단에 서명 미완료 인원이 자동으로 집계됩니다.</div></div></li>
-        <li class="step"><span class="idx">06</span><div><div class="h">근무표 확정</div><div class="d">월 근무표 입력이 끝나면 <code>근무표 확정</code>을 누릅니다. 확정 후에는 이 지사에서 직접 수정할 수 없고, <code>수정 요청</code> 버튼으로 변경 사유를 적어 관리자에게 보내야 합니다.</div></div></li>
+        <li class="step"><span class="idx">04</span><div><div class="h">엑셀 가져오기 · 사전 등록</div><div class="d">기존에 쓰던 엑셀 근무계획표는 <code>엑셀 가져오기</code> 탭에서 헤더 위치를 지정해 그대로 불러올 수 있습니다. 앞으로 예정된 연차·교육·청원은 <code>관리자 설정</code> 탭에서 기간을 지정해 미리 등록해두면 해당 월이 되었을 때 자동으로 반영됩니다.</div></div></li>
+        <li class="step"><span class="idx">05</span><div><div class="h">미리보기 · 출력</div><div class="d"><code>미리보기</code>로 범례·서명란·근무시간 합계가 포함된 최종 문서를 확인하고, <code>엑셀로 출력</code> 또는 <code>PDF 출력</code>으로 내려받습니다. PDF는 A4 가로 한 장에 맞춰 자동 축소됩니다.</div></div></li>
+        <li class="step"><span class="idx">06</span><div><div class="h">근무자 서명</div><div class="d">미리보기의 <code>서명하기</code> 버튼을 눌러 화면에 직접 서명하면 해당 직원·해당 월에 서명이 저장되고, 상단에 서명 미완료 인원이 자동으로 집계됩니다.</div></div></li>
+        <li class="step"><span class="idx">07</span><div><div class="h">근무표 확정</div><div class="d">월 근무표 입력이 끝나면 <code>근무표 확정</code>을 누릅니다. 확정 후에는 이 지사에서 직접 수정할 수 없고, <code>수정 요청</code> 버튼으로 변경 사유를 적어 관리자에게 보내야 합니다.</div></div></li>
+        <li class="step"><span class="idx">08</span><div><div class="h">근로시간 검증시트</div><div class="d"><code>검증 시작일</code>을 지정하고 <code>근로시간 검증시트</code>를 누르면, 91일(13주) 단위로 주64시간·분기평균52시간 초과 여부를 자동 점검하고 ERP 업로드용 양식까지 함께 생성합니다.</div></div></li>
       </ol>
 
       <h3 style="font-size:15px;margin:28px 0 4px;">관리자</h3>
       <ol class="step-list">
         <li class="step"><span class="idx">01</span><div><div class="h">관리자 로그인</div><div class="d">로그인 화면에서 <code>관리자로 로그인</code>을 체크하고 관리자 비밀번호를 입력하면 전체 지사·전체 메뉴에 접근합니다.</div></div></li>
         <li class="step"><span class="idx">02</span><div><div class="h">수정 요청 처리</div><div class="d"><code>운영 알림 · 자동검증</code> 탭 ③번에서 지사가 보낸 수정 요청을 확인하고, 필요 시 확정을 취소해 직접 수정한 뒤 <code>처리완료로 표시</code>를 누릅니다.</div></div></li>
-        <li class="step"><span class="idx">03</span><div><div class="h">비밀번호 관리</div><div class="d"><code>관리자 설정</code> 탭에서 지사별·관리자 비밀번호를 코드 수정 없이 바꾸거나 기본값으로 되돌립니다.</div></div></li>
-        <li class="step"><span class="idx">04</span><div><div class="h">지사·지도사·백업 관리</div><div class="d">같은 탭에서 지사 추가/삭제, 경비지도사 정보 수정, 전체 데이터 백업(JSON) 다운로드와 복원을 수행합니다.</div></div></li>
+        <li class="step"><span class="idx">03</span><div><div class="h">비밀번호 관리</div><div class="d"><code>관리자 설정</code> 탭에서 지사별·관리자 비밀번호는 물론 구역·사번 단위 비밀번호까지 코드 수정 없이 바꾸거나 기본값으로 되돌립니다.</div></div></li>
+        <li class="step"><span class="idx">04</span><div><div class="h">지사·구역·백업 관리</div><div class="d">같은 탭에서 지사 추가/삭제, 경비지도사 정보 수정, 구역/호수별 직원 배정, 전체 데이터 백업(JSON) 다운로드와 복원을 수행합니다.</div></div></li>
+        <li class="step"><span class="idx">05</span><div><div class="h">대시보드 · 전사 초과근무 현황</div><div class="d">기준일 하루의 지사별 주·야·숙 인원 분포와 구역 공백, 기준월 한 달간 주64h·분기평균52h 초과 직원을 전체 지사에서 한 번에 확인합니다.</div></div></li>
       </ol>
     </section>
 
