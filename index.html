@@ -1053,7 +1053,6 @@ const DUTY_LIST = ['','기술점검','출동지원','기계경비·출동'];
 // 드롭다운(DUTY_LIST 기반)과 항상 같은 선택지를 갖도록 한다(값이 두 곳에 따로 있으면
 // 하나만 고치고 잊어버리기 쉬움).
 document.getElementById('newEmpDuty').innerHTML = DUTY_LIST.map(d=>`<option value="${d}">${d||'직무 선택 안함'}</option>`).join('');
-const OFF_CODES = new Set(['휴','연차','청원','공가','병가','비번','']);
 /* 범례/근태유형 기준 근무시간(시간). 표시는 관례상 주/야/휴 코드를 그대로 쓰되,
    시간 계산만 범례값(A=일근8, B=석근14, K=숙명0 등)을 매핑해 적용합니다. */
 const HOUR_MAP = { '':0, '주':8, '야':14, '휴':0, '숙':0, '전일':22, '연차':0, '청원':0, '공가':0, '병가':0, '교육':8, '비번':0 };
@@ -1375,11 +1374,17 @@ function effectiveCode(emp, dateStr){
   if(emp.overrides && Object.prototype.hasOwnProperty.call(emp.overrides,dateStr)) return emp.overrides[dateStr];
   return autoCodeFor(emp, dateStr);
 }
+/* 순회감독 "배치인원" 판정 기준 — 그 지사 소속이라도 그날 실제로 현장에서 주/야
+   근무 중인 사람만 배치 인원으로 친다. 숙(대기)·전일·교육·연차 등은 현장에 없거나
+   순회 대상이 아니므로 전부 제외(대체근무·지역태그 코드는 baseCodeOf로 원래 코드로
+   환원해 같은 기준으로 판정). 캘린더 상세 팝업(showCalDayDetail)과 이 함수가 항상
+   같은 정의를 쓰도록 여기 하나로 모아둔다. */
+function isPatrolOnDutyCode(code){ return ['주','야'].includes(baseCodeOf(code)); }
 function onDutyCount(branch, dateStr){
   if(!dateStr) return {count:0,total:0};
   const staff = employees.filter(e=>e.branch===branch);
   let count=0;
-  staff.forEach(e=>{ if(!OFF_CODES.has(baseCodeOf(effectiveCode(e,dateStr)))) count++; });
+  staff.forEach(e=>{ if(isPatrolOnDutyCode(effectiveCode(e,dateStr))) count++; });
   return {count, total:staff.length};
 }
 function generateFromPreset(key, monthStartStr){
@@ -4071,19 +4076,18 @@ function showCalDayDetail(ds){
   if(items.length===0){ wrap.style.display='none'; return; }
   const branchesToday = [...new Set(items.map(r=>r.branch))];
   let html = `<h3 style="font-size:14.5px;margin:0 0 8px;">${ds} 순회 대상 지사 배치 인원</h3>`;
-  // 배치인원(순회감독 대상)은 그날 실제로 현장에서 주/야 근무 중인 인원만 해당 — 숙(대기)·휴·연차 등은
-  // 그 지사 소속이라도 현장에 없거나 순회 대상이 아니므로 제외한다. (대체근무·지역태그 코드는
-  // baseCodeOf로 원래 코드로 환원해 같은 기준으로 판정.)
+  // 배치인원(순회감독 대상) 판정 기준은 onDutyCount()·isPatrolOnDutyCode()와 동일 — 정의가
+  // 두 군데서 어긋나지 않도록 같은 함수를 재사용한다.
   branchesToday.forEach(b=>{
     const staff = employees.filter(e=>e.branch===b).slice().sort((a,c)=> (a.zone||'').localeCompare(c.zone||'') || a.empno.localeCompare(c.empno));
-    const onDuty = staff.filter(e=> ['주','야'].includes(baseCodeOf(effectiveCode(e, ds))));
+    const onDuty = staff.filter(e=> isPatrolOnDutyCode(effectiveCode(e, ds)));
     html += `<p class="sub" style="margin:10px 0 4px;">${esc(b)}지사 · 배치인원(주/야) <b>${onDuty.length}명</b> <span style="color:var(--text-mute);">(전체 등록 ${staff.length}명, 숙·휴·연차 등 제외)</span></p>`;
     if(staff.length===0){ html += `<p class="sub" style="margin:0 0 8px;">등록된 직원이 없습니다.</p>`; }
     else{
       html += '<div class="table-scroll"><table class="grid"><thead><tr><th>지사</th><th>사번</th><th style="text-align:left;">성명</th><th>근무유형</th></tr></thead><tbody>';
       staff.forEach(e=>{
         const code = effectiveCode(e, ds) || '';
-        const counted = ['주','야'].includes(baseCodeOf(code));
+        const counted = isPatrolOnDutyCode(code);
         html += `<tr${counted?'':' style="opacity:.5;"'}><td>${esc(e.branch)}</td><td>${esc(e.empno)}</td><td style="text-align:left;">${esc(e.name)}</td><td class="code-${esc(baseCodeOf(code))}">${esc(code) || '-'}</td></tr>`;
       });
       html += '</tbody></table></div>';
