@@ -5,6 +5,10 @@
 // 매번 같은 경로에 쓰기 때문에 브라우저 저장소(localStorage)에 저장된
 // 근무표 데이터는 실행할 때마다 그대로 유지됩니다.
 //
+// "차량관리" 버튼이 여는 vehicle-management.html은 개인정보 때문에 embed하지 않는다.
+// 실행 파일과 같은 폴더에 그 파일을 따로 놓아두면, 실행할 때마다 그것도 함께 임시
+// 폴더로 복사해서 차량관리 버튼이 정상 작동하게 한다(없으면 조용히 건너뜀).
+//
 // 주의: 이 실행 파일은 빌드 시점의 index.html 스냅샷을 담고 있습니다.
 // 앱이 업데이트되면 이 실행 파일도 새로 빌드해서 다시 배포해야 최신 화면이 보입니다.
 package main
@@ -13,6 +17,7 @@ import (
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,6 +34,30 @@ func messageBox(title, text string) {
 	titlePtr, _ := syscall.UTF16PtrFromString(title)
 	textPtr, _ := syscall.UTF16PtrFromString(text)
 	proc.Call(0, uintptr(unsafe.Pointer(textPtr)), uintptr(unsafe.Pointer(titlePtr)), 0x10)
+}
+
+// vehicle-management.html은 실명·사번·계좌번호 등 실제 개인정보가 들어있어서 exe 안에
+// 절대 go:embed하지 않는다 — embed하면 그 정보가 exe 파일 자체에 그대로 박혀서 다른 PC에
+// 복사·배포될 때마다 함께 퍼진다. 대신 실행 파일과 같은 폴더에 그 파일이 "따로" 놓여 있는
+// 경우에만, 실행 시점에 임시 폴더로 복사해서 index.html의 "차량관리" 버튼이 그 사본을 찾아
+// 열 수 있게 한다. 파일이 없으면 조용히 건너뛴다 — 차량관리를 안 쓰는 지사는 둘 필요 없다.
+func copySiblingVehicleManagementHTML(tmpDir string) {
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	src, err := os.Open(filepath.Join(filepath.Dir(exePath), "vehicle-management.html"))
+	if err != nil {
+		return
+	}
+	defer src.Close()
+
+	dst, err := os.Create(filepath.Join(tmpDir, "vehicle-management.html"))
+	if err != nil {
+		return
+	}
+	defer dst.Close()
+	io.Copy(dst, src)
 }
 
 func main() {
@@ -52,6 +81,8 @@ func main() {
 		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
 		return
 	}
+
+	copySiblingVehicleManagementHTML(tmpDir)
 
 	cmd := exec.Command("cmd", "/c", "start", "", htmlPath)
 	if err := cmd.Start(); err != nil {
