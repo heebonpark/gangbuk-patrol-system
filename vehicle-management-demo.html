@@ -172,7 +172,10 @@ table.data tbody tr:last-child td{border-bottom:none;}
       <div class="sub">차량월마감 · 점검 · 사고/과태료</div>
     </div>
   </div>
-  <div class="right" id="lastSavedLabel"></div>
+  <div class="right">
+    <a class="back" href="#" id="btnGoVehicleInspection" style="margin-right:14px;">🛵 자산차량상태평가</a>
+    <span id="lastSavedLabel"></span>
+  </div>
 </header>
 
 <nav class="tabs" id="tabNav">
@@ -704,6 +707,11 @@ function seedClone(){
     tinting: SEED_TINTING.map((r,i)=>Object.assign({_id:'tinting_'+i}, r)),
   };
 }
+document.getElementById('btnGoVehicleInspection').addEventListener('click', function(e){
+  e.preventDefault();
+  // 자산차량상태평가는 별도 서버(Streamlit)에서 도는 완전히 다른 앱이라 새 탭으로 연다.
+  window.open('https://vehicle-inspection-app-gemcjdxsuffgjhwn2gfas2.streamlit.app/', '_blank');
+});
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
