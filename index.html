@@ -547,7 +547,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="status-pill login-hidden" id="licenseWarnPill"></div>
   <div class="status-pill" id="loginStatusPill">
     <span id="loginStatusLabel"></span>
-    <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:6px;">로그아웃</a>
+    <a href="vehicle-management.html" style="color:#fff;text-decoration:underline;margin-left:10px;">🚗 차량관리</a>
+    <a href="#" id="btnGoVehicleInspection" style="color:#fff;text-decoration:underline;margin-left:10px;">🛵 자산차량상태평가</a>
+    <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:10px;">로그아웃</a>
   </div>
 </header>
 
@@ -1794,6 +1796,11 @@ document.getElementById('btnLogout').addEventListener('click', (e)=>{
   e.preventDefault();
   sessionStorage.removeItem('patrol_auth');
   location.reload();
+});
+document.getElementById('btnGoVehicleInspection').addEventListener('click', (e)=>{
+  e.preventDefault();
+  // 자산차량상태평가는 별도 서버(Streamlit)에서 도는 완전히 다른 앱이라 새 탭으로 연다.
+  window.open('https://vehicle-inspection-app-gemcjdxsuffgjhwn2gfas2.streamlit.app/', '_blank');
 });
 function setSyncStatus(msg, ok=true){
   document.getElementById('syncStatus').textContent = msg;
