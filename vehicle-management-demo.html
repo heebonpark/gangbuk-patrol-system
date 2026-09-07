@@ -1727,6 +1727,15 @@ function downloadUploadTemplate(){
 
 /* ================= 시작 ================= */
 loadState();
+(function initBranchFromLogin(){
+  try{
+    const b = new URLSearchParams(location.search).get('branch');
+    if(!b) return;
+    const canonical = canonicalBranch(b);
+    dashboardBranch = canonical;
+    DOMAIN_KEYS.forEach(domain=>{ branchFilterState[domain] = rawBranchFor(domain, canonical); });
+  }catch(e){}
+})();
 renderAll();
 initUploadTab();
 renderStorageUsage();
