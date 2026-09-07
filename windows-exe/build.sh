@@ -4,6 +4,7 @@
 set -e
 cd "$(dirname "$0")"
 cp ../index.html ./index.html
+cp ../vehicle-management.html ./vehicle-management.html
 
 # versioninfo.json에 적어둔 저작권/제품 정보를 exe 파일 속성(우클릭 > 속성 > 자세히)에
 # 심는다. goversioninfo가 없으면 최초 1회 설치(go install)한 뒤 resource.syso를 새로

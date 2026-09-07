@@ -11,6 +11,9 @@ set -e
 cd "$(dirname "$0")"
 
 node make-blank-html.js ../index.html ./index.html
+cp ../vehicle-management.html ./vehicle-management.html
+# vehicle-management.html은 임의 생성된 테스트 데이터라 그대로 담아도 되지만, 새 고객
+# 배포판이니 원치 않으면 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다.
 
 if ! command -v goversioninfo >/dev/null 2>&1; then
   GOVERSIONINFO_BIN="$(go env GOPATH)/bin/goversioninfo"
