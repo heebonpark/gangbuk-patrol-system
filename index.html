@@ -547,7 +547,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="status-pill login-hidden" id="licenseWarnPill"></div>
   <div class="status-pill" id="loginStatusPill">
     <span id="loginStatusLabel"></span>
-    <a href="vehicle-management.html" style="color:#fff;text-decoration:underline;margin-left:10px;">🚗 차량관리</a>
+    <a href="#" id="btnGoVehicleManagement" style="color:#fff;text-decoration:underline;margin-left:10px;">🚗 차량관리</a>
     <a href="#" id="btnGoVehicleInspection" style="color:#fff;text-decoration:underline;margin-left:10px;">🛵 자산차량상태평가</a>
     <a href="#" id="btnLogout" style="color:#fff;text-decoration:underline;margin-left:10px;">로그아웃</a>
   </div>
@@ -1550,6 +1550,13 @@ function getLoginFailState(){ try{ return JSON.parse(safeLocalGet('patrol_login_
 function saveLoginFailState(s){ safeLocalSet('patrol_login_fails', JSON.stringify(s)); }
 function currentAuth(){ try{ const raw = sessionStorage.getItem('patrol_auth'); return raw ? JSON.parse(raw) : null; }catch(e){ return null; } }
 function loginLabel(){ const a = currentAuth(); return a ? (a.isAdmin ? '관리자' : a.branch + ' 지사' + (a.zone ? ` · ${a.zone}` : '') + (a.empno ? ` · ${a.empno}` : '')) : ''; }
+function goVehicleManagement(){
+  // 지사 로그인이면 그 지사로 미리 필터링해서 넘어간다 — 관리자(본부 총괄)는 전체를 봐야 하므로
+  // 필터를 걸지 않는다.
+  const a = currentAuth();
+  const branch = (a && !a.isAdmin && a.branch) ? a.branch : '';
+  location.href = 'vehicle-management.html' + (branch ? ('?branch=' + encodeURIComponent(branch)) : '');
+}
 function applyLoginBranchDefault(){
   const a = currentAuth();
   if(a && !a.isAdmin && a.branch){ const rb = document.getElementById('rosterBranch'); if(rb && [...rb.options].some(o=>o.value===a.branch)) rb.value = a.branch; }
@@ -1796,6 +1803,10 @@ document.getElementById('btnLogout').addEventListener('click', (e)=>{
   e.preventDefault();
   sessionStorage.removeItem('patrol_auth');
   location.reload();
+});
+document.getElementById('btnGoVehicleManagement').addEventListener('click', (e)=>{
+  e.preventDefault();
+  goVehicleManagement();
 });
 document.getElementById('btnGoVehicleInspection').addEventListener('click', (e)=>{
   e.preventDefault();
@@ -5458,7 +5469,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
   });
   document.getElementById('btnHubVehicle').addEventListener('click', ()=>{
-    location.href = 'vehicle-management.html';
+    goVehicleManagement();
   });
   document.getElementById('btnHubVehicleInspection').addEventListener('click', ()=>{
     // 자산차량상태평가는 별도 서버(Streamlit)에서 도는 완전히 다른 앱이라 이 페이지를
