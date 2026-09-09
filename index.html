@@ -501,6 +501,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <span class="hub-btn-title">카드키판매등록</span>
         <span class="hub-btn-desc">카드키 판매 등록</span>
       </button>
+      <button type="button" class="hub-btn" id="btnHubCollection">
+        <span class="hub-btn-icon">📋</span>
+        <span class="hub-btn-title">체납관리</span>
+        <span class="hub-btn-desc">체납 현황 대시보드</span>
+      </button>
     </div>
     <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;margin-top:18px;text-decoration:underline;cursor:pointer;">로그아웃</a>
   </div>
@@ -5486,6 +5491,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 카드키판매등록도 별도 서버(Streamlit)의 완전히 다른 앱 — 새 탭으로 열고,
     // 그 앱 자체의 로그인(뷰어 인증)은 사용자가 그 탭에서 별도로 진행해야 한다.
     window.open('https://cardkey-management-web-kaeegcdyyj35ejuwdmappco.streamlit.app/Sales_Registration', '_blank');
+  });
+  document.getElementById('btnHubCollection').addEventListener('click', ()=>{
+    // 체납관리도 별도 서버(Vercel)에서 도는 완전히 다른 앱 — 새 탭으로 열고,
+    // 그 앱 자체의 로그인은 사용자가 그 탭에서 별도로 진행해야 한다.
+    window.open('https://collection-management-dashboard.vercel.app/', '_blank');
   });
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
     e.preventDefault();
