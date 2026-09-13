@@ -480,7 +480,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="login-box" style="max-width:600px;text-align:center;">
     <h1>어떤 업무를 여시겠어요?</h1>
     <p class="sub" id="hubLoginLabel"></p>
-    <div class="hub-btn-grid">
+    <div class="hub-btn-grid" id="hubMainGrid">
       <button type="button" class="hub-btn" id="btnHubAttendance">
         <span class="hub-btn-icon">🗓️</span>
         <span class="hub-btn-title">근태관리</span>
@@ -506,6 +506,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <span class="hub-btn-title">체납관리</span>
         <span class="hub-btn-desc">체납 현황 대시보드</span>
       </button>
+      <button type="button" class="hub-btn" id="btnHubLineManagement">
+        <span class="hub-btn-icon">📶</span>
+        <span class="hub-btn-title">회선관리</span>
+        <span class="hub-btn-desc">MVNO · WCDMA</span>
+      </button>
+      <button type="button" class="hub-btn" id="btnHubBidConstruction">
+        <span class="hub-btn-icon">🏗️</span>
+        <span class="hub-btn-title">입찰/공사팀신청</span>
+        <span class="hub-btn-desc">입찰일정등록 · 공사팀신청</span>
+      </button>
+    </div>
+    <!-- 회선관리 하위 메뉴: 실제 링크는 각 도구가 따로 만들어진 뒤 관리자가 채워 넣는다
+         (아래 openHubLink/openHubLinkSettings, hubExternalLinks localStorage 참고). -->
+    <div class="hub-btn-grid login-hidden" id="hubLineGrid">
+      <button type="button" class="hub-btn" id="btnHubMVNO">
+        <span class="hub-btn-icon">📡</span>
+        <span class="hub-btn-title">MVNO</span>
+        <span class="hub-btn-desc">회선관리 · MVNO</span>
+      </button>
+      <button type="button" class="hub-btn" id="btnHubWCDMA">
+        <span class="hub-btn-icon">📱</span>
+        <span class="hub-btn-title">WCDMA</span>
+        <span class="hub-btn-desc">회선관리 · WCDMA</span>
+      </button>
+    </div>
+    <div class="hub-btn-grid login-hidden" id="hubBidGrid">
+      <button type="button" class="hub-btn" id="btnHubBidSchedule">
+        <span class="hub-btn-icon">🗂️</span>
+        <span class="hub-btn-title">입찰일정등록</span>
+        <span class="hub-btn-desc">입찰/공사팀신청 · 입찰일정등록</span>
+      </button>
+      <button type="button" class="hub-btn" id="btnHubConstructionTeam">
+        <span class="hub-btn-icon">👷</span>
+        <span class="hub-btn-title">공사팀신청</span>
+        <span class="hub-btn-desc">입찰/공사팀신청 · 공사팀신청</span>
+      </button>
+    </div>
+    <div id="hubSubActions" class="login-hidden" style="margin-top:14px;">
+      <a href="#" id="btnHubSubBack" class="sub" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">← 뒤로가기</a>
+      <a href="#" id="btnHubLinkSettings" class="sub login-hidden" style="display:inline-block;text-decoration:underline;cursor:pointer;">🔧 링크 설정(관리자)</a>
     </div>
     <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;margin-top:18px;text-decoration:underline;cursor:pointer;">로그아웃</a>
   </div>
@@ -5471,6 +5511,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     if(!gate.classList.contains('login-hidden')) return; // 아직 로그인 전
     hubLabel.textContent = (typeof loginLabel==='function' && loginLabel()) ? ('로그인: ' + loginLabel()) : '';
     hub.classList.remove('login-hidden');
+    if(typeof hideSubmenu === 'function') hideSubmenu(); // 회선관리/입찰·공사팀신청 하위메뉴는 항상 처음엔 접힌 상태로
   }
   showHubIfLoggedIn(); // 세션이 이미 복원되어 있던 경우(새로고침 등)를 위한 즉시 확인
   new MutationObserver(showHubIfLoggedIn).observe(gate, {attributes:true, attributeFilter:['class']});
@@ -5497,6 +5538,83 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 그 앱 자체의 로그인은 사용자가 그 탭에서 별도로 진행해야 한다.
     window.open('https://collection-management-dashboard.vercel.app/', '_blank');
   });
+
+  /* ---- 회선관리(MVNO/WCDMA) · 입찰/공사팀신청(입찰일정등록/공사팀신청) ----
+     이 4개는 아직 만들어지지 않은(또는 나중에 따로 만드는) 별도 도구라 URL을 코드에
+     못박아두지 않는다. 대신 관리자가 로그인해서 "🔧 링크 설정"으로 각자 넣도록 하고,
+     이 브라우저의 localStorage(hubExternalLinks)에 저장해 다음부터 그 링크로 바로 연결한다. */
+  const HUB_SUBMENUS = {
+    line: { grid: 'hubLineGrid', items: [
+      { key:'mvno',  label:'MVNO' },
+      { key:'wcdma', label:'WCDMA' }
+    ] },
+    bid: { grid: 'hubBidGrid', items: [
+      { key:'bidSchedule',       label:'입찰일정등록' },
+      { key:'constructionTeam',  label:'공사팀신청' }
+    ] }
+  };
+  const mainGrid = document.getElementById('hubMainGrid');
+  const subActions = document.getElementById('hubSubActions');
+  const linkSettingsBtn = document.getElementById('btnHubLinkSettings');
+  let activeSubmenu = null;
+
+  function getHubLinks(){
+    try{ return JSON.parse(localStorage.getItem('hubExternalLinks') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setHubLink(key, url){
+    const links = getHubLinks();
+    links[key] = url;
+    localStorage.setItem('hubExternalLinks', JSON.stringify(links));
+  }
+  function openHubLink(key, label){
+    const url = (getHubLinks()[key] || '').trim();
+    if(url){ window.open(url, '_blank'); return; }
+    const auth = currentAuth();
+    if(auth && auth.isAdmin){
+      const input = prompt(`"${label}" 링크가 아직 설정되지 않았습니다.\n연결할 URL을 입력하세요.`, 'https://');
+      if(input && input.trim()){ setHubLink(key, input.trim()); window.open(input.trim(), '_blank'); }
+    } else {
+      alert('관리자가 아직 이 메뉴의 링크를 설정하지 않았습니다.');
+    }
+  }
+  function showSubmenu(name){
+    activeSubmenu = name;
+    mainGrid.classList.add('login-hidden');
+    Object.values(HUB_SUBMENUS).forEach(sm=>{
+      document.getElementById(sm.grid).classList.add('login-hidden');
+    });
+    document.getElementById(HUB_SUBMENUS[name].grid).classList.remove('login-hidden');
+    subActions.classList.remove('login-hidden');
+    const auth = currentAuth();
+    linkSettingsBtn.classList.toggle('login-hidden', !(auth && auth.isAdmin));
+  }
+  function hideSubmenu(){
+    activeSubmenu = null;
+    Object.values(HUB_SUBMENUS).forEach(sm=>{
+      document.getElementById(sm.grid).classList.add('login-hidden');
+    });
+    subActions.classList.add('login-hidden');
+    mainGrid.classList.remove('login-hidden');
+  }
+  document.getElementById('btnHubLineManagement').addEventListener('click', ()=> showSubmenu('line'));
+  document.getElementById('btnHubBidConstruction').addEventListener('click', ()=> showSubmenu('bid'));
+  document.getElementById('btnHubSubBack').addEventListener('click', (e)=>{ e.preventDefault(); hideSubmenu(); });
+  document.getElementById('btnHubLinkSettings').addEventListener('click', (e)=>{
+    e.preventDefault();
+    if(!activeSubmenu) return;
+    HUB_SUBMENUS[activeSubmenu].items.forEach(({key,label})=>{
+      const cur = getHubLinks()[key] || '';
+      const input = prompt(`"${label}" 링크를 입력하세요.\n(비워두고 확인을 누르면 미설정 상태로 둡니다)`, cur);
+      if(input !== null){ setHubLink(key, input.trim()); }
+    });
+    alert('링크 설정이 저장되었습니다.');
+  });
+  document.getElementById('btnHubMVNO').addEventListener('click', ()=> openHubLink('mvno', 'MVNO'));
+  document.getElementById('btnHubWCDMA').addEventListener('click', ()=> openHubLink('wcdma', 'WCDMA'));
+  document.getElementById('btnHubBidSchedule').addEventListener('click', ()=> openHubLink('bidSchedule', '입찰일정등록'));
+  document.getElementById('btnHubConstructionTeam').addEventListener('click', ()=> openHubLink('constructionTeam', '공사팀신청'));
+
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
     e.preventDefault();
     hub.classList.add('login-hidden');
