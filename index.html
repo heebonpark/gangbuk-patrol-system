@@ -410,10 +410,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hub-section{margin-bottom:20px;}
   .hub-section:last-child{margin-bottom:0;}
   .hub-section-title{font-size:11px;font-weight:800;color:var(--text-mute);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;text-align:left;}
-  .hub-visibility-group{font-size:11px;font-weight:800;color:var(--text-mute);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 4px;}
-  .hub-visibility-group:first-child{margin-top:0;}
   .hub-visibility-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--text);}
   .hub-visibility-row input{width:15px;height:15px;flex:none;}
+  .hub-visibility-row select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);flex:none;}
   .hub-btn{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
   .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
   .hub-btn-icon{font-size:26px;}
@@ -5691,29 +5690,26 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubBidSchedule').addEventListener('click', ()=> openHubLink('bidSchedule', '입찰일정등록'));
   document.getElementById('btnHubConstructionTeam').addEventListener('click', ()=> openHubLink('constructionTeam', '공사팀신청'));
 
-  /* ---- 화면 구성 설정: 어떤 허브 메뉴를 지사(일반) 로그인에게 보여줄지 관리자가 고른다.
-     관리자 본인은 이 설정과 무관하게 항상 전체 메뉴를 본다(배포 후 지사별로 필요 없는
-     메뉴를 숨긴 채로 exe를 나눠줄 수 있도록). ---- */
-  const HUB_CATEGORIES = [
-    { section:'common', label:'공통', items:[
-      { key:'attendance',        label:'근태관리' },
-      { key:'vehicle',           label:'차량관리' },
-      { key:'vehicleInspection', label:'자산차량상태평가' },
-      { key:'cardKeySales',      label:'카드키판매등록' },
-      { key:'lineManagement',    label:'회선관리' },
-      { key:'assetManagement',   label:'자산관리' },
-      { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가' },
-      { key:'securityNewsLLM',   label:'보안뉴스 LLM' }
-    ] },
-    { section:'sales', label:'영업', items:[
-      { key:'salesWeekly',       label:'영업주간업무' },
-      { key:'bidConstruction',   label:'입찰/공사팀신청' }
-    ] },
-    { section:'customer', label:'고객', items:[
-      { key:'collection',           label:'체납관리' },
-      { key:'incidentManagement',   label:'사건사고관리' }
-    ] }
+  /* ---- 화면 구성 설정: 어떤 허브 메뉴를 지사(일반) 로그인에게 보여줄지, 그리고 공통/영업/
+     고객 중 어느 분류에 둘지를 관리자가 고른다. 관리자 본인은 이 설정과 무관하게 항상 전체
+     메뉴를 본다(배포 후 지사별로 필요 없는 메뉴를 숨기거나 분류를 바꾼 채로 exe를 나눠줄
+     수 있도록). 분류는 hubButtonCategory(localStorage)에 "바뀐 것만" 저장하고, 없으면
+     defaultCategory(아래 목록에 적힌 원래 위치)를 그대로 쓴다. ---- */
+  const HUB_ITEMS = [
+    { key:'attendance',        label:'근태관리',              defaultCategory:'common' },
+    { key:'vehicle',           label:'차량관리',              defaultCategory:'common' },
+    { key:'vehicleInspection', label:'자산차량상태평가',       defaultCategory:'common' },
+    { key:'cardKeySales',      label:'카드키판매등록',         defaultCategory:'common' },
+    { key:'lineManagement',    label:'회선관리',              defaultCategory:'common' },
+    { key:'assetManagement',   label:'자산관리',              defaultCategory:'common' },
+    { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가', defaultCategory:'common' },
+    { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
+    { key:'salesWeekly',       label:'영업주간업무',           defaultCategory:'sales' },
+    { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
+    { key:'collection',        label:'체납관리',              defaultCategory:'customer' },
+    { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' }
   ];
+  const HUB_CATEGORY_LABELS = { common:'공통', sales:'영업', customer:'고객' };
   const visibilitySettingsBtn = document.getElementById('btnHubVisibilitySettings');
   const visibilityPanel = document.getElementById('hubVisibilityPanel');
   const visibilityList = document.getElementById('hubVisibilityList');
@@ -5725,7 +5721,29 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   function setHubVisibility(map){
     localStorage.setItem('hubButtonVisibility', JSON.stringify(map));
   }
+  function getHubCategoryOverrides(){
+    try{ return JSON.parse(localStorage.getItem('hubButtonCategory') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setHubCategoryOverrides(map){
+    localStorage.setItem('hubButtonCategory', JSON.stringify(map));
+  }
+  function resolveHubCategory(key){
+    const item = HUB_ITEMS.find(i=>i.key===key);
+    const overrides = getHubCategoryOverrides();
+    return overrides[key] || (item && item.defaultCategory) || 'common';
+  }
+  function applyHubCategories(){
+    HUB_ITEMS.forEach(({key})=>{
+      const btn = document.querySelector(`#hubMainGrid [data-hub-key="${key}"]`);
+      if(!btn) return;
+      const cat = resolveHubCategory(key);
+      const targetGrid = document.querySelector(`#hubMainGrid [data-hub-section="${cat}"] .hub-btn-grid`);
+      if(targetGrid && btn.parentElement !== targetGrid) targetGrid.appendChild(btn);
+    });
+  }
   function applyHubVisibility(){
+    applyHubCategories(); // 분류가 바뀌었을 수 있으니 노출 여부 계산 전에 먼저 제자리로 옮긴다
     const auth = currentAuth();
     const isAdmin = !!(auth && auth.isAdmin);
     const vis = getHubVisibility();
@@ -5742,13 +5760,19 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   }
   function renderHubVisibilityPanel(){
     const vis = getHubVisibility();
-    visibilityList.innerHTML = HUB_CATEGORIES.map(cat=>{
-      const rows = cat.items.map(({key,label})=>{
-        const checked = vis[key] !== false ? 'checked' : '';
-        return `<label class="hub-visibility-row"><input type="checkbox" data-vis-key="${key}" ${checked}> ${label}</label>`;
-      }).join('');
-      return `<div class="hub-visibility-group">${cat.label}</div>${rows}`;
+    const catOptions = Object.entries(HUB_CATEGORY_LABELS)
+      .map(([val,label])=>`<option value="${val}">${label}</option>`).join('');
+    visibilityList.innerHTML = HUB_ITEMS.map(({key,label})=>{
+      const checked = vis[key] !== false ? 'checked' : '';
+      const curCat = resolveHubCategory(key);
+      const select = `<select data-cat-key="${key}">${catOptions}</select>`;
+      return `<div class="hub-visibility-row"><label style="display:flex;align-items:center;gap:8px;flex:1;"><input type="checkbox" data-vis-key="${key}" ${checked}> ${label}</label>${select}</div>`;
     }).join('');
+    // 각 select의 현재 값을 분류에 맞게 지정 (innerHTML 문자열엔 selected를 못 넣었으니 여기서)
+    HUB_ITEMS.forEach(({key})=>{
+      const sel = visibilityList.querySelector(`select[data-cat-key="${key}"]`);
+      if(sel) sel.value = resolveHubCategory(key);
+    });
   }
   visibilitySettingsBtn.addEventListener('click', (e)=>{
     e.preventDefault();
@@ -5759,11 +5783,16 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     visibilityPanel.classList.add('login-hidden');
   });
   document.getElementById('btnHubVisibilitySave').addEventListener('click', ()=>{
-    const map = {};
+    const visMap = {};
     visibilityList.querySelectorAll('input[data-vis-key]').forEach(cb=>{
-      map[cb.getAttribute('data-vis-key')] = cb.checked;
+      visMap[cb.getAttribute('data-vis-key')] = cb.checked;
     });
-    setHubVisibility(map);
+    const catMap = {};
+    visibilityList.querySelectorAll('select[data-cat-key]').forEach(sel=>{
+      catMap[sel.getAttribute('data-cat-key')] = sel.value;
+    });
+    setHubVisibility(visMap);
+    setHubCategoryOverrides(catMap);
     visibilityPanel.classList.add('login-hidden');
     applyHubVisibility();
     alert('화면 구성 설정이 저장되었습니다.');
