@@ -407,6 +407,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
      이 화면이 그 위에 한 겹 얹혔다가 "근태관리"를 누르면 사라지는 방식. */
   .hub-btn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:6px;}
   @media (max-width:640px){ .hub-btn-grid{grid-template-columns:1fr;} }
+  .hub-section{margin-bottom:20px;}
+  .hub-section:last-child{margin-bottom:0;}
+  .hub-section-title{font-size:11px;font-weight:800;color:var(--text-mute);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;text-align:left;}
+  .hub-visibility-group{font-size:11px;font-weight:800;color:var(--text-mute);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 4px;}
+  .hub-visibility-group:first-child{margin-top:0;}
+  .hub-visibility-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--text);}
+  .hub-visibility-row input{width:15px;height:15px;flex:none;}
   .hub-btn{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
   .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
   .hub-btn-icon{font-size:26px;}
@@ -477,45 +484,85 @@ https://github.com/nodeca/pako/blob/main/LICENSE
      렌더링되어 있고, "근태관리"를 누르면 이 화면만 사라진다(기존 로직 변경 없음).
      "차량관리"는 완전히 별도 파일(vehicle-management.html)로 이동한다. -->
 <div class="login-gate login-hidden" id="systemHub">
-  <div class="login-box" style="max-width:600px;text-align:center;">
+  <div class="login-box" style="max-width:760px;text-align:center;">
     <h1>어떤 업무를 여시겠어요?</h1>
     <p class="sub" id="hubLoginLabel"></p>
-    <div class="hub-btn-grid" id="hubMainGrid">
-      <button type="button" class="hub-btn" id="btnHubAttendance">
-        <span class="hub-btn-icon">🗓️</span>
-        <span class="hub-btn-title">근태관리</span>
-        <span class="hub-btn-desc">근무표 · 순회감독 일정</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubVehicle">
-        <span class="hub-btn-icon">🚗</span>
-        <span class="hub-btn-title">차량관리</span>
-        <span class="hub-btn-desc">차량월마감 · 점검 · 사고/과태료</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubVehicleInspection">
-        <span class="hub-btn-icon">🛵</span>
-        <span class="hub-btn-title">자산차량상태평가</span>
-        <span class="hub-btn-desc">이륜차 점검표 · 4면 사진 · PDF/엑셀</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubCardKeySales">
-        <span class="hub-btn-icon">💳</span>
-        <span class="hub-btn-title">카드키판매등록</span>
-        <span class="hub-btn-desc">카드키 판매 등록</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubCollection">
-        <span class="hub-btn-icon">📋</span>
-        <span class="hub-btn-title">체납관리</span>
-        <span class="hub-btn-desc">체납 현황 대시보드</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubLineManagement">
-        <span class="hub-btn-icon">📶</span>
-        <span class="hub-btn-title">회선관리</span>
-        <span class="hub-btn-desc">MVNO · WCDMA</span>
-      </button>
-      <button type="button" class="hub-btn" id="btnHubBidConstruction">
-        <span class="hub-btn-icon">🏗️</span>
-        <span class="hub-btn-title">입찰/공사팀신청</span>
-        <span class="hub-btn-desc">입찰일정등록 · 공사팀신청</span>
-      </button>
+    <div id="hubMainGrid">
+      <div class="hub-section" data-hub-section="common">
+        <div class="hub-section-title">공통</div>
+        <div class="hub-btn-grid">
+          <button type="button" class="hub-btn" id="btnHubAttendance" data-hub-key="attendance">
+            <span class="hub-btn-icon">🗓️</span>
+            <span class="hub-btn-title">근태관리</span>
+            <span class="hub-btn-desc">근무표 · 순회감독 일정</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubVehicle" data-hub-key="vehicle">
+            <span class="hub-btn-icon">🚗</span>
+            <span class="hub-btn-title">차량관리</span>
+            <span class="hub-btn-desc">차량월마감 · 점검 · 사고/과태료</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubVehicleInspection" data-hub-key="vehicleInspection">
+            <span class="hub-btn-icon">🛵</span>
+            <span class="hub-btn-title">자산차량상태평가</span>
+            <span class="hub-btn-desc">이륜차 점검표 · 4면 사진 · PDF/엑셀</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubCardKeySales" data-hub-key="cardKeySales">
+            <span class="hub-btn-icon">💳</span>
+            <span class="hub-btn-title">카드키판매등록</span>
+            <span class="hub-btn-desc">카드키 판매 등록</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubLineManagement" data-hub-key="lineManagement">
+            <span class="hub-btn-icon">📶</span>
+            <span class="hub-btn-title">회선관리</span>
+            <span class="hub-btn-desc">MVNO · WCDMA</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubAssetManagement" data-hub-key="assetManagement" title="전사 자산관리">
+            <span class="hub-btn-icon">🗃️</span>
+            <span class="hub-btn-title">자산관리</span>
+            <span class="hub-btn-desc">전사 자산관리</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubTbmRisk" data-hub-key="tbmRisk" title="공사팀 작성">
+            <span class="hub-btn-icon">⚠️</span>
+            <span class="hub-btn-title">작업전 TBM 및 위험성평가</span>
+            <span class="hub-btn-desc">공사팀 작성</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubSecurityNewsLLM" data-hub-key="securityNewsLLM">
+            <span class="hub-btn-icon">🛡️</span>
+            <span class="hub-btn-title">보안뉴스 LLM</span>
+            <span class="hub-btn-desc">보안 뉴스 요약(LLM)</span>
+          </button>
+        </div>
+      </div>
+      <div class="hub-section" data-hub-section="sales">
+        <div class="hub-section-title">영업</div>
+        <div class="hub-btn-grid">
+          <button type="button" class="hub-btn" id="btnHubSalesWeekly" data-hub-key="salesWeekly" title="영업실적 및 활동내역">
+            <span class="hub-btn-icon">📈</span>
+            <span class="hub-btn-title">영업주간업무</span>
+            <span class="hub-btn-desc">영업실적 및 활동내역</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubBidConstruction" data-hub-key="bidConstruction">
+            <span class="hub-btn-icon">🏗️</span>
+            <span class="hub-btn-title">입찰/공사팀신청</span>
+            <span class="hub-btn-desc">입찰일정등록 · 공사팀신청</span>
+          </button>
+        </div>
+      </div>
+      <div class="hub-section" data-hub-section="customer">
+        <div class="hub-section-title">고객</div>
+        <div class="hub-btn-grid">
+          <button type="button" class="hub-btn" id="btnHubCollection" data-hub-key="collection">
+            <span class="hub-btn-icon">📋</span>
+            <span class="hub-btn-title">체납관리</span>
+            <span class="hub-btn-desc">체납 현황 대시보드</span>
+          </button>
+          <button type="button" class="hub-btn" id="btnHubIncidentManagement" data-hub-key="incidentManagement">
+            <span class="hub-btn-icon">🚨</span>
+            <span class="hub-btn-title">사건사고관리</span>
+            <span class="hub-btn-desc">현장 사건사고 등록·관리</span>
+          </button>
+        </div>
+      </div>
     </div>
     <!-- 회선관리 하위 메뉴: 실제 링크는 각 도구가 따로 만들어진 뒤 관리자가 채워 넣는다
          (아래 openHubLink/openHubLinkSettings, hubExternalLinks localStorage 참고). -->
@@ -547,7 +594,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <a href="#" id="btnHubSubBack" class="sub" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">← 뒤로가기</a>
       <a href="#" id="btnHubLinkSettings" class="sub login-hidden" style="display:inline-block;text-decoration:underline;cursor:pointer;">🔧 링크 설정(관리자)</a>
     </div>
-    <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;margin-top:18px;text-decoration:underline;cursor:pointer;">로그아웃</a>
+
+    <!-- 화면 구성 설정: 관리자가 지사(일반) 로그인에게 보일 메뉴를 고르는 패널. 관리자 본인
+         화면에는 이 설정과 무관하게 항상 전체 메뉴가 보인다(아래 applyHubVisibility 참고). -->
+    <div id="hubVisibilityPanel" class="login-hidden" style="margin-top:16px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <p class="sub" style="margin:0 0 8px;font-weight:700;color:var(--text);">화면 구성 설정</p>
+      <p class="sub" style="margin:0 0 10px;">체크 해제한 메뉴는 지사(일반) 로그인 화면에서 숨겨집니다. 관리자 본인에게는 항상 전체 메뉴가 보입니다.</p>
+      <div id="hubVisibilityList"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn" id="btnHubVisibilityCancel">닫기</button>
+        <button type="button" class="btn btn-primary" id="btnHubVisibilitySave">저장</button>
+      </div>
+    </div>
+
+    <div style="margin-top:18px;">
+      <a href="#" id="btnHubVisibilitySettings" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">⚙️ 화면 구성 설정(관리자)</a>
+      <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;text-decoration:underline;cursor:pointer;">로그아웃</a>
+    </div>
   </div>
 </div>
 
@@ -5512,10 +5575,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     hubLabel.textContent = (typeof loginLabel==='function' && loginLabel()) ? ('로그인: ' + loginLabel()) : '';
     hub.classList.remove('login-hidden');
     if(typeof hideSubmenu === 'function') hideSubmenu(); // 회선관리/입찰·공사팀신청 하위메뉴는 항상 처음엔 접힌 상태로
+    if(typeof applyHubVisibility === 'function') applyHubVisibility(); // 로그인 주체(관리자/지사)에 맞춰 메뉴 노출 갱신
   }
-  showHubIfLoggedIn(); // 세션이 이미 복원되어 있던 경우(새로고침 등)를 위한 즉시 확인
-  new MutationObserver(showHubIfLoggedIn).observe(gate, {attributes:true, attributeFilter:['class']});
-
   document.getElementById('btnHubAttendance').addEventListener('click', ()=>{
     hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
   });
@@ -5537,6 +5598,21 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 체납관리도 별도 서버(Vercel)에서 도는 완전히 다른 앱 — 새 탭으로 열고,
     // 그 앱 자체의 로그인은 사용자가 그 탭에서 별도로 진행해야 한다.
     window.open('https://collection-management-dashboard.vercel.app/', '_blank');
+  });
+  document.getElementById('btnHubAssetManagement').addEventListener('click', ()=>{
+    window.open('https://py-asset-manager-gkfcukfyhwgyq5xvijzvmb.streamlit.app/', '_blank');
+  });
+  document.getElementById('btnHubTbmRisk').addEventListener('click', ()=>{
+    window.open('https://heebonpark.github.io/tbm-risk-assessment-app/', '_blank');
+  });
+  document.getElementById('btnHubSecurityNewsLLM').addEventListener('click', ()=>{
+    window.open('https://bough38-web.github.io/security-report/', '_blank');
+  });
+  document.getElementById('btnHubSalesWeekly').addEventListener('click', ()=>{
+    window.open('https://heebonpark.github.io/Gangbuk-Gangwon-Weekly-Dashboard_2026/', '_blank');
+  });
+  document.getElementById('btnHubIncidentManagement').addEventListener('click', ()=>{
+    window.open('https://field-incident-app-2fuqcrjhybm6epcnulmrzv.streamlit.app/', '_blank');
   });
 
   /* ---- 회선관리(MVNO/WCDMA) · 입찰/공사팀신청(입찰일정등록/공사팀신청) ----
@@ -5615,12 +5691,97 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubBidSchedule').addEventListener('click', ()=> openHubLink('bidSchedule', '입찰일정등록'));
   document.getElementById('btnHubConstructionTeam').addEventListener('click', ()=> openHubLink('constructionTeam', '공사팀신청'));
 
+  /* ---- 화면 구성 설정: 어떤 허브 메뉴를 지사(일반) 로그인에게 보여줄지 관리자가 고른다.
+     관리자 본인은 이 설정과 무관하게 항상 전체 메뉴를 본다(배포 후 지사별로 필요 없는
+     메뉴를 숨긴 채로 exe를 나눠줄 수 있도록). ---- */
+  const HUB_CATEGORIES = [
+    { section:'common', label:'공통', items:[
+      { key:'attendance',        label:'근태관리' },
+      { key:'vehicle',           label:'차량관리' },
+      { key:'vehicleInspection', label:'자산차량상태평가' },
+      { key:'cardKeySales',      label:'카드키판매등록' },
+      { key:'lineManagement',    label:'회선관리' },
+      { key:'assetManagement',   label:'자산관리' },
+      { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가' },
+      { key:'securityNewsLLM',   label:'보안뉴스 LLM' }
+    ] },
+    { section:'sales', label:'영업', items:[
+      { key:'salesWeekly',       label:'영업주간업무' },
+      { key:'bidConstruction',   label:'입찰/공사팀신청' }
+    ] },
+    { section:'customer', label:'고객', items:[
+      { key:'collection',           label:'체납관리' },
+      { key:'incidentManagement',   label:'사건사고관리' }
+    ] }
+  ];
+  const visibilitySettingsBtn = document.getElementById('btnHubVisibilitySettings');
+  const visibilityPanel = document.getElementById('hubVisibilityPanel');
+  const visibilityList = document.getElementById('hubVisibilityList');
+
+  function getHubVisibility(){
+    try{ return JSON.parse(localStorage.getItem('hubButtonVisibility') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setHubVisibility(map){
+    localStorage.setItem('hubButtonVisibility', JSON.stringify(map));
+  }
+  function applyHubVisibility(){
+    const auth = currentAuth();
+    const isAdmin = !!(auth && auth.isAdmin);
+    const vis = getHubVisibility();
+    document.querySelectorAll('#hubMainGrid [data-hub-key]').forEach(btn=>{
+      const key = btn.getAttribute('data-hub-key');
+      const shown = isAdmin || vis[key] !== false;
+      btn.classList.toggle('login-hidden', !shown);
+    });
+    document.querySelectorAll('#hubMainGrid .hub-section').forEach(sec=>{
+      const anyVisible = Array.from(sec.querySelectorAll('.hub-btn')).some(b=>!b.classList.contains('login-hidden'));
+      sec.classList.toggle('login-hidden', !anyVisible);
+    });
+    visibilitySettingsBtn.classList.toggle('login-hidden', !isAdmin);
+  }
+  function renderHubVisibilityPanel(){
+    const vis = getHubVisibility();
+    visibilityList.innerHTML = HUB_CATEGORIES.map(cat=>{
+      const rows = cat.items.map(({key,label})=>{
+        const checked = vis[key] !== false ? 'checked' : '';
+        return `<label class="hub-visibility-row"><input type="checkbox" data-vis-key="${key}" ${checked}> ${label}</label>`;
+      }).join('');
+      return `<div class="hub-visibility-group">${cat.label}</div>${rows}`;
+    }).join('');
+  }
+  visibilitySettingsBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    renderHubVisibilityPanel();
+    visibilityPanel.classList.remove('login-hidden');
+  });
+  document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
+    visibilityPanel.classList.add('login-hidden');
+  });
+  document.getElementById('btnHubVisibilitySave').addEventListener('click', ()=>{
+    const map = {};
+    visibilityList.querySelectorAll('input[data-vis-key]').forEach(cb=>{
+      map[cb.getAttribute('data-vis-key')] = cb.checked;
+    });
+    setHubVisibility(map);
+    visibilityPanel.classList.add('login-hidden');
+    applyHubVisibility();
+    alert('화면 구성 설정이 저장되었습니다.');
+  });
+
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
     e.preventDefault();
     hub.classList.add('login-hidden');
     const logoutBtn = document.getElementById('btnLogout');
     if(logoutBtn) logoutBtn.click(); // 기존 로그아웃 로직 그대로 재사용
   });
+
+  // 위의 모든 선언(activeSubmenu 등 let 변수 포함)이 다 끝난 뒤에 처음 상태를 확인해야 한다 —
+  // 새로고침으로 세션이 이미 복원돼 있으면 이 즉시호출이 hideSubmenu/applyHubVisibility를
+  // 타는데, 그보다 앞에서 부르면 아직 초기화 전인 let 변수 참조로 TDZ 에러가 나서
+  // 허브 버튼 클릭 핸들러가 하나도 안 붙는 사고가 난다.
+  showHubIfLoggedIn(); // 세션이 이미 복원되어 있던 경우(새로고침 등)를 위한 즉시 확인
+  new MutationObserver(showHubIfLoggedIn).observe(gate, {attributes:true, attributeFilter:['class']});
 })();
 </script>
 </body>
