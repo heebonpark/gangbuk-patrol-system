@@ -606,6 +606,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="btn btn-primary" id="btnHubAddCategory">추가</button>
         </div>
       </div>
+      <div style="margin:0 0 14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">메뉴 추가</p>
+        <p class="sub" style="margin:0 0 8px;">새 메뉴를 추가하면 아래 목록에 바로 나타나고 실제 버튼도 즉시 만들어집니다. 링크는 그 버튼을 관리자가 처음 누를 때 입력받아 채워집니다(회선관리 하위 항목과 같은 방식) — 아래 목록에서 언제든 다시 바꿀 수 있습니다.</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="hubNewItemInput" placeholder="새 메뉴 이름 (예: 안전점검현황)" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);">
+          <button type="button" class="btn btn-primary" id="btnHubAddItem">추가</button>
+        </div>
+      </div>
       <div id="hubVisibilityList"></div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-primary" id="btnHubVisibilityCancel">닫기</button>
@@ -5823,13 +5831,13 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     localStorage.setItem('hubButtonTitleOverrides', JSON.stringify(map));
   }
   function resolveHubTitle(key){
-    const item = HUB_ITEMS.find(i=>i.key===key);
+    const item = getAllHubItemDefs().find(i=>i.key===key);
     const overrides = getHubTitleOverrides();
     const override = (overrides[key] || '').trim();
     return override || (item && item.label) || key;
   }
   function applyHubTitles(){
-    HUB_ITEMS.forEach(({key})=>{
+    getAllHubItemDefs().forEach(({key})=>{
       const titleEl = document.querySelector(`#hubMainGrid [data-hub-key="${key}"] .hub-btn-title`);
       if(titleEl) titleEl.textContent = resolveHubTitle(key);
     });
@@ -5847,6 +5855,40 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   }
   function setCustomHubCategories(list){
     localStorage.setItem('hubCustomCategories', JSON.stringify(list));
+  }
+  /* 관리자가 화면 구성 설정에서 직접 추가한 "새 메뉴"(고정 12개 밖의 항목).
+     회선관리 하위 항목(hubGroupItems)과 같은 저장 방식 — id/label/category만 갖고,
+     실제 버튼은 ensureCustomHubButtons()가 매번 새로 만들어서 그린다. */
+  function getCustomHubItems(){
+    try{ return JSON.parse(localStorage.getItem('hubCustomItems') || '[]'); }
+    catch(e){ return []; }
+  }
+  function setCustomHubItems(list){
+    localStorage.setItem('hubCustomItems', JSON.stringify(list));
+  }
+  // HUB_ITEMS(고정 12개) + 관리자가 추가한 커스텀 메뉴를 합친 전체 목록.
+  // 화면 구성 설정·분류 배치·제목 해석 등은 전부 이 함수를 거쳐야 커스텀 메뉴도 똑같이 취급된다.
+  function getAllHubItemDefs(){
+    return HUB_ITEMS.concat(getCustomHubItems().map(c=>({ key:c.id, label:c.label, defaultCategory:c.category||'common', custom:true })));
+  }
+  function addHubItem(label){
+    const trimmed = (label || '').trim();
+    if(!trimmed) return;
+    const list = getCustomHubItems();
+    list.push({ id:'custom_' + Date.now(), label:trimmed, category:'common' });
+    setCustomHubItems(list);
+  }
+  // 커스텀 메뉴 삭제 — 버튼 DOM, 링크, 표시여부/분류/제목 오버라이드까지 다 같이 지운다
+  // (지사·구역 비밀번호를 지울 때처럼, 흔적을 안 남겨야 나중에 같은 이름을 다시 추가해도
+  // 엉뚱한 이전 설정이 튀어나오지 않는다). 고정 12개 메뉴는 여기로 오지 않는다(삭제 불가).
+  function removeHubItem(key){
+    setCustomHubItems(getCustomHubItems().filter(c=>c.id !== key));
+    const btn = document.querySelector(`#hubMainGrid [data-hub-key="${key}"]`);
+    if(btn) btn.remove();
+    const vis = getHubVisibility(); delete vis[key]; setHubVisibility(vis);
+    const cats = getHubCategoryOverrides(); delete cats[key]; setHubCategoryOverrides(cats);
+    const titles = getHubTitleOverrides(); delete titles[key]; setHubTitleOverrides(titles);
+    const links = getHubLinks(); delete links[key]; localStorage.setItem('hubExternalLinks', JSON.stringify(links));
   }
   function getBuiltinCategoryLabelOverrides(){
     try{ return JSON.parse(localStorage.getItem('hubBuiltinCategoryLabels') || '{}'); }
@@ -5890,7 +5932,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     setHubCategoryOverrides(overrides);
   }
   function resolveHubCategory(key){
-    const item = HUB_ITEMS.find(i=>i.key===key);
+    const item = getAllHubItemDefs().find(i=>i.key===key);
     const overrides = getHubCategoryOverrides();
     const override = overrides[key];
     const validIds = getAllHubCategories().map(c=>c.id);
@@ -5908,9 +5950,26 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       mainGrid.appendChild(sec);
     });
   }
+  // 관리자가 화면 구성 설정에서 새로 추가한 메뉴는 고정 12개와 달리 처음부터 <button>이
+  // 없으므로, 분류 배치(applyHubCategories)보다 먼저 실제 버튼 DOM을 만들어둬야 한다.
+  // 클릭 동작은 회선관리 하위 항목과 동일하게 openHubLink로 처리(링크 없으면 관리자에게
+  // 물어봄) — 커스텀 메뉴는 애초에 미리 정해둔 전용 페이지가 없기 때문.
+  function ensureCustomHubButtons(){
+    getCustomHubItems().forEach(({id,label})=>{
+      if(document.querySelector(`#hubMainGrid [data-hub-key="${id}"]`)) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hub-btn';
+      btn.setAttribute('data-hub-key', id);
+      btn.innerHTML = `<span class="hub-btn-icon">🔗</span><span class="hub-btn-title"></span><span class="hub-btn-desc">관리자 추가 메뉴</span>`;
+      btn.querySelector('.hub-btn-title').textContent = label; // XSS 방지: 텍스트로만 삽입
+      btn.addEventListener('click', ()=> openHubLink(id, resolveHubTitle(id)));
+      mainGrid.appendChild(btn);
+    });
+  }
   function applyHubCategories(){
     ensureHubSections(); // 관리자가 추가한 분류(예: 공공데이터)의 섹션이 아직 없으면 먼저 만든다
-    HUB_ITEMS.forEach(({key})=>{
+    getAllHubItemDefs().forEach(({key})=>{
       const btn = document.querySelector(`#hubMainGrid [data-hub-key="${key}"]`);
       if(!btn) return;
       const cat = resolveHubCategory(key);
@@ -5927,6 +5986,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     });
   }
   function applyHubVisibility(){
+    ensureCustomHubButtons(); // 관리자가 새로 추가한 메뉴의 버튼이 아직 없으면 먼저 만든다
     applyHubCategories();     // 분류가 바뀌었을 수 있으니 노출 여부 계산 전에 먼저 제자리로 옮긴다
     applyHubCategoryLabels(); // 분류 이름을 바꿨을 수도 있으니 섹션 제목도 갱신
     applyHubTitles();         // 메뉴 이름을 바꿨을 수도 있으니 같이 갱신
@@ -5957,17 +6017,21 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     const vis = getHubVisibility();
     const catOptions = getAllHubCategories()
       .map(({id,label})=>`<option value="${id}">${esc(label)}</option>`).join('');
-    visibilityList.innerHTML = HUB_ITEMS.map(({key})=>{
+    const allItems = getAllHubItemDefs();
+    visibilityList.innerHTML = allItems.map(({key,custom})=>{
       const checked = vis[key] !== false ? 'checked' : '';
       const select = `<select data-cat-key="${key}">${catOptions}</select>`;
+      // 고정 12개 메뉴는 삭제할 수 없고(숨기기만 가능), 관리자가 추가한 커스텀 메뉴만 삭제 가능.
+      const removeLink = custom ? `<a href="#" data-remove-item="${esc(key)}" class="sub" style="text-decoration:underline;cursor:pointer;white-space:nowrap;">삭제</a>` : '';
       return `<div class="hub-visibility-row">
         <input type="checkbox" data-vis-key="${key}" ${checked}>
         <input type="text" data-title-key="${key}" value="${esc(resolveHubTitle(key))}" style="flex:1;">
         ${select}
+        ${removeLink}
       </div>`;
     }).join('');
     // 각 select의 현재 값을 분류에 맞게 지정 (innerHTML 문자열엔 selected를 못 넣었으니 여기서)
-    HUB_ITEMS.forEach(({key})=>{
+    allItems.forEach(({key})=>{
       const sel = visibilityList.querySelector(`select[data-cat-key="${key}"]`);
       if(sel) sel.value = resolveHubCategory(key);
     });
@@ -5982,6 +6046,22 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     newCategoryInput.value = '';
     applyHubVisibility();       // 새 분류의 빈 섹션을 바로 만들어 둔다
     renderHubVisibilityPanel(); // select 목록에도 새 분류가 바로 보이도록
+  });
+  document.getElementById('btnHubAddItem').addEventListener('click', ()=>{
+    const input = document.getElementById('hubNewItemInput');
+    addHubItem(input.value);
+    input.value = '';
+    applyHubVisibility();       // 새 메뉴의 실제 버튼을 바로 만들어서 배치
+    renderHubVisibilityPanel(); // 목록에도 새 메뉴가 바로 보이도록
+  });
+  visibilityList.addEventListener('click', (e)=>{
+    const link = e.target.closest('[data-remove-item]');
+    if(!link) return;
+    e.preventDefault();
+    if(!confirm('이 메뉴를 삭제할까요? 설정해둔 링크도 함께 삭제됩니다.')) return;
+    removeHubItem(link.getAttribute('data-remove-item'));
+    applyHubVisibility();       // 그 메뉴가 마지막 항목이던 분류 섹션이 있었다면 숨김 처리까지 반영
+    renderHubVisibilityPanel();
   });
   customCategoryList.addEventListener('click', (e)=>{
     const link = e.target.closest('[data-remove-cat]');
