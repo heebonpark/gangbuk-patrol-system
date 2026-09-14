@@ -397,9 +397,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .preview-main-table tr.zone-start td { border-top: 2px solid #64748b; }
 
   /* ---------- 로그인 게이트 ---------- */
-  .login-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(150deg,var(--navy) 0%,var(--navy-dark) 100%);display:flex;align-items:center;justify-content:center;padding:20px;}
+  /* display:flex + align-items:center로 세로가운데 정렬을 했었는데, 내용(특히 systemHub의
+     허브 메뉴+화면구성 설정 패널)이 화면 높이보다 길어지면 위쪽으로 넘친 부분이 flex 중앙
+     정렬 특성상 스크롤로 닿지 않는 문제가 있었다(스크롤바는 생기는데 실제로는 안 움직이는
+     것처럼 보임). overflow-y:auto + 상단 패딩 방식으로 바꿔서 내용이 길어져도 항상 끝까지
+     스크롤해서 볼 수 있게 한다. */
+  .login-gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(150deg,var(--navy) 0%,var(--navy-dark) 100%);overflow-y:auto;padding:40px 20px;}
   .login-gate::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:repeating-linear-gradient(115deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 54px);}
-  .login-box{background:#fff;border-radius:16px;padding:34px 30px;width:100%;max-width:340px;box-shadow:var(--shadow-lg), 0 20px 60px rgba(0,0,0,0.35);position:relative;}
+  .login-box{background:#fff;border-radius:16px;padding:34px 30px;width:100%;max-width:340px;margin:0 auto;box-shadow:var(--shadow-lg), 0 20px 60px rgba(0,0,0,0.35);position:relative;}
   .login-box h1{margin:0 0 4px;font-family:var(--display);font-size:18px;font-weight:700;color:var(--text);text-align:center;}
   .login-box .sub{margin:0 0 20px;font-size:12px;color:var(--text-mute);text-align:center;}
   /* 로그인 직후 "근태관리/차량관리" 선택 화면 — 기존 로그인 게이트 스타일(.login-gate/.login-box)을
