@@ -604,6 +604,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div id="hubVisibilityPanel" class="login-hidden" style="margin-top:16px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
       <p class="sub" style="margin:0 0 8px;font-weight:700;color:var(--text);">화면 구성 설정</p>
       <p class="sub" style="margin:0 0 10px;">체크나 분류를 바꾸면 바로 적용됩니다(위로 스크롤하면 바뀐 위치를 바로 확인할 수 있어요). 체크 해제한 메뉴는 지사(일반) 로그인 화면에서만 숨겨지고, 관리자 본인에게는 항상 전체 메뉴가 보입니다.</p>
+      <div style="margin:0 0 14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">분류 추가 (예: 협력사)</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="hubNewCategoryInput" placeholder="새 분류 이름" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);">
+          <button type="button" class="btn btn-primary" id="btnHubAddCategory">추가</button>
+        </div>
+        <div id="hubCustomCategoryList" style="margin-top:8px;"></div>
+      </div>
       <div id="hubVisibilityList"></div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-primary" id="btnHubVisibilityCancel">닫기</button>
@@ -5713,10 +5721,18 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'collection',        label:'체납관리',              defaultCategory:'customer' },
     { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' }
   ];
-  const HUB_CATEGORY_LABELS = { common:'공통', sales:'영업', customer:'고객' };
+  // 기본 3분류는 항상 존재(삭제 불가). "협력사"처럼 관리자가 더 추가한 분류는
+  // hubCustomCategories(localStorage)에 저장되고, 필요하면 다시 삭제할 수도 있다.
+  const HUB_BUILTIN_CATEGORIES = [
+    { id:'common',   label:'공통' },
+    { id:'sales',    label:'영업' },
+    { id:'customer', label:'고객' }
+  ];
   const visibilitySettingsBtn = document.getElementById('btnHubVisibilitySettings');
   const visibilityPanel = document.getElementById('hubVisibilityPanel');
   const visibilityList = document.getElementById('hubVisibilityList');
+  const customCategoryList = document.getElementById('hubCustomCategoryList');
+  const newCategoryInput = document.getElementById('hubNewCategoryInput');
 
   function getHubVisibility(){
     try{ return JSON.parse(localStorage.getItem('hubButtonVisibility') || '{}'); }
@@ -5732,12 +5748,52 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   function setHubCategoryOverrides(map){
     localStorage.setItem('hubButtonCategory', JSON.stringify(map));
   }
+  function getCustomHubCategories(){
+    try{ return JSON.parse(localStorage.getItem('hubCustomCategories') || '[]'); }
+    catch(e){ return []; }
+  }
+  function setCustomHubCategories(list){
+    localStorage.setItem('hubCustomCategories', JSON.stringify(list));
+  }
+  function getAllHubCategories(){
+    return HUB_BUILTIN_CATEGORIES.concat(getCustomHubCategories());
+  }
+  function addHubCategory(label){
+    const trimmed = (label || '').trim();
+    if(!trimmed) return;
+    const list = getCustomHubCategories();
+    if(getAllHubCategories().some(c=>c.label === trimmed)){ alert('이미 있는 분류 이름입니다.'); return; }
+    list.push({ id:'custom_' + Date.now(), label: trimmed });
+    setCustomHubCategories(list);
+  }
+  function removeHubCategory(id){
+    setCustomHubCategories(getCustomHubCategories().filter(c=>c.id !== id));
+    // 그 분류에 있던 항목들은 원래 기본 분류로 돌아간다(resolveHubCategory가 알아서 처리).
+    const overrides = getHubCategoryOverrides();
+    Object.keys(overrides).forEach(key=>{ if(overrides[key] === id) delete overrides[key]; });
+    setHubCategoryOverrides(overrides);
+  }
   function resolveHubCategory(key){
     const item = HUB_ITEMS.find(i=>i.key===key);
     const overrides = getHubCategoryOverrides();
-    return overrides[key] || (item && item.defaultCategory) || 'common';
+    const override = overrides[key];
+    const validIds = getAllHubCategories().map(c=>c.id);
+    if(override && validIds.includes(override)) return override; // 삭제된 커스텀 분류면 무시하고 기본값으로
+    return (item && item.defaultCategory) || 'common';
+  }
+  function ensureHubSections(){
+    getAllHubCategories().forEach(({id,label})=>{
+      if(document.querySelector(`#hubMainGrid [data-hub-section="${id}"]`)) return;
+      const sec = document.createElement('div');
+      sec.className = 'hub-section';
+      sec.setAttribute('data-hub-section', id);
+      sec.innerHTML = `<div class="hub-section-title"></div><div class="hub-btn-grid"></div>`;
+      sec.querySelector('.hub-section-title').textContent = label; // XSS 방지: 텍스트로만 삽입
+      mainGrid.appendChild(sec);
+    });
   }
   function applyHubCategories(){
+    ensureHubSections(); // 관리자가 추가한 분류(예: 협력사)의 섹션이 아직 없으면 먼저 만든다
     HUB_ITEMS.forEach(({key})=>{
       const btn = document.querySelector(`#hubMainGrid [data-hub-key="${key}"]`);
       if(!btn) return;
@@ -5762,13 +5818,19 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     });
     visibilitySettingsBtn.classList.toggle('login-hidden', !isAdmin);
   }
+  function renderHubCategoryManager(){
+    const custom = getCustomHubCategories();
+    customCategoryList.innerHTML = custom.map(({id,label})=>
+      `<div class="hub-visibility-row"><span style="flex:1;">${esc(label)}</span><a href="#" data-remove-cat="${id}" class="sub" style="text-decoration:underline;cursor:pointer;">삭제</a></div>`
+    ).join('') || '<p class="sub" style="margin:0;">추가된 분류가 없습니다.</p>';
+  }
   function renderHubVisibilityPanel(){
+    renderHubCategoryManager();
     const vis = getHubVisibility();
-    const catOptions = Object.entries(HUB_CATEGORY_LABELS)
-      .map(([val,label])=>`<option value="${val}">${label}</option>`).join('');
+    const catOptions = getAllHubCategories()
+      .map(({id,label})=>`<option value="${id}">${esc(label)}</option>`).join('');
     visibilityList.innerHTML = HUB_ITEMS.map(({key,label})=>{
       const checked = vis[key] !== false ? 'checked' : '';
-      const curCat = resolveHubCategory(key);
       const select = `<select data-cat-key="${key}">${catOptions}</select>`;
       return `<div class="hub-visibility-row"><label style="display:flex;align-items:center;gap:8px;flex:1;"><input type="checkbox" data-vis-key="${key}" ${checked}> ${label}</label>${select}</div>`;
     }).join('');
@@ -5782,6 +5844,21 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     e.preventDefault();
     renderHubVisibilityPanel();
     visibilityPanel.classList.remove('login-hidden');
+  });
+  document.getElementById('btnHubAddCategory').addEventListener('click', ()=>{
+    addHubCategory(newCategoryInput.value);
+    newCategoryInput.value = '';
+    applyHubVisibility();       // 새 분류의 빈 섹션을 바로 만들어 둔다
+    renderHubVisibilityPanel(); // select 목록에도 새 분류가 바로 보이도록
+  });
+  customCategoryList.addEventListener('click', (e)=>{
+    const link = e.target.closest('[data-remove-cat]');
+    if(!link) return;
+    e.preventDefault();
+    if(!confirm('이 분류를 삭제할까요? 여기 속한 메뉴는 원래 기본 분류로 돌아갑니다.')) return;
+    removeHubCategory(link.getAttribute('data-remove-cat'));
+    applyHubVisibility();
+    renderHubVisibilityPanel();
   });
   document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
     visibilityPanel.classList.add('login-hidden');
