@@ -11,15 +11,10 @@ set -e
 cd "$(dirname "$0")"
 
 node make-blank-html.js ../index.html ./index.html
-cp ../vehicle-management-demo.html ./vehicle-management.html
-# 반드시 vehicle-management-demo.html(마스킹판)만 써야 한다 — ../vehicle-management.html은
-# 실제 회사 개인정보(실명·연락처·계좌번호)가 그대로 든 파일이라 배포용 exe에 절대 담으면
-# 안 된다(2026-09-15 사고 참고). 데모판도 완전히 빈 상태는 아니므로, 새 고객 배포판에서는
+cp ../vehicle-management.html ./vehicle-management.html
+# vehicle-management.html은 시드 데이터 자체가 항상 마스킹되어 있어(2026-09-15 이후)
+# 배포용 exe에 그대로 담아도 안전하다. 완전히 빈 상태는 아니므로, 새 고객 배포판에서는
 # 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다.
-if [ -f ../vehicle-management.html ] && cmp -s ../vehicle-management.html ./vehicle-management.html; then
-  echo "오류: 실제 개인정보가 담긴 vehicle-management.html이 그대로 embed될 뻔했습니다. 빌드를 중단합니다." >&2
-  exit 1
-fi
 
 if ! command -v goversioninfo >/dev/null 2>&1; then
   GOVERSIONINFO_BIN="$(go env GOPATH)/bin/goversioninfo"

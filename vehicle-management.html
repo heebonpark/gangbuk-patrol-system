@@ -159,6 +159,8 @@ table.data tbody tr:last-child td{border-bottom:none;}
 .top10-table tr:last-child td{border-bottom:none;}
 .rank-no{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:var(--bg);color:var(--text-mute);font-size:10.5px;font-weight:700;margin-right:6px;}
 .rank-no.top3{background:var(--danger-bg);color:var(--danger);}
+.mask-toggle{display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:12px;color:#C6D0E4;cursor:pointer;user-select:none;}
+.mask-toggle input{cursor:pointer;}
 @media (max-width:640px){ header.app{padding:12px 16px;} main{padding:16px;} }
 </style>
 </head>
@@ -174,6 +176,9 @@ table.data tbody tr:last-child td{border-bottom:none;}
   </div>
   <div class="right">
     <a class="back" href="#" id="btnGoVehicleInspection" style="margin-right:14px;">🛵 자산차량상태평가</a>
+    <label class="mask-toggle" title="목록 화면의 실명·연락처·계좌번호를 가립니다. 항목을 열어보면(수정 화면) 실제 값이 그대로 보입니다.">
+      <input type="checkbox" id="chkMaskingEnabled" checked> 🔒 개인정보 마스킹
+    </label>
     <span id="lastSavedLabel"></span>
   </div>
 </header>
@@ -483,7 +488,7 @@ const SCHEMAS = {
     listColumns:['지사','사번','이름','직무','결과','교육종료일','비고_교육'],
     money:[],
     groups:[{title:null, fields:[
-      {k:'지사',l:'지사'}, {k:'본부',l:'본부'}, {k:'사번',l:'사번'}, {k:'이름',l:'이름'}, {k:'직무',l:'직무'},
+      {k:'지사',l:'지사'}, {k:'본부',l:'본부'}, {k:'사번',l:'사번'}, {k:'이름',l:'이름',pii:'name'}, {k:'직무',l:'직무'},
       {k:'입사일',l:'입사일',t:'date'}, {k:'퇴사일자',l:'퇴사일자',t:'date'},
       {k:'결과',l:'자격 결과'}, {k:'비고_자격',l:'비고(자격)'},
       {k:'교육이수일',l:'교육이수일',t:'date'}, {k:'교육종료일',l:'교육종료일',t:'date'}, {k:'교육구분',l:'교육구분'}, {k:'비고_교육',l:'비고(교육)'},
@@ -514,7 +519,7 @@ const SCHEMAS = {
       {title:'장비 · 서류', fields:[
         {k:'자동차사용본거지주소',l:'사용본거지 주소'},
         {k:'긴급자동차등록여부',l:'긴급차 등록여부'}, {k:'긴급자동차관리청',l:'긴급차 관리청'}, {k:'긴급자동차지정번호',l:'긴급차 지정번호'}, {k:'긴급자동차신고일자',l:'긴급차 신고일자',t:'date'},
-        {k:'업무용스마트폰',l:'업무용 스마트폰'}, {k:'주유하이패스카드',l:'주유/하이패스카드'},
+        {k:'업무용스마트폰',l:'업무용 스마트폰',pii:'phone'}, {k:'주유하이패스카드',l:'주유/하이패스카드'},
         {k:'블랙박스채널수',l:'블랙박스 채널수',t:'number'}, {k:'블랙박스위치',l:'블랙박스 위치'},
         {k:'키박스',l:'키박스'}, {k:'키박스수량',l:'키박스 수량',t:'number'}, {k:'경광등설치여부',l:'경광등 설치여부'}, {k:'효성MS카드',l:'효성MS카드'},
         {k:'비고',l:'비고'},
@@ -546,10 +551,10 @@ const SCHEMAS = {
       {k:'지사',l:'지사'}, {k:'정비접수번호',l:'정비접수번호'}, {k:'계약번호',l:'계약번호'},
       {k:'차량번호',l:'차량번호', link:{domain:'vehicles', match:'차량번호', fill:{'지사':'지사'}}},
       {k:'사고일자',l:'사고일자',t:'date'},
-      {k:'운전자명',l:'운전자명', link:{domain:'personnel', match:'이름', fill:{}}},
+      {k:'운전자명',l:'운전자명', link:{domain:'personnel', match:'이름', fill:{}}, pii:'name'},
       {k:'과실비율(%)',l:'과실비율(%)',t:'number'},
-      {k:'청구금액',l:'청구금액',t:'number'}, {k:'사고유형',l:'사고유형'}, {k:'은행명',l:'은행명'}, {k:'입금계좌번호',l:'입금계좌번호'},
-      {k:'입금자명',l:'입금자명'}, {k:'입금일자',l:'입금일자',t:'date'}, {k:'입금금액',l:'입금금액',t:'number'},
+      {k:'청구금액',l:'청구금액',t:'number'}, {k:'사고유형',l:'사고유형'}, {k:'은행명',l:'은행명'}, {k:'입금계좌번호',l:'입금계좌번호',pii:'account'},
+      {k:'입금자명',l:'입금자명',pii:'name'}, {k:'입금일자',l:'입금일자',t:'date'}, {k:'입금금액',l:'입금금액',t:'number'},
       {k:'납부방식',l:'납부방식'}, {k:'납입여부',l:'납입여부',t:'select',options:['납부','미납']}, {k:'비고',l:'비고'},
       {k:'블랙박스 제출일자',l:'블랙박스 제출일자'}, {k:'수신자',l:'수신자'},
     ]}],
@@ -564,7 +569,7 @@ const SCHEMAS = {
       {k:'본부',l:'본부'}, {k:'지사',l:'지사'}, {k:'구역번호',l:'구역번호'},
       {k:'차량번호',l:'차량번호', link:{domain:'vehicles', match:'차량번호', fill:{'지사':'지사','구역번호':'구역번호'}}},
       {k:'사원번호',l:'사원번호', link:{domain:'personnel', match:'사번', fill:{'사원명':'이름','지사':'지사'}}},
-      {k:'사원명',l:'사원명', link:{domain:'personnel', match:'이름', fill:{'사원번호':'사번','지사':'지사'}}},
+      {k:'사원명',l:'사원명', link:{domain:'personnel', match:'이름', fill:{'사원번호':'사번','지사':'지사'}}, pii:'name'},
       {k:'구분',l:'구분(범칙금/과태료)',t:'select',options:['과태료','범칙금']},
       {k:'위반일자',l:'위반일자',t:'date'}, {k:'위반장소',l:'위반장소'}, {k:'위반내용',l:'위반내용'},
       {k:'부과금액',l:'부과금액',t:'number'}, {k:'가산금액',l:'가산금액',t:'number'}, {k:'납부금액',l:'납부금액',t:'number'},
@@ -760,10 +765,46 @@ function daysUntil(dateStr){
   const today = new Date(); today.setHours(0,0,0,0);
   return Math.round((d-today)/86400000);
 }
+/* ================= 개인정보 마스킹(목록 화면 전용) =================
+   실명·연락처·계좌번호가 든 필드(schema에 pii:'name'|'phone'|'account'로 표시)를
+   목록(표) 화면에서만 가린다. 수정 화면(openEdit)은 실제 값을 그대로 보여준다 —
+   마스킹된 문자열이 그대로 저장돼버리는 사고를 막기 위해 편집 입력칸은 일부러
+   마스킹하지 않는다. 켜고 끈 상태는 이 브라우저에만 저장(localStorage)된다. */
+let maskingEnabled = true;
+try{ maskingEnabled = localStorage.getItem('vehicle_mgmt_masking') !== 'off'; }catch(e){}
+function setMaskingEnabled(on){
+  maskingEnabled = on;
+  try{ localStorage.setItem('vehicle_mgmt_masking', on ? 'on' : 'off'); }catch(e){}
+  DOMAIN_KEYS.forEach(renderTable);
+}
+function maskName(v){
+  const s = String(v);
+  const m = s.match(/^([가-힣]{2,4})(.*)$/); // 이름 뒤에 덧붙는 문자(예: 입금자명의 차량번호)는 그대로 둠
+  if(!m) return s;
+  const name = m[1], rest = m[2];
+  const masked = name.length<=2 ? name[0]+'O' : name[0]+'O'.repeat(name.length-2)+name[name.length-1];
+  return masked+rest;
+}
+function maskPhone(v){
+  return String(v).replace(/(\d{2,3})-(\d{3,4})-(\d{4})/g, (_,a,b,c)=> `${a}-${'*'.repeat(b.length)}-${c}`);
+}
+function maskAccount(v){
+  const s = String(v);
+  const parts = s.split('-');
+  if(parts.length<3) return s.replace(/./g, (ch,i)=> (i===0||i===s.length-1||!/\d/.test(ch)) ? ch : '*');
+  return parts.map((p,i)=> (i===0||i===parts.length-1) ? p : '*'.repeat(p.length)).join('-');
+}
+function maskFieldValue(field, v){
+  if(!field || !field.pii || !maskingEnabled) return v;
+  if(field.pii==='name') return maskName(v);
+  if(field.pii==='phone') return maskPhone(v);
+  if(field.pii==='account') return maskAccount(v);
+  return v;
+}
 function fmtCell(v, field){
   if(v===null || v===undefined || v==='') return '<span style="color:#B7C0CE;">-</span>';
   if(field && field.t==='number' && typeof v==='number') return v.toLocaleString('ko-KR');
-  return esc(v);
+  return esc(maskFieldValue(field, v));
 }
 function allFields(schema){ return schema.groups.flatMap(g=>g.fields); }
 function fieldOf(schema, key){ return allFields(schema).find(f=>f.k===key); }
@@ -1739,6 +1780,12 @@ loadState();
 renderAll();
 initUploadTab();
 renderStorageUsage();
+(function initMaskingToggle(){
+  const chk = document.getElementById('chkMaskingEnabled');
+  if(!chk) return;
+  chk.checked = maskingEnabled;
+  chk.addEventListener('change', ()=> setMaskingEnabled(chk.checked));
+})();
 </script>
 </body>
 </html>
