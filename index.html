@@ -536,6 +536,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">보안뉴스 LLM</span>
             <span class="hub-btn-desc">보안 뉴스 요약(LLM)</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubManagement" data-hub-key="management">
+            <span class="hub-btn-icon">🏢</span>
+            <span class="hub-btn-title">경영</span>
+            <span class="hub-btn-desc">관리자가 연결할 링크 설정</span>
+          </button>
         </div>
       </div>
       <div class="hub-section" data-hub-section="sales">
@@ -5639,6 +5644,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubSecurityNewsLLM').addEventListener('click', ()=>{
     window.open('https://bough38-web.github.io/security-report/', '_blank');
   });
+  document.getElementById('btnHubManagement').addEventListener('click', ()=>{
+    // 아직 정해진 목적지가 없는 메뉴 — 회선관리 하위 항목과 같은 방식으로, 관리자가
+    // 처음 누르면 연결할 URL을 물어보고(기기별 localStorage에 저장) 그 다음부터는 바로 연다.
+    openHubLink('management', '경영');
+  });
   document.getElementById('btnHubSalesWeekly').addEventListener('click', ()=>{
     window.open('https://heebonpark.github.io/Gangbuk-Gangwon-Weekly-Dashboard_2026/', '_blank');
   });
@@ -5828,6 +5838,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'assetManagement',   label:'자산관리',              defaultCategory:'common' },
     { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가', defaultCategory:'common' },
     { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
+    { key:'management',       label:'경영',                  defaultCategory:'common' },
     { key:'salesWeekly',       label:'영업주간업무',           defaultCategory:'sales' },
     { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
     { key:'subscriptionDashboard', label:'청약현황대시보드',    defaultCategory:'sales' },
