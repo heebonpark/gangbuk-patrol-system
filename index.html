@@ -6730,7 +6730,12 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
 
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
     e.preventDefault();
-    hub.classList.add('login-hidden');
+    // 예전엔 여기서 hub.classList.add('login-hidden')로 허브 화면을 먼저 숨긴 뒤
+    // 아래 logoutBtn.click()(location.reload 포함)을 불렀는데, 허브는 근태관리 화면
+    // "위에 얹힌" 오버레이라서 허브만 먼저 사라지면 새로고침이 실제로 일어나기 전
+    // 그 짧은 순간 동안 밑에 있던 근태관리 화면이 잠깐 보였다 사라지는 현상이 있었다.
+    // 화면을 직접 숨기지 말고 곧장 기존 로그아웃(세션 삭제 + 새로고침)만 재사용한다 —
+    // 새로고침되면 로그인 게이트가 처음부터 다시 그려지므로 허브를 미리 숨길 필요가 없다.
     const logoutBtn = document.getElementById('btnLogout');
     if(logoutBtn) logoutBtn.click(); // 기존 로그아웃 로직 그대로 재사용
   });
