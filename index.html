@@ -754,6 +754,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <div style="margin-top:18px;">
       <a href="#" id="btnHubVisibilitySettings" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">⚙️ 화면 구성 설정(관리자)</a>
+      <a href="#" id="btnHubAnnouncementManage" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">📢 공지사항 관리(관리자)</a>
       <a href="#" id="btnSpecialNotes" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">📝 특이사항 관리(관리자)</a>
       <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;text-decoration:underline;cursor:pointer;">로그아웃</a>
     </div>
@@ -5990,6 +5991,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   const specialNotesList = document.getElementById('specialNotesList');
   const branchAccessSelect = document.getElementById('hubBranchAccessSelect');
   const branchAccessList = document.getElementById('hubBranchAccessList');
+  const announcementManageBtn = document.getElementById('btnHubAnnouncementManage');
   const announcementBanner = document.getElementById('hubAnnouncementBanner');
   const announcementText = document.getElementById('hubAnnouncementText');
   const announcementPanel = document.getElementById('hubAnnouncementPanel');
@@ -6442,6 +6444,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     e.preventDefault();
     openAnnouncementPanel();
   });
+  announcementManageBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    openAnnouncementPanel();
+  });
   document.getElementById('btnHubAnnouncementClose').addEventListener('click', ()=>{
     announcementPanel.classList.add('login-hidden');
   });
@@ -6524,6 +6530,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     });
     visibilitySettingsBtn.classList.toggle('login-hidden', !isAdmin);
     specialNotesBtn.classList.toggle('login-hidden', !isAdmin); // 지사 로그인에는 이 링크 자체가 안 보인다 — 화면 구성 설정으로도 못 바꿈
+    announcementManageBtn.classList.toggle('login-hidden', !isAdmin); // 공지가 하나도 없으면 배너 자체가 숨어서 등록할 곳을 못 찾는 문제가 있었다 — 그래서 배너와 별개로 관리자에게 항상 보이는 링크를 따로 둔다
   }
   function renderHubCategoryManager(){
     customCategoryList.innerHTML = getAllHubCategories().map(({id,label,builtin})=>
