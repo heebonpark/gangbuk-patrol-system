@@ -535,6 +535,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">자산관리</span>
             <span class="hub-btn-desc">전사 자산관리</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubCollabTower" data-hub-key="collabTower" title="본부-지사 협업플랫폼">
+            <span class="hub-btn-icon">🗼</span>
+            <span class="hub-btn-title">본부-지사 협업</span>
+            <span class="hub-btn-desc">업무 요청 · 진행상황 관제</span>
+          </button>
           <button type="button" class="hub-btn" id="btnHubTbmRisk" data-hub-key="tbmRisk" title="공사팀 작성">
             <span class="hub-btn-icon">⚠️</span>
             <span class="hub-btn-title">작업전 TBM 및 위험성평가</span>
@@ -5647,6 +5652,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubAssetManagement').addEventListener('click', ()=>{
     window.open('https://py-asset-manager-gkfcukfyhwgyq5xvijzvmb.streamlit.app/', '_blank');
   });
+  document.getElementById('btnHubCollabTower').addEventListener('click', ()=>{
+    // 본부-지사 협업플랫폼도 별도 서버(Vercel + Supabase)에서 도는 완전히 다른 앱 — 새
+    // 탭으로 열고, 그 앱 자체의 로그인은 사용자가 그 탭에서 별도로 진행해야 한다.
+    window.open('https://collab-control-tower-20260625.vercel.app', '_blank');
+  });
   document.getElementById('btnHubTbmRisk').addEventListener('click', ()=>{
     window.open('https://heebonpark.github.io/tbm-risk-assessment-app/', '_blank');
   });
@@ -5845,6 +5855,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'cardKeySales',      label:'카드키판매등록',         defaultCategory:'common' },
     { key:'lineManagement',    label:'회선관리',              defaultCategory:'common' },
     { key:'assetManagement',   label:'자산관리',              defaultCategory:'common' },
+    { key:'collabTower',       label:'본부-지사 협업',         defaultCategory:'common' },
     { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가', defaultCategory:'common' },
     { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
     { key:'management',       label:'경영',                  defaultCategory:'common' },
