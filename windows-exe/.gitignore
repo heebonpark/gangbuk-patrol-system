@@ -1,6 +1,8 @@
-# build.sh/build-blank.sh가 ../index.html, ../vehicle-management.html, ../voc-management.html
-# 에서 복사해오는 파일들이라 저장소에는 올리지 않습니다.
-# (진짜 원본은 저장소 루트의 세 파일 하나씩뿐이어야 함)
+# build.sh/build-blank.sh가 ../index.html, ../vehicle-management.html, ../voc-management.html,
+# ../kakao-map.html, ../kakao-map-admin.html 에서 복사해오는 파일들이라 저장소에는 올리지 않습니다.
+# (진짜 원본은 저장소 루트의 각 파일 하나씩뿐이어야 함)
 index.html
 vehicle-management.html
 voc-management.html
+kakao-map.html
+kakao-map-admin.html

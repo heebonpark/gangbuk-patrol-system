@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Data Intel PRO - 관리자 모니터링 대시보드</title>
+  <style>
+    :root { --bg: #0f172a; --surface: #1e293b; --text: #e2e8f0; --accent: #3b82f6; --accent-hover: #2563eb; --border: #334155; }
+    body { font-family: 'Pretendard', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+    #loginScreen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+    .card { background: var(--surface); padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); text-align: center; width: 300px; }
+    input[type=password] { width: 100%; padding: 10px; margin: 15px 0; border: 1px solid var(--border); border-radius: 6px; background: #0f172a; color: white; box-sizing: border-box; }
+    button { background: var(--accent); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; }
+    button:hover { background: var(--accent-hover); }
+    
+    .dashboard { display: none; max-width: 1000px; margin: 0 auto; }
+    h1 { color: #60a5fa; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+    .stats { display: flex; gap: 15px; margin-bottom: 20px; }
+    .stat-box { background: var(--surface); padding: 15px; border-radius: 10px; flex: 1; text-align: center; border: 1px solid var(--border); }
+    .stat-box h3 { margin: 0 0 10px 0; font-size: 14px; color: #94a3b8; }
+    .stat-box .val { font-size: 24px; font-weight: bold; color: #fff; }
+    
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 10px; overflow: hidden; }
+    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #334155; color: #94a3b8; font-weight: 600; font-size: 13px; }
+    td { font-size: 13px; }
+    tr:hover { background: #2a3441; }
+    .badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; }
+    .bg-green { background: rgba(34,197,94,0.2); color: #4ade80; }
+    .bg-yellow { background: rgba(234,179,8,0.2); color: #fde047; }
+    .bg-red { background: rgba(239,68,68,0.2); color: #f87171; }
+    .bg-gray { background: rgba(148,163,184,0.2); color: #cbd5e1; }
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;display:flex;align-items:center;justify-content:center}
+    .overlay.hidden{display:none}
+    .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:500px;max-width:96vw;max-height:92vh;overflow-y:auto;padding:22px}
+    .modal h2{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:16px}
+    .field{margin-bottom:12px}
+    .field label{display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;font-weight:600}
+    .field input,.field select,.field textarea{width:100%;padding:8px 10px;background:#0f172a;border:1px solid var(--border);border-radius:7px;color:white;font-size:13px;font-family:inherit;box-sizing:border-box}
+  </style>
+</head>
+<body>
+
+  <div id="loginScreen">
+    <div class="card">
+      <h2 style="margin-top:0;color:#60a5fa">Data Intel PRO</h2>
+      <p style="font-size:12px;color:#94a3b8">관리자 모니터링 시스템</p>
+      <input type="password" id="pw" placeholder="비밀번호 입력">
+      <button onclick="checkLogin()">로그인</button>
+      <p id="err" style="color:#f87171;font-size:11px;margin-top:10px;display:none">비밀번호가 틀렸습니다.</p>
+    </div>
+  </div>
+
+  <div class="dashboard" id="dashboard">
+    <h1>📊 현장 마커 상태 모니터링 (실시간)</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+      <div style="display:flex; gap:10px">
+        <select id="branchFilter" onchange="renderDashboard()" style="padding:6px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:5px;">
+          <option value="">🏢 전체 지사</option>
+        </select>
+        <select id="areaFilter" onchange="renderDashboard()" style="padding:6px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:5px;">
+          <option value="">📍 전체 영업구역</option>
+        </select>
+      </div>
+      <div style="text-align:right;font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:10px">
+        <span id="lastRefreshed"></span>
+        <button onclick="fetchData()" style="width:auto;padding:6px 12px;font-size:12px">🔄 새로고침</button>
+        <button onclick="copyForEmail()" style="width:auto;padding:6px 12px;font-size:12px;background:#8b5cf6">📋 메일 복사</button>
+        <button onclick="downloadCSV()" style="width:auto;padding:6px 12px;font-size:12px;background:#10b981">📥 엑셀 다운로드</button>
+      </div>
+    </div>
+    <div class="stats" id="statsArea"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>고객 고유ID</th>
+          <th>이름</th>
+          <th>지사</th>
+          <th>구역</th>
+          <th>주소 (위치)</th>
+          <th>현재 상태</th>
+          <th>특이사항(메모)</th>
+          <th>최종 업데이트</th>
+          <th>작업</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    function checkLogin() {
+      // 심플 관리자 패스워드 로직 (개발 데모용)
+      if(document.getElementById('pw').value === 'admin123') {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        fetchData();
+        setInterval(fetchData, 2000); // 2초마다 자동갱신
+      } else {
+        document.getElementById('err').style.display = 'block';
+      }
+    }
+
+    let lastData = {}; // 원본 데이터 보관
+
+    // kakao_map.html과 같은 브라우저 localStorage 키를 공유한다 — 예전 로컬 서버(/api/*)가
+    // 없어도 동작하며, 같은 브라우저에서 지도를 연 뒤 이 대시보드를 열면 데이터가 바로 보인다.
+    const MARKER_DB_KEY = 'kakaoMapMarkerStatus';
+    function loadMarkerDB(){
+      try{ return JSON.parse(localStorage.getItem(MARKER_DB_KEY) || '{}'); }
+      catch(e){ return {}; }
+    }
+    function saveMarkerDB(db){
+      try{ localStorage.setItem(MARKER_DB_KEY, JSON.stringify(db)); return true; }
+      catch(e){ return false; }
+    }
+
+    async function fetchData() {
+      try {
+        lastData = loadMarkerDB();
+        updateFilterOptions(lastData);
+        renderDashboard();
+        const now = new Date();
+        document.getElementById('lastRefreshed').textContent = `최근 갱신: ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+      } catch(e) {
+        console.error('데이터 조회 실패', e);
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:30px;color:#f87171">데이터를 불러오지 못했습니다.</td></tr>`;
+      }
+    }
+
+    function updateFilterOptions(data) {
+      const bFilter = document.getElementById('branchFilter');
+      const aFilter = document.getElementById('areaFilter');
+      const bVal = bFilter.value;
+      const aVal = aFilter.value;
+
+      const branches = new Set();
+      const areas = new Set();
+
+      for(const info of Object.values(data)) {
+        if(info.branch) branches.add(info.branch);
+        if(info.area) areas.add(info.area);
+      }
+
+      bFilter.innerHTML = '<option value="">🏢 전체 지사</option>';
+      [...branches].sort().forEach(b => {
+        bFilter.innerHTML += `<option value="${b}" ${b===bVal?'selected':''}>${b}</option>`;
+      });
+
+      aFilter.innerHTML = '<option value="">📍 전체 영업구역</option>';
+      [...areas].sort().forEach(a => {
+        aFilter.innerHTML += `<option value="${a}" ${a===aVal?'selected':''}>${a}</option>`;
+      });
+    }
+
+    function renderDashboard() {
+      const tbody = document.getElementById('tableBody');
+      const statsArea = document.getElementById('statsArea');
+      tbody.innerHTML = '';
+      
+      const bFilterVal = document.getElementById('branchFilter').value;
+      const aFilterVal = document.getElementById('areaFilter').value;
+
+      let counts = {};
+      let rows = [];
+
+      for(const [id, info] of Object.entries(lastData)) {
+        if(bFilterVal && info.branch !== bFilterVal) continue;
+        if(aFilterVal && info.area !== aFilterVal) continue;
+
+        counts[info.status] = (counts[info.status] || 0) + 1;
+        rows.push({ id, ...info });
+      }
+
+      // 최신순 정렬
+      rows.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+
+      // 요약 통계 렌더링
+      const order = ['상담완료', '진행중', '대기', '예외사항(해지,정지)'];
+      let statsHtml = '';
+      order.forEach(st => {
+        const cnt = counts[st] || 0;
+        statsHtml += `<div class="stat-box"><h3>${st}</h3><div class="val">${cnt}건</div></div>`;
+      });
+      statsArea.innerHTML = statsHtml;
+
+      // 테이블 렌더링
+      rows.forEach(r => {
+        let badgeCls = 'bg-gray';
+        if(r.status === '상담완료') badgeCls = 'bg-green';
+        if(r.status === '진행중') badgeCls = 'bg-yellow';
+        if(r.status.includes('예외')) badgeCls = 'bg-red';
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.name || '-'}</td>
+            <td>${r.branch || '-'}</td>
+            <td>${r.area || '-'}</td>
+            <td>${r.addr}</td>
+            <td><span class="badge ${badgeCls}">${r.status}</span></td>
+            <td style="max-width:200px;font-size:11px;color:#cbd5e1">${r.note ? r.note.replace(/\n/g,'<br>') : '-'}</td>
+            <td style="color:#94a3b8;font-size:11px">${r.updated_at}</td>
+            <td>
+              <button onclick="openEditModal('${r.id}')" style="width:auto;padding:4px 8px;font-size:11px;background:#3b82f6;margin-right:4px">✏️ 수정</button>
+              <button onclick="deleteRow('${r.id}')" style="width:auto;padding:4px 8px;font-size:11px;background:#ef4444">🗑️ 삭제</button>
+            </td>
+          </tr>
+        `;
+      });
+      if(rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:30px;color:#94a3b8">필터 조건에 맞는 마커 상태 데이터가 없습니다.</td></tr>`;
+      }
+    }
+    
+    // 삭제 기능
+    async function deleteRow(id) {
+      if(!confirm('정말 삭제하시겠습니까? 지도의 상태는 원상복구되지 않지만, DB에서는 삭제됩니다.')) return;
+      const db = loadMarkerDB();
+      delete db[id];
+      if(saveMarkerDB(db)) fetchData();
+      else alert('삭제 실패');
+    }
+
+    // 수정 모달 기능
+    function openEditModal(id) {
+      const data = lastData[id];
+      if(!data) return;
+      document.getElementById('edit_id').value = id;
+      document.getElementById('edit_name').value = data.name || '';
+      document.getElementById('edit_status').value = data.status || '';
+      document.getElementById('edit_branch').value = data.branch || '';
+      document.getElementById('edit_area').value = data.area || '';
+      document.getElementById('edit_addr').value = data.addr || '';
+      document.getElementById('edit_note').value = data.note || '';
+      document.getElementById('editModalOverlay').style.display = 'flex';
+    }
+
+    async function saveEditModal() {
+      const id = document.getElementById('edit_id').value;
+      const status = document.getElementById('edit_status').value;
+      const name = document.getElementById('edit_name').value;
+      const branch = document.getElementById('edit_branch').value;
+      const area = document.getElementById('edit_area').value;
+      const addr = document.getElementById('edit_addr').value;
+      const note = document.getElementById('edit_note').value;
+      
+      const db = loadMarkerDB();
+      db[id] = { status, name, branch, area, addr, note, updated_at: new Date().toLocaleString('ko-KR') };
+      if(saveMarkerDB(db)) {
+        document.getElementById('editModalOverlay').style.display = 'none';
+        fetchData();
+      } else {
+        alert('수정 실패');
+      }
+    }
+
+    // CSV 다운로드 기능
+    function downloadCSV() {
+      const tbody = document.getElementById('tableBody');
+      const rows = tbody.querySelectorAll('tr');
+      if(!rows || rows.length === 0 || rows[0].innerText.includes('없습니다')) return;
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+      csvContent += "고객 고유ID,이름,지사,구역,주소,현재 상태,특이사항,최종 업데이트\n";
+
+      rows.forEach(r => {
+        const cols = r.querySelectorAll('td');
+        if(cols.length < 9) return;
+        const rowData = [
+          cols[0].innerText,
+          cols[1].innerText,
+          cols[2].innerText,
+          cols[3].innerText,
+          cols[4].innerText,
+          cols[5].innerText,
+          cols[6].innerText.replace(/"/g, '""'),
+          cols[7].innerText
+        ].map(v => `"${v}"`).join(",");
+        csvContent += rowData + "\n";
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `marker_status_${new Date().getTime()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    
+    // 메일 복사 기능 (클립보드 HTML 복사)
+    function copyForEmail() {
+      const tbody = document.getElementById('tableBody');
+      const rows = tbody.querySelectorAll('tr');
+      if(!rows || rows.length === 0 || rows[0].innerText.includes('없습니다')) {
+        alert('복사할 데이터가 없습니다.');
+        return;
+      }
+
+      let htmlContent = `
+        <table style="border-collapse: collapse; width: 100%; font-family: 'Malgun Gothic', sans-serif; font-size: 13px;">
+          <thead>
+            <tr style="background-color: #f3f4f6; color: #374151; text-align: center;">
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">고객 고유ID</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">이름</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">지사</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">구역</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">주소 (위치)</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">현재 상태</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">특이사항(메모)</th>
+              <th style="border: 1px solid #d1d5db; padding: 8px; font-weight: bold;">최종 업데이트</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      rows.forEach(r => {
+        const cols = r.querySelectorAll('td');
+        if(cols.length < 9) return;
+        
+        let trHtml = '<tr>';
+        for(let i=0; i<8; i++) {
+          let val = cols[i].innerText.trim();
+          let align = (i === 1 || i === 4 || i === 6) ? 'left' : 'center'; // 이름, 주소, 메모는 좌측정렬
+          trHtml += `<td style="border: 1px solid #d1d5db; padding: 8px; color: #1f2937; text-align: ${align};">${val.replace(/\n/g, '<br>')}</td>`;
+        }
+        trHtml += '</tr>';
+        htmlContent += trHtml;
+      });
+
+      htmlContent += `</tbody></table>`;
+
+      // 구형/신형 브라우저 호환 복사 로직 (Range Selection)
+      const div = document.createElement("div");
+      div.innerHTML = htmlContent;
+      div.style.position = 'fixed';
+      div.style.left = '-9999px';
+      document.body.appendChild(div);
+      
+      const range = document.createRange();
+      range.selectNode(div);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+      
+      try {
+        document.execCommand('copy');
+        alert('메일 본문용 표가 클립보드에 복사되었습니다!\\n메일 쓰기 창(아웃룩, 지메일 등) 본문에서 붙여넣기(Ctrl+V) 하세요.');
+      } catch (err) {
+        alert('클립보드 복사에 실패했습니다.');
+      }
+      
+      window.getSelection().removeAllRanges();
+      document.body.removeChild(div);
+    }
+    
+    // 엔터키 로그인 지원
+    document.getElementById('pw').addEventListener('keypress', function(e) {
+      if(e.key === 'Enter') checkLogin();
+    });
+  </script>
+
+  <!-- 관리자 수정 모달 -->
+  <div id="editModalOverlay" class="overlay" style="display:none">
+    <div class="modal">
+      <h2 style="margin-top:0">상태 상세 수정</h2>
+      <input type="hidden" id="edit_id">
+      <input type="hidden" id="edit_addr">
+      <div class="field">
+        <label>고객명</label>
+        <input type="text" id="edit_name">
+      </div>
+      <div class="field">
+        <label>상태</label>
+        <select id="edit_status">
+          <option value="상담완료">상담완료</option>
+          <option value="진행중">진행중</option>
+          <option value="대기">대기</option>
+          <option value="예외사항(해지,정지)">예외사항(해지,정지)</option>
+        </select>
+      </div>
+      <div class="field" style="display:flex;gap:10px">
+        <div style="flex:1"><label>지사</label><input type="text" id="edit_branch"></div>
+        <div style="flex:1"><label>구역</label><input type="text" id="edit_area"></div>
+      </div>
+      <div class="field">
+        <label>특이사항 (메모)</label>
+        <textarea id="edit_note" rows="4"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+        <button onclick="document.getElementById('editModalOverlay').style.display='none'" style="padding:8px 15px;background:var(--border);color:white;width:auto">취소</button>
+        <button onclick="saveEditModal()" style="padding:8px 15px;width:auto">저장하기</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

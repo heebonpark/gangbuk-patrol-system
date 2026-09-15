@@ -18,6 +18,13 @@
 // 자리에서 업로드해 쓰는 구조라 처음부터 개인정보가 들어있지 않다. 다만 xlsx.js·Chart.js를
 // CDN(cdnjs)에서 불러오므로, 이 화면만은 실행 PC에 인터넷 연결이 있어야 정상 동작한다.
 //
+// kakao-map.html(고객지도)/kakao-map-admin.html(지도 관리자 대시보드)도 같은 이유로 시드
+// 데이터가 없다 — 주소도 CSV/엑셀을 그 자리에서 업로드해 지오코딩하고, 카카오 지도 JS
+// 키도 화면에서 직접 입력한다. 예전엔 마커별 진행상태를 로컬 파이썬 서버(지도실행.py,
+// /api/*)에 저장하는 구조였는데, 정적 파일만으로도(exe·GitHub Pages 어디서든) 그대로
+// 동작하도록 브라우저 localStorage 기반으로 바꿨다. 카카오 지도 SDK를 CDN(dapi.kakao.com)
+// 에서 불러오므로, 이 화면도 실행 PC에 인터넷 연결이 있어야 한다.
+//
 // 주의: 이 실행 파일은 빌드 시점의 스냅샷을 담고 있습니다.
 // 앱이 업데이트되면 이 실행 파일도 새로 빌드해서 다시 배포해야 최신 화면이 보입니다.
 package main
@@ -41,6 +48,12 @@ var vehicleManagementHTML []byte
 
 //go:embed voc-management.html
 var vocManagementHTML []byte
+
+//go:embed kakao-map.html
+var kakaoMapHTML []byte
+
+//go:embed kakao-map-admin.html
+var kakaoMapAdminHTML []byte
 
 func messageBox(title, text string) {
 	user32 := syscall.NewLazyDLL("user32.dll")
@@ -76,6 +89,14 @@ func main() {
 		return
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "voc-management.html"), vocManagementHTML, 0644); err != nil {
+		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "kakao-map.html"), kakaoMapHTML, 0644); err != nil {
+		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "kakao-map-admin.html"), kakaoMapAdminHTML, 0644); err != nil {
 		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
 		return
 	}
