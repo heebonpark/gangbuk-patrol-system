@@ -736,6 +736,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">기본 메뉴 목록 (지사별로 따로 설정 안 했으면 이 체크 상태를 씀)</p>
       <div id="hubVisibilityList"></div>
+      <!-- 설정 내보내기/가져오기: 위의 모든 설정은 이 기기의 브라우저(localStorage)에만
+           저장되어 다른 기기로 자동으로 안 넘어간다(예: PC에서 추가한 회선관리 항목이
+           아이폰에는 안 보이는 문제) — 그래서 파일로 내보내고 다른 기기에서 불러오는
+           방법을 제공한다. 특이사항 관리(이중 암호로 보호되는 기록)는 일부러 포함하지
+           않는다. -->
+      <div style="margin:14px 0 0;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">설정 내보내기/가져오기</p>
+        <p class="sub" style="margin:0 0 8px;">위 설정들은 이 기기의 브라우저에만 저장됩니다. 다른 기기(PC↔모바일 등)에서도 똑같이 쓰려면 여기서 "내보내기"로 파일을 받은 뒤, 다른 기기에서 "가져오기"로 불러오세요. (특이사항 관리 내용은 포함되지 않습니다.)</p>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn" id="btnHubSettingsExport">📤 내보내기</button>
+          <button type="button" class="btn" id="btnHubSettingsImport">📥 가져오기</button>
+          <input type="file" id="hubSettingsImportFile" accept="application/json" style="display:none;">
+        </div>
+      </div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-primary" id="btnHubVisibilityCancel">닫기</button>
       </div>
@@ -6712,6 +6726,92 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
     saveVisibilityPanelState(); // 열려 있던 입력창에 아직 안 저장된 내용이 있으면 마저 저장
     visibilityPanel.classList.add('login-hidden');
+  });
+  /* ---- 설정 내보내기/가져오기 ----
+     화면 구성 설정/항목 관리/공지사항 등은 전부 이 기기의 브라우저(localStorage)에만
+     저장되어 다른 기기로 자동 동기화되지 않는다 — PC에서 추가한 회선관리 항목이
+     아이폰에는 안 보이는 식의 문제가 반복적으로 있었다. 파일로 내보내고 다른 기기에서
+     불러오는 방법으로 이 문제를 해결한다. 특이사항 관리(이중 암호로 보호되는 기록)는
+     그 보호 취지를 유지하기 위해 일부러 내보내기 대상에서 뺀다.
+     덮어쓰기 확인창은 native confirm() 대신 페이지 안 모달로 만든다(prompt()가 일부
+     임베디드 웹뷰에서 안 뜨던 것과 같은 이유로, 위험도가 높은 동작이라 더 확실하게). */
+  const HUB_SETTINGS_EXPORT_KEYS = [
+    'hubAnnouncements','hubBranchVisibility','hubBuiltinCategoryLabels','hubButtonCategory',
+    'hubButtonNotes','hubButtonTitleOverrides','hubButtonVisibility','hubCustomCategories',
+    'hubCustomItems','hubExternalLinks','hubGroupItems'
+  ];
+  function showConfirmModal(message, onConfirm){
+    const existing = document.getElementById('hubPwConfirmOverlay');
+    if(existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'hub-pw-confirm-overlay';
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.remove(); });
+    const card = document.createElement('div');
+    card.className = 'hub-pw-confirm-card';
+    const p = document.createElement('p');
+    p.style.cssText = 'margin:0 0 14px;font-size:13.5px;color:var(--text);line-height:1.5;';
+    p.textContent = message;
+    card.appendChild(p);
+    const btnRow = document.createElement('div');
+    btnRow.className = 'hub-pw-confirm-btnrow';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = '취소';
+    cancelBtn.addEventListener('click', ()=> overlay.remove());
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'primary';
+    okBtn.textContent = '확인';
+    okBtn.addEventListener('click', ()=>{ overlay.remove(); onConfirm(); });
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(okBtn);
+    card.appendChild(btnRow);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  }
+  document.getElementById('btnHubSettingsExport').addEventListener('click', ()=>{
+    const data = {};
+    HUB_SETTINGS_EXPORT_KEYS.forEach(k=>{
+      const raw = localStorage.getItem(k);
+      if(raw !== null){ try{ data[k] = JSON.parse(raw); }catch(e){} }
+    });
+    const payload = { app:'gangbuk-patrol-hub-settings', version:1, exportedAt:new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `허브설정_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  });
+  document.getElementById('btnHubSettingsImport').addEventListener('click', ()=>{
+    document.getElementById('hubSettingsImportFile').click();
+  });
+  document.getElementById('hubSettingsImportFile').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // 같은 파일을 다시 골라도 change가 또 나도록 비워둔다
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      let parsed;
+      try{ parsed = JSON.parse(reader.result); }
+      catch(err){ alert('파일을 읽을 수 없습니다. 올바른 설정 파일인지 확인해주세요.'); return; }
+      if(!parsed || typeof parsed.data !== 'object'){
+        alert('올바른 허브 설정 파일이 아닙니다.');
+        return;
+      }
+      const keys = Object.keys(parsed.data).filter(k=>HUB_SETTINGS_EXPORT_KEYS.includes(k));
+      if(keys.length === 0){ alert('가져올 설정이 없습니다.'); return; }
+      showConfirmModal(`이 기기의 허브 설정을 파일 내용(${keys.length}개 항목)으로 덮어쓸까요? 지금 이 기기에 있던 기존 설정은 사라집니다.`, ()=>{
+        keys.forEach(k=>{ localStorage.setItem(k, JSON.stringify(parsed.data[k])); });
+        applyHubVisibility();
+        renderHubVisibilityPanel();
+        alert('설정을 가져왔습니다.');
+      });
+    };
+    reader.readAsText(file);
   });
   visibilityList.addEventListener('change', (e)=>{
     if(!e.target.matches('input[data-vis-key], input[data-title-key], select[data-cat-key], textarea[data-note-key]')) return;
