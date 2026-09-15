@@ -421,7 +421,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hub-visibility-row select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);flex:none;}
   .hub-visibility-item{padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border);}
   .hub-visibility-item:last-child{border-bottom:none;margin-bottom:0;}
-  .hub-visibility-note{width:100%;box-sizing:border-box;margin-top:4px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);resize:vertical;}
+  .hub-visibility-note-row{display:flex;gap:6px;align-items:flex-start;margin-top:4px;}
+  .hub-visibility-note{flex:1;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);resize:vertical;}
+  .hub-note-save-btn{flex:none;padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);}
+  .hub-note-save-btn:hover{opacity:.9;}
+  .hub-note-saved-flag{display:inline-block;margin-top:4px;font-size:11.5px;color:var(--good);font-weight:700;}
   .hub-btn{position:relative;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
 .hub-btn-info{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--text-mute);font-size:11px;line-height:16px;text-align:center;font-style:normal;font-weight:700;cursor:pointer;z-index:2;}
 .hub-btn-info.has-note{background:var(--accent);border-color:var(--accent);color:#fff;}
@@ -6247,7 +6251,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
           ${select}
           ${removeLink}
         </div>
-        <textarea class="hub-visibility-note" data-note-key="${key}" rows="2" placeholder="이 메뉴에 대한 업무 상세설명 (선택 — 허브 화면에서 ⓘ를 누르면 여기 적은 내용이 보입니다)">${esc(notes[key] || '')}</textarea>
+        <div class="hub-visibility-note-row">
+          <textarea class="hub-visibility-note" data-note-key="${key}" rows="2" placeholder="이 메뉴에 대한 업무 상세설명 (선택 — 허브 화면에서 ⓘ를 누르면 여기 적은 내용이 보입니다)">${esc(notes[key] || '')}</textarea>
+          <button type="button" class="hub-note-save-btn" data-save-note-key="${key}">저장</button>
+        </div>
+        <span class="hub-note-saved-flag" data-saved-flag-key="${key}" hidden>✓ 저장됨</span>
       </div>`;
     }).join('');
     // 각 select의 현재 값을 분류에 맞게 지정 (innerHTML 문자열엔 selected를 못 넣었으니 여기서)
@@ -6339,6 +6347,21 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   visibilityList.addEventListener('change', (e)=>{
     if(!e.target.matches('input[data-vis-key], input[data-title-key], select[data-cat-key], textarea[data-note-key]')) return;
     saveVisibilityPanelState();
+  });
+  // 설명란마다 있는 "저장" 버튼 — change 이벤트(포커스 이탈)에 기대지 않고, 관리자가
+  // 직접 눌러서 그 즉시 저장되는 걸 눈으로 확인할 수 있게 한다("✓ 저장됨" 표시).
+  visibilityList.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-save-note-key]');
+    if(!btn) return;
+    e.preventDefault();
+    saveVisibilityPanelState();
+    const key = btn.getAttribute('data-save-note-key');
+    const flag = visibilityList.querySelector(`[data-saved-flag-key="${key}"]`);
+    if(flag){
+      flag.hidden = false;
+      clearTimeout(flag._hideTimer);
+      flag._hideTimer = setTimeout(()=>{ flag.hidden = true; }, 1800);
+    }
   });
 
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
