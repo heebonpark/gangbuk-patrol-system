@@ -410,13 +410,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   /* 로그인 직후 "근태관리/차량관리" 선택 화면 — 기존 로그인 게이트 스타일(.login-gate/.login-box)을
      그대로 재사용하고, 여기 버튼 그리드만 추가한다. 근태관리 쪽 로직/화면은 전혀 건드리지 않고
      이 화면이 그 위에 한 겹 얹혔다가 "근태관리"를 누르면 사라지는 방식. */
-  .hub-btn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:6px;}
+  /* CSS Grid(auto-fit/repeat) 대신 flexbox+flex-wrap을 쓴다 — 아이폰/아이패드 Safari에서
+     display:none 상태로 innerHTML을 채운 뒤(showSubmenu가 항목을 미리 렌더링해두고 나중에
+     보여주는 방식) 다시 보여줄 때, 특정 항목(주로 grid 트랙이 남는 마지막 줄의 항목)이
+     스크롤해도 전혀 안 보이는 렌더링 버그가 있었다 — flexbox는 이런 문제 없이 훨씬
+     안정적으로 동작해서 레이아웃 방식 자체를 바꿨다. */
+  .hub-btn-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;}
   /* 메뉴가 18개까지 늘어나면서 한 줄에 적게 들어가면 세로로 너무 길게 늘어지는 문제가
      있었다 — 모바일에서도 한 줄에 1개씩이 아니라 2개씩 보이게 하고, 버튼 자체 크기(패딩·
      아이콘·글자)도 조금 줄여서 좁은 화면에서 두 칸이 여유 있게 들어가게 한다. */
   @media (max-width:640px){
-    .hub-btn-grid{grid-template-columns:repeat(2, 1fr);gap:8px;}
-    .hub-btn{padding:12px 8px;gap:3px;}
+    .hub-btn-grid{gap:8px;}
+    .hub-btn{flex:0 0 calc(50% - 4px);padding:12px 8px;gap:3px;}
     .hub-btn-icon{font-size:20px;}
     .hub-btn-title{font-size:12.5px;}
     .hub-btn-desc{font-size:10px;}
@@ -438,7 +443,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hub-note-save-btn{flex:none;padding:6px 12px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);}
   .hub-note-save-btn:hover{opacity:.9;}
   .hub-note-saved-flag{display:inline-block;margin-top:4px;font-size:11.5px;color:var(--good);font-weight:700;}
-  .hub-btn{position:relative;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
+  .hub-btn{position:relative;flex:1 1 150px;min-width:0;box-sizing:border-box;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
 .hub-btn-info{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--text-mute);font-size:11px;line-height:16px;text-align:center;font-style:normal;font-weight:700;cursor:pointer;z-index:2;}
 .hub-btn-info.has-note{background:var(--accent);border-color:var(--accent);color:#fff;}
 .hub-btn-info:hover{border-color:var(--accent);color:var(--accent);}
