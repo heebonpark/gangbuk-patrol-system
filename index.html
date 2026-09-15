@@ -555,6 +555,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">경영</span>
             <span class="hub-btn-desc">관리자가 연결할 링크 설정</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubCisSms" data-hub-key="cisSms" title="CIS 단체/개별 선택 문자보내기">
+            <span class="hub-btn-icon">💬</span>
+            <span class="hub-btn-title">CIS 문자보내기</span>
+            <span class="hub-btn-desc">CIS 단체/개별 문자 자동발송</span>
+          </button>
         </div>
       </div>
       <div class="hub-section" data-hub-section="sales">
@@ -5668,6 +5673,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 처음 누르면 연결할 URL을 물어보고(기기별 localStorage에 저장) 그 다음부터는 바로 연다.
     openHubLink('management', '경영');
   });
+  document.getElementById('btnHubCisSms').addEventListener('click', ()=>{
+    // CIS 문자보내기는 실제 CIS 프로그램 화면을 pyautogui로 제어하는 데스크톱 매크로라
+    // 브라우저에서 바로 쓸 수 없다 — 소개/다운로드 페이지를 새 탭으로 연다.
+    window.open('https://heebonpark.github.io/CIS_SMS_KTT/', '_blank');
+  });
   document.getElementById('btnHubSalesWeekly').addEventListener('click', ()=>{
     window.open('https://heebonpark.github.io/Gangbuk-Gangwon-Weekly-Dashboard_2026/', '_blank');
   });
@@ -5859,6 +5869,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가', defaultCategory:'common' },
     { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
     { key:'management',       label:'경영',                  defaultCategory:'common' },
+    { key:'cisSms',           label:'CIS 문자보내기',         defaultCategory:'common' },
     { key:'salesWeekly',       label:'영업주간업무',           defaultCategory:'sales' },
     { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
     { key:'subscriptionDashboard', label:'청약현황대시보드',    defaultCategory:'sales' },
