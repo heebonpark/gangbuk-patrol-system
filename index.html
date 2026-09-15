@@ -452,6 +452,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .special-note-text{flex:1;white-space:pre-wrap;color:var(--text);}
 .special-note-del{flex:none;background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0;}
 .special-note-empty{color:var(--text-mute);font-size:13px;padding:8px 0;}
+.hub-announcement-banner{display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:10px 14px;background:var(--accent-warm-soft);border:1px solid var(--accent-warm);border-radius:10px;text-align:left;}
+.hub-announcement-icon{flex:none;font-size:16px;}
+.hub-announcement-text{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hub-announcement-more{flex:none;font-size:12px;color:var(--accent-warm);text-decoration:underline;cursor:pointer;white-space:nowrap;}
 .hub-pw-confirm-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:3200;display:flex;align-items:center;justify-content:center;padding:16px;}
 .hub-pw-confirm-card{width:100%;max-width:320px;background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow-lg);}
 .hub-pw-confirm-card h3{margin:0 0 10px;font-size:14.5px;font-weight:700;color:var(--text);}
@@ -532,6 +536,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="login-box" style="max-width:760px;text-align:center;">
     <h1>어떤 업무를 여시겠어요?</h1>
     <p class="sub" id="hubLoginLabel"></p>
+    <!-- 공지사항: 관리자만 쓰고 전체(지사 포함)가 볼 수 있는 배너. 등록된 공지가
+         없으면 통째로 숨긴다. -->
+    <div id="hubAnnouncementBanner" class="hub-announcement-banner login-hidden">
+      <span class="hub-announcement-icon">📢</span>
+      <span class="hub-announcement-text" id="hubAnnouncementText"></span>
+      <a href="#" id="btnHubAnnouncementMore" class="hub-announcement-more">더보기</a>
+    </div>
     <div id="hubMainGrid">
       <div class="hub-section" data-hub-section="common">
         <div class="hub-section-title">공통</div>
@@ -659,6 +670,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div style="margin-top:12px;text-align:right;">
         <button type="button" class="btn" id="btnHubGroupManageClose">닫기</button>
+      </div>
+    </div>
+
+    <!-- 공지사항 전체보기/관리 패널: 지사 로그인도 열어서 읽을 수 있다(등록/수정/삭제
+         버튼만 관리자에게만 보인다 — btnHubAnnouncementAddRow는 JS에서 isAdmin으로 토글). -->
+    <div id="hubAnnouncementPanel" class="login-hidden" style="margin-top:16px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <p class="sub" style="margin:0 0 8px;font-weight:700;color:var(--text);">공지사항</p>
+      <div id="hubAnnouncementList" style="margin-bottom:12px;"></div>
+      <div id="hubAnnouncementAddRow" class="login-hidden" style="display:flex;gap:8px;">
+        <textarea id="hubAnnouncementNewInput" rows="2" placeholder="공지 내용을 입력하세요" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);resize:vertical;box-sizing:border-box;"></textarea>
+        <button type="button" class="btn btn-primary" id="btnHubAnnouncementAdd" style="flex:none;align-self:flex-start;">등록</button>
+      </div>
+      <div style="margin-top:12px;text-align:right;">
+        <button type="button" class="btn btn-primary" id="btnHubAnnouncementClose">닫기</button>
       </div>
     </div>
 
@@ -5691,6 +5716,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     hub.classList.remove('login-hidden');
     if(typeof hideSubmenu === 'function') hideSubmenu(); // 회선관리/입찰·공사팀신청 하위메뉴는 항상 처음엔 접힌 상태로
     if(typeof applyHubVisibility === 'function') applyHubVisibility(); // 로그인 주체(관리자/지사)에 맞춰 메뉴 노출 갱신
+    if(typeof updateAnnouncementBanner === 'function') updateAnnouncementBanner(); // 공지사항 배너도 로그인 시점에 갱신
   }
   document.getElementById('btnHubAttendance').addEventListener('click', ()=>{
     hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
@@ -5955,6 +5981,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   const specialNotesList = document.getElementById('specialNotesList');
   const branchAccessSelect = document.getElementById('hubBranchAccessSelect');
   const branchAccessList = document.getElementById('hubBranchAccessList');
+  const announcementBanner = document.getElementById('hubAnnouncementBanner');
+  const announcementText = document.getElementById('hubAnnouncementText');
+  const announcementPanel = document.getElementById('hubAnnouncementPanel');
+  const announcementList = document.getElementById('hubAnnouncementList');
+  const announcementAddRow = document.getElementById('hubAnnouncementAddRow');
 
   function getHubVisibility(){
     try{ return JSON.parse(localStorage.getItem('hubButtonVisibility') || '{}'); }
@@ -6352,6 +6383,80 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       setSpecialNotes(notes);
       renderSpecialNotes();
     });
+  });
+  /* ---- 공지사항 (관리자만 등록/삭제, 전체 로그인이 읽을 수 있음) ----
+     특이사항 관리와 반대로 "누구나 볼 수 있어야" 하는 기능이라, 배너와 패널 자체는
+     화면 구성 설정/지사별 접근 권한과 무관하게 항상(로그인만 하면) 노출된다. 등록·삭제
+     버튼(announcementAddRow)만 isAdmin일 때만 보인다. */
+  function getHubAnnouncements(){
+    try{ return JSON.parse(localStorage.getItem('hubAnnouncements') || '[]'); }
+    catch(e){ return []; }
+  }
+  function setHubAnnouncements(list){
+    localStorage.setItem('hubAnnouncements', JSON.stringify(list));
+  }
+  function updateAnnouncementBanner(){
+    const list = getHubAnnouncements();
+    if(list.length === 0){
+      announcementBanner.classList.add('login-hidden');
+      return;
+    }
+    announcementBanner.classList.remove('login-hidden');
+    announcementText.textContent = list[0].text;
+  }
+  function renderAnnouncementList(){
+    const list = getHubAnnouncements();
+    if(list.length === 0){
+      announcementList.innerHTML = '<div class="special-note-empty">등록된 공지사항이 없습니다.</div>';
+      return;
+    }
+    announcementList.innerHTML = list.map((n, idx)=>`
+      <div class="special-note-row">
+        <div class="special-note-ts">${esc(fmtTs(n.at))}</div>
+        <div class="special-note-text">${esc(n.text)}</div>
+        <button type="button" class="special-note-del login-hidden" data-del-announcement-idx="${idx}">삭제</button>
+      </div>
+    `).join('');
+    const auth = currentAuth();
+    const isAdmin = !!(auth && auth.isAdmin);
+    announcementList.querySelectorAll('[data-del-announcement-idx]').forEach(btn=>{
+      btn.classList.toggle('login-hidden', !isAdmin);
+    });
+  }
+  function openAnnouncementPanel(){
+    renderAnnouncementList();
+    const auth = currentAuth();
+    announcementAddRow.classList.toggle('login-hidden', !(auth && auth.isAdmin));
+    announcementPanel.classList.remove('login-hidden');
+  }
+  document.getElementById('btnHubAnnouncementMore').addEventListener('click', (e)=>{
+    e.preventDefault();
+    openAnnouncementPanel();
+  });
+  document.getElementById('btnHubAnnouncementClose').addEventListener('click', ()=>{
+    announcementPanel.classList.add('login-hidden');
+  });
+  document.getElementById('btnHubAnnouncementAdd').addEventListener('click', ()=>{
+    const input = document.getElementById('hubAnnouncementNewInput');
+    const text = input.value.trim();
+    if(!text) return;
+    const list = getHubAnnouncements();
+    list.unshift({ at: new Date().toISOString(), text });
+    setHubAnnouncements(list);
+    input.value = '';
+    renderAnnouncementList();
+    updateAnnouncementBanner();
+  });
+  announcementList.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-del-announcement-idx]');
+    if(!btn) return;
+    if(!confirm('이 공지사항을 삭제할까요?')) return;
+    const idx = Number(btn.getAttribute('data-del-announcement-idx'));
+    const list = getHubAnnouncements();
+    list.splice(idx, 1);
+    setHubAnnouncements(list);
+    renderAnnouncementList();
+    updateAnnouncementBanner();
   });
   function ensureHubButtonInfoIcons(){
     const notes = getHubButtonNotes();
