@@ -25,6 +25,12 @@
 // 동작하도록 브라우저 localStorage 기반으로 바꿨다. 카카오 지도 SDK를 CDN(dapi.kakao.com)
 // 에서 불러오므로, 이 화면도 실행 PC에 인터넷 연결이 있어야 한다.
 //
+// subscription-dashboard.html(청약현황대시보드)도 시드 데이터가 없다 — 원래
+// subscription-status-dashboard라는 별도 Public 저장소의 "대시보드생성기/template.html"
+// (데이터 없는 화면 구조만 담긴 템플릿)을 그대로 가져온 것으로, CSV를 그 자리에서
+// 업로드해 지사·영업자별 실적을 전부 브라우저 안에서 계산·렌더링한다. 외부 CDN도
+// 쓰지 않아 완전히 오프라인으로 동작한다.
+//
 // 주의: 이 실행 파일은 빌드 시점의 스냅샷을 담고 있습니다.
 // 앱이 업데이트되면 이 실행 파일도 새로 빌드해서 다시 배포해야 최신 화면이 보입니다.
 package main
@@ -54,6 +60,9 @@ var kakaoMapHTML []byte
 
 //go:embed kakao-map-admin.html
 var kakaoMapAdminHTML []byte
+
+//go:embed subscription-dashboard.html
+var subscriptionDashboardHTML []byte
 
 func messageBox(title, text string) {
 	user32 := syscall.NewLazyDLL("user32.dll")
@@ -97,6 +106,10 @@ func main() {
 		return
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "kakao-map-admin.html"), kakaoMapAdminHTML, 0644); err != nil {
+		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "subscription-dashboard.html"), subscriptionDashboardHTML, 0644); err != nil {
 		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
 		return
 	}

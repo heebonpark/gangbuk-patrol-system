@@ -15,11 +15,12 @@ cp ../vehicle-management.html ./vehicle-management.html
 cp ../voc-management.html ./voc-management.html
 cp ../kakao-map.html ./kakao-map.html
 cp ../kakao-map-admin.html ./kakao-map-admin.html
+cp ../subscription-dashboard.html ./subscription-dashboard.html
 # vehicle-management.html은 시드 데이터 자체가 항상 마스킹되어 있어(2026-09-15 이후)
 # 배포용 exe에 그대로 담아도 안전하다. 완전히 빈 상태는 아니므로, 새 고객 배포판에서는
-# 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다. voc-management.html과
-# kakao-map.html/kakao-map-admin.html은 시드 데이터가 아예 없어(CSV/엑셀을 그 자리에서
-# 업로드하는 구조) 배포판에 그대로 담아도 된다.
+# 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다. voc-management.html,
+# kakao-map.html/kakao-map-admin.html, subscription-dashboard.html은 시드 데이터가
+# 아예 없어(CSV/엑셀을 그 자리에서 업로드하는 구조) 배포판에 그대로 담아도 된다.
 
 if ! command -v goversioninfo >/dev/null 2>&1; then
   GOVERSIONINFO_BIN="$(go env GOPATH)/bin/goversioninfo"

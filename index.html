@@ -551,6 +551,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">입찰/공사팀신청</span>
             <span class="hub-btn-desc">입찰일정등록 · 공사팀신청</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubSubscriptionDashboard" data-hub-key="subscriptionDashboard">
+            <span class="hub-btn-icon">📊</span>
+            <span class="hub-btn-title">청약현황대시보드</span>
+            <span class="hub-btn-desc">지사·영업자별 청약 실적 · 추이</span>
+          </button>
         </div>
       </div>
       <div class="hub-section" data-hub-section="customer">
@@ -5648,6 +5653,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 고객지도(카카오맵)도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
     window.open('kakao-map.html', '_blank');
   });
+  document.getElementById('btnHubSubscriptionDashboard').addEventListener('click', ()=>{
+    // 청약현황대시보드도 CSV를 그 자리에서 업로드해 쓰는 자체 완결형 앱이라 새 탭으로 연다.
+    window.open('subscription-dashboard.html', '_blank');
+  });
 
   /* ---- 회선관리(기본 MVNO/WCDMA) · 입찰/공사팀신청(기본 입찰일정등록/공사팀신청) ----
      이 그룹 안의 항목은 고정된 2개가 아니라, 관리자가 "⚙️ 항목 관리"에서 자유롭게
@@ -5821,6 +5830,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
     { key:'salesWeekly',       label:'영업주간업무',           defaultCategory:'sales' },
     { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
+    { key:'subscriptionDashboard', label:'청약현황대시보드',    defaultCategory:'sales' },
     { key:'collection',        label:'체납관리',              defaultCategory:'customer' },
     { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' },
     { key:'vocManagement',     label:'VOC관리',               defaultCategory:'customer' },
