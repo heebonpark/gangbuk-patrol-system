@@ -419,6 +419,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hub-visibility-row input{width:15px;height:15px;flex:none;}
   .hub-visibility-row input[type="text"]{width:auto;height:auto;flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--sans);background:var(--card);color:var(--text);}
   .hub-visibility-row select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);flex:none;}
+  .hub-branch-access-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;color:var(--text);}
+  .hub-branch-access-row input{width:15px;height:15px;flex:none;}
+  .hub-branch-access-hint{color:var(--text-mute);font-size:12.5px;padding:6px 0;}
   .hub-visibility-item{padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border);}
   .hub-visibility-item:last-child{border-bottom:none;margin-bottom:0;}
   .hub-visibility-note-row{display:flex;gap:6px;align-items:flex-start;margin-top:4px;}
@@ -681,6 +684,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="btn btn-primary" id="btnHubAddItem">추가</button>
         </div>
       </div>
+      <div style="margin:0 0 14px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">지사별 접근 권한</p>
+        <p class="sub" style="margin:0 0 8px;">예) 중앙은 근태관리만, 강북은 근태관리+차량관리만 보이게 — 처럼 지사마다 다르게 주고 싶을 때 씁니다. 아래에서 지사를 고른 뒤 체크를 바꾸면 그 지사에만 적용됩니다. 따로 설정하지 않은 지사는 아래 "기본 메뉴 목록"의 체크 상태를 그대로 씁니다.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <select id="hubBranchAccessSelect" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);">
+            <option value="">— 지사를 선택하세요 —</option>
+          </select>
+          <button type="button" class="btn" id="btnHubBranchAccessReset">이 지사 기본값으로 초기화</button>
+        </div>
+        <div id="hubBranchAccessList"></div>
+      </div>
+      <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">기본 메뉴 목록 (지사별로 따로 설정 안 했으면 이 체크 상태를 씀)</p>
       <div id="hubVisibilityList"></div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-primary" id="btnHubVisibilityCancel">닫기</button>
@@ -5938,6 +5953,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   const specialNotesBtn = document.getElementById('btnSpecialNotes');
   const specialNotesPanel = document.getElementById('specialNotesPanel');
   const specialNotesList = document.getElementById('specialNotesList');
+  const branchAccessSelect = document.getElementById('hubBranchAccessSelect');
+  const branchAccessList = document.getElementById('hubBranchAccessList');
 
   function getHubVisibility(){
     try{ return JSON.parse(localStorage.getItem('hubButtonVisibility') || '{}'); }
@@ -5945,6 +5962,26 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   }
   function setHubVisibility(map){
     localStorage.setItem('hubButtonVisibility', JSON.stringify(map));
+  }
+  // 지사별로 다르게 줄 메뉴 접근 권한 — { 지사명: { 메뉴키: true/false } }. 특정
+  // (지사, 메뉴) 조합에 값이 없으면 위 hubButtonVisibility(전체 지사 기본값)를 따른다.
+  function getHubBranchVisibility(){
+    try{ return JSON.parse(localStorage.getItem('hubBranchVisibility') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setHubBranchVisibility(map){
+    localStorage.setItem('hubBranchVisibility', JSON.stringify(map));
+  }
+  // 로그인 주체(관리자/특정 지사/그 외)에 따라 메뉴 하나가 실제로 보여야 하는지 계산한다.
+  // 관리자는 항상 전체 노출. 지사 로그인이고 그 지사에 이 메뉴의 개별 설정이 있으면 그걸
+  // 쓰고, 없으면 전체 지사 기본값(globalVis)을 그대로 쓴다.
+  function resolveShownForViewer(auth, key, globalVis){
+    if(auth && auth.isAdmin) return true;
+    if(auth && auth.branch){
+      const branchMap = getHubBranchVisibility()[auth.branch];
+      if(branchMap && Object.prototype.hasOwnProperty.call(branchMap, key)) return !!branchMap[key];
+    }
+    return globalVis[key] !== false;
   }
   function getHubTitleOverrides(){
     try{ return JSON.parse(localStorage.getItem('hubButtonTitleOverrides') || '{}'); }
@@ -6364,7 +6401,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     const vis = getHubVisibility();
     document.querySelectorAll('#hubMainGrid [data-hub-key]').forEach(btn=>{
       const key = btn.getAttribute('data-hub-key');
-      const shown = isAdmin || vis[key] !== false;
+      const shown = resolveShownForViewer(auth, key, vis);
       btn.classList.toggle('login-hidden', !shown);
     });
     document.querySelectorAll('#hubMainGrid .hub-section').forEach(sec=>{
@@ -6382,8 +6419,63 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       </div>`
     ).join('');
   }
+  function renderHubBranchAccessOptions(){
+    const prev = branchAccessSelect.value;
+    const list = (typeof branches !== 'undefined' && branches) ? branches : seedBranches();
+    branchAccessSelect.innerHTML = '<option value="">— 지사를 선택하세요 —</option>' +
+      list.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    if(prev && list.includes(prev)) branchAccessSelect.value = prev;
+  }
+  function renderHubBranchAccessList(){
+    const branchName = branchAccessSelect.value;
+    if(!branchName){
+      branchAccessList.innerHTML = '<div class="hub-branch-access-hint">지사를 먼저 선택하세요.</div>';
+      return;
+    }
+    const globalVis = getHubVisibility();
+    const branchVis = getHubBranchVisibility()[branchName] || {};
+    branchAccessList.innerHTML = getAllHubItemDefs().map(({key})=>{
+      const hasOverride = Object.prototype.hasOwnProperty.call(branchVis, key);
+      const shown = hasOverride ? !!branchVis[key] : globalVis[key] !== false;
+      return `<div class="hub-branch-access-row" data-branch-access-row-key="${esc(key)}">
+        <input type="checkbox" data-branch-vis-key="${esc(key)}" ${shown ? 'checked' : ''}>
+        <span>${esc(resolveHubTitle(key))}</span>
+        <span class="sub hub-branch-access-default-flag" style="font-size:11px;" ${hasOverride ? 'hidden' : ''}>(기본값)</span>
+      </div>`;
+    }).join('');
+  }
+  branchAccessSelect.addEventListener('change', renderHubBranchAccessList);
+  branchAccessList.addEventListener('change', (e)=>{
+    const cb = e.target.closest('[data-branch-vis-key]');
+    if(!cb) return;
+    const branchName = branchAccessSelect.value;
+    if(!branchName) return;
+    const branchVisAll = getHubBranchVisibility();
+    const branchVis = branchVisAll[branchName] || {};
+    branchVis[cb.getAttribute('data-branch-vis-key')] = cb.checked;
+    branchVisAll[branchName] = branchVis;
+    setHubBranchVisibility(branchVisAll);
+    // 목록 전체를 다시 그리면(innerHTML 교체) 지금 막 클릭한 체크박스까지 포함해 모든
+    // 행이 새 DOM 노드로 바뀌어버려서, 여러 개를 연달아 체크할 때 두 번째 클릭부터
+    // 이벤트가 옛 노드에서 발생해 반영이 안 되는 문제가 있었다 — 그래서 전체를 다시
+    // 그리지 않고 방금 바뀐 행의 "(기본값)" 표시만 직접 숨긴다.
+    const row = cb.closest('[data-branch-access-row-key]');
+    const flag = row ? row.querySelector('.hub-branch-access-default-flag') : null;
+    if(flag) flag.hidden = true;
+  });
+  document.getElementById('btnHubBranchAccessReset').addEventListener('click', ()=>{
+    const branchName = branchAccessSelect.value;
+    if(!branchName) return;
+    if(!confirm(`"${branchName}" 지사에 따로 설정한 메뉴 권한을 전부 지우고 기본값을 쓰게 할까요?`)) return;
+    const branchVisAll = getHubBranchVisibility();
+    delete branchVisAll[branchName];
+    setHubBranchVisibility(branchVisAll);
+    renderHubBranchAccessList();
+  });
   function renderHubVisibilityPanel(){
     renderHubCategoryManager();
+    renderHubBranchAccessOptions();
+    renderHubBranchAccessList();
     const vis = getHubVisibility();
     const catOptions = getAllHubCategories()
       .map(({id,label})=>`<option value="${id}">${esc(label)}</option>`).join('');
@@ -6489,6 +6581,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     setHubTitleOverrides(titleMap);
     localStorage.setItem('hubButtonNotes', JSON.stringify(noteMap));
     applyHubVisibility();
+    renderHubBranchAccessList(); // 기본값이 바뀌었을 수 있으니 지사별 권한 목록의 "(기본값)" 표시도 갱신
   }
   document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
     saveVisibilityPanelState(); // 열려 있던 입력창에 아직 안 저장된 내용이 있으면 마저 저장
