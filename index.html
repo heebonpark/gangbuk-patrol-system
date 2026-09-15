@@ -6300,14 +6300,15 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 항목별 분류 select의 옵션 글자는 패널을 다음에 열 때 새 이름으로 반영됨(입력 중 포커스
     // 를 잃지 않도록 여기서는 패널 전체를 다시 그리지 않는다).
   });
-  document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
-    visibilityPanel.classList.add('login-hidden');
-  });
   // 체크박스·분류 select 어느 쪽을 바꾸든 그 즉시 저장하고 화면에 반영한다(예전엔 "저장"
   // 버튼을 따로 눌러야 했는데, 패널이 위쪽 메뉴 그리드와 같은 페이지에 있다 보니 바뀐 걸
   // 바로 못 보고 "안 옮겨진다"고 착각하기 쉬웠음).
-  visibilityList.addEventListener('change', (e)=>{
-    if(!e.target.matches('input[data-vis-key], input[data-title-key], select[data-cat-key], textarea[data-note-key]')) return;
+  // "닫기" 버튼을 누를 때도 한 번 더 명시적으로 저장한다 — 원래는 필드의 change 이벤트
+  // (포커스를 잃을 때 발생)에만 의존했는데, 설명 textarea에 막 입력하고 바로 "닫기"를
+  // 누르면 일부 환경에서 change가 제때 발생하지 않아 방금 쓴 내용이 저장 안 되고 사라지는
+  // 문제가 있었다(입력 → 닫기를 한 번의 동작으로 처리하는 경우 특히). 저장 로직 자체를
+  // 함수로 빼서 change 이벤트와 닫기 버튼 둘 다에서 그대로 재사용한다.
+  function saveVisibilityPanelState(){
     const visMap = {};
     visibilityList.querySelectorAll('input[data-vis-key]').forEach(cb=>{
       visMap[cb.getAttribute('data-vis-key')] = cb.checked;
@@ -6330,6 +6331,14 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     setHubTitleOverrides(titleMap);
     localStorage.setItem('hubButtonNotes', JSON.stringify(noteMap));
     applyHubVisibility();
+  }
+  document.getElementById('btnHubVisibilityCancel').addEventListener('click', ()=>{
+    saveVisibilityPanelState(); // 열려 있던 입력창에 아직 안 저장된 내용이 있으면 마저 저장
+    visibilityPanel.classList.add('login-hidden');
+  });
+  visibilityList.addEventListener('change', (e)=>{
+    if(!e.target.matches('input[data-vis-key], input[data-title-key], select[data-cat-key], textarea[data-note-key]')) return;
+    saveVisibilityPanelState();
   });
 
   document.getElementById('btnHubLogout').addEventListener('click', (e)=>{
