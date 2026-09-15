@@ -419,7 +419,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .hub-visibility-row input{width:15px;height:15px;flex:none;}
   .hub-visibility-row input[type="text"]{width:auto;height:auto;flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--sans);background:var(--card);color:var(--text);}
   .hub-visibility-row select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--card);color:var(--text);flex:none;}
-  .hub-btn{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
+  .hub-btn{position:relative;border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:20px 14px;cursor:pointer;font-family:var(--sans);display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .12s ease,transform .12s ease,box-shadow .12s ease;}
+.hub-btn-info{position:absolute;top:6px;right:6px;width:18px;height:18px;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--text-mute);font-size:11px;line-height:16px;text-align:center;font-style:normal;font-weight:700;cursor:pointer;z-index:2;}
+.hub-btn-info.has-note{background:var(--accent);border-color:var(--accent);color:#fff;}
+.hub-btn-info:hover{border-color:var(--accent);color:var(--accent);}
+.hub-btn-info.has-note:hover{color:#fff;}
+.hub-note-bubble{position:fixed;z-index:3000;max-width:260px;background:var(--navy);color:#fff;padding:12px 14px;border-radius:10px;box-shadow:var(--shadow-lg);font-size:12.5px;line-height:1.6;white-space:pre-wrap;}
+.hub-note-bubble::after{content:"";position:absolute;top:-6px;right:14px;border-width:0 6px 6px 6px;border-style:solid;border-color:transparent transparent var(--navy) transparent;}
+.hub-note-bubble .hub-note-title{font-weight:700;margin-bottom:4px;color:#fff;}
+.hub-note-bubble .hub-note-empty{color:#B7C0D6;font-style:italic;}
+.hub-note-bubble .hub-note-edit{display:inline-block;margin-top:8px;color:#9FC1FF;text-decoration:underline;cursor:pointer;font-size:11.5px;}
   .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
   .hub-btn-icon{font-size:26px;}
   .hub-btn-title{font-size:14.5px;font-weight:700;color:var(--text);}
@@ -6011,6 +6020,89 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       mainGrid.appendChild(btn);
     });
   }
+  /* ---- 버튼별 말풍선(업무상세설명) ----
+     각 허브 버튼 우측 상단에 작은 ⓘ 배지를 붙여, 눌렀을 때 말풍선으로 설명을 보여준다.
+     관리자는 말풍선 안의 "수정" 링크로 내용을 등록/수정할 수 있다. 다른 커스텀 설정과
+     마찬가지로 이 내용도 브라우저 localStorage(hubButtonNotes)에 저장되므로 기기별로
+     따로 등록해야 한다(경영 메뉴 링크와 동일한 제약 — 화면 구성 자체는 코드로 배포되어
+     모든 기기에서 보이지만, "내용"은 기기별). */
+  function getHubButtonNotes(){
+    try{ return JSON.parse(localStorage.getItem('hubButtonNotes') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function setHubButtonNote(key, text){
+    const notes = getHubButtonNotes();
+    if(text) notes[key] = text; else delete notes[key];
+    localStorage.setItem('hubButtonNotes', JSON.stringify(notes));
+  }
+  let hubNoteBubbleEl = null;
+  function closeHubNoteBubble(){
+    if(hubNoteBubbleEl){ hubNoteBubbleEl.remove(); hubNoteBubbleEl = null; }
+    document.removeEventListener('click', onHubNoteOutsideClick, true);
+  }
+  function onHubNoteOutsideClick(e){
+    if(hubNoteBubbleEl && !hubNoteBubbleEl.contains(e.target)) closeHubNoteBubble();
+  }
+  function showHubNoteBubble(key, label, anchorEl){
+    closeHubNoteBubble();
+    const auth = currentAuth();
+    const isAdmin = !!(auth && auth.isAdmin);
+    const note = getHubButtonNotes()[key] || '';
+    const bubble = document.createElement('div');
+    bubble.className = 'hub-note-bubble';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'hub-note-title';
+    titleEl.textContent = label;
+    bubble.appendChild(titleEl);
+    const bodyEl = document.createElement('div');
+    if(note){ bodyEl.textContent = note; }
+    else { bodyEl.textContent = '등록된 설명이 없습니다.'; bodyEl.className = 'hub-note-empty'; }
+    bubble.appendChild(bodyEl);
+    if(isAdmin){
+      const editEl = document.createElement('a');
+      editEl.href = '#';
+      editEl.className = 'hub-note-edit';
+      editEl.textContent = note ? '✏️ 수정' : '✏️ 설명 등록';
+      editEl.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        const input = prompt(`"${label}" 버튼에 표시할 업무 상세설명을 입력하세요.`, note);
+        if(input === null) return; // 취소
+        setHubButtonNote(key, input.trim());
+        closeHubNoteBubble();
+        ensureHubButtonInfoIcons();
+      });
+      bubble.appendChild(editEl);
+    }
+    document.body.appendChild(bubble);
+    const r = anchorEl.getBoundingClientRect();
+    const bw = bubble.offsetWidth || 260;
+    let left = r.right - bw;
+    if(left < 8) left = 8;
+    if(left + bw > window.innerWidth - 8) left = window.innerWidth - 8 - bw;
+    bubble.style.left = left + 'px';
+    bubble.style.top = (r.bottom + 8) + 'px';
+    hubNoteBubbleEl = bubble;
+    setTimeout(()=> document.addEventListener('click', onHubNoteOutsideClick, true), 0);
+  }
+  function ensureHubButtonInfoIcons(){
+    const notes = getHubButtonNotes();
+    document.querySelectorAll('#hubMainGrid .hub-btn[data-hub-key]').forEach(btn=>{
+      const key = btn.getAttribute('data-hub-key');
+      let icon = btn.querySelector('.hub-btn-info');
+      if(!icon){
+        icon = document.createElement('span');
+        icon.className = 'hub-btn-info';
+        icon.textContent = 'ⓘ';
+        icon.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const titleEl = btn.querySelector('.hub-btn-title');
+          showHubNoteBubble(key, titleEl ? titleEl.textContent : key, icon);
+        });
+        btn.appendChild(icon);
+      }
+      icon.classList.toggle('has-note', !!notes[key]);
+    });
+  }
   function applyHubCategories(){
     ensureHubSections(); // 관리자가 추가한 분류(예: 공공데이터)의 섹션이 아직 없으면 먼저 만든다
     getAllHubItemDefs().forEach(({key})=>{
@@ -6034,6 +6126,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     applyHubCategories();     // 분류가 바뀌었을 수 있으니 노출 여부 계산 전에 먼저 제자리로 옮긴다
     applyHubCategoryLabels(); // 분류 이름을 바꿨을 수도 있으니 섹션 제목도 갱신
     applyHubTitles();         // 메뉴 이름을 바꿨을 수도 있으니 같이 갱신
+    ensureHubButtonInfoIcons(); // 버튼별 말풍선(업무상세설명) 아이콘도 함께 갱신
     const auth = currentAuth();
     const isAdmin = !!(auth && auth.isAdmin);
     const vis = getHubVisibility();
