@@ -443,6 +443,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .hub-note-edit-btnrow{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
 .hub-note-edit-btnrow button{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);}
 .hub-note-edit-btnrow button.primary{border-color:var(--accent);background:var(--accent);color:#fff;}
+.special-note-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.special-note-row:last-child{border-bottom:none;}
+.special-note-ts{flex:none;width:88px;color:var(--text-mute);font-size:11.5px;padding-top:2px;}
+.special-note-text{flex:1;white-space:pre-wrap;color:var(--text);}
+.special-note-del{flex:none;background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0;}
+.special-note-empty{color:var(--text-mute);font-size:13px;padding:8px 0;}
+.hub-pw-confirm-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:3200;display:flex;align-items:center;justify-content:center;padding:16px;}
+.hub-pw-confirm-card{width:100%;max-width:320px;background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow-lg);}
+.hub-pw-confirm-card h3{margin:0 0 10px;font-size:14.5px;font-weight:700;color:var(--text);}
+.hub-pw-confirm-card input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--mono);letter-spacing:2px;text-align:center;}
+.hub-pw-confirm-error{color:var(--danger);font-size:12px;margin-top:6px;min-height:16px;}
+.hub-pw-confirm-btnrow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+.hub-pw-confirm-btnrow button{padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.hub-pw-confirm-btnrow button.primary{border-color:var(--accent);background:var(--accent);color:#fff;}
   .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
   .hub-btn-icon{font-size:26px;}
   .hub-btn-title{font-size:14.5px;font-weight:700;color:var(--text);}
@@ -673,8 +687,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
+    <!-- 특이사항 관리: 관리자만 보고 쓸 수 있는 기록장(지사 로그인에는 링크 자체가 안 보임 —
+         화면 구성 설정으로도 노출을 바꿀 수 없는 고정 관리자 전용 기능). 새 항목 등록/삭제 시
+         이중 암호(0303)를 한 번 더 확인한다. -->
+    <div id="specialNotesPanel" class="login-hidden" style="margin-top:16px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <p class="sub" style="margin:0 0 8px;font-weight:700;color:var(--text);">특이사항 관리</p>
+      <p class="sub" style="margin:0 0 10px;">관리자만 보이는 기록장입니다. 새로 등록하거나 삭제할 때 이중 암호(0303)를 한 번 더 확인합니다.</p>
+      <div id="specialNotesList" style="margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;">
+        <textarea id="specialNoteNewInput" rows="2" placeholder="특이사항을 입력하세요" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);resize:vertical;box-sizing:border-box;"></textarea>
+        <button type="button" class="btn btn-primary" id="btnSpecialNoteAdd" style="flex:none;align-self:flex-start;">등록</button>
+      </div>
+      <div style="margin-top:12px;text-align:right;">
+        <button type="button" class="btn btn-primary" id="btnSpecialNotesClose">닫기</button>
+      </div>
+    </div>
+
     <div style="margin-top:18px;">
       <a href="#" id="btnHubVisibilitySettings" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">⚙️ 화면 구성 설정(관리자)</a>
+      <a href="#" id="btnSpecialNotes" class="sub login-hidden" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">📝 특이사항 관리(관리자)</a>
       <a href="#" id="btnHubLogout" class="sub" style="display:inline-block;text-decoration:underline;cursor:pointer;">로그아웃</a>
     </div>
   </div>
@@ -5904,6 +5935,9 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   const visibilityList = document.getElementById('hubVisibilityList');
   const customCategoryList = document.getElementById('hubCustomCategoryList');
   const newCategoryInput = document.getElementById('hubNewCategoryInput');
+  const specialNotesBtn = document.getElementById('btnSpecialNotes');
+  const specialNotesPanel = document.getElementById('specialNotesPanel');
+  const specialNotesList = document.getElementById('specialNotesList');
 
   function getHubVisibility(){
     try{ return JSON.parse(localStorage.getItem('hubButtonVisibility') || '{}'); }
@@ -6167,6 +6201,121 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     document.body.appendChild(overlay);
     textarea.focus();
   }
+  /* ---- 특이사항 관리 (관리자 전용, 이중 암호 0303) ----
+     지사 로그인에는 링크 자체가 안 보이는 고정 관리자 전용 기능이라 HUB_ITEMS/
+     화면 구성 설정 시스템을 타지 않는다(그 시스템은 "지사에게 보일지"만 다루는데,
+     이건 애초에 지사에게 보이면 안 됨). 새 항목 등록/삭제 모두 0303을 한 번 더
+     확인한 뒤에만 실제로 반영한다 — 관리자 로그인 세션을 다른 사람이 잠깐 만졌을
+     때를 대비한 이중 확인. */
+  const SPECIAL_NOTE_PASSWORD = '0303';
+  function getSpecialNotes(){
+    try{ return JSON.parse(localStorage.getItem('specialNotesLog') || '[]'); }
+    catch(e){ return []; }
+  }
+  function setSpecialNotes(list){
+    localStorage.setItem('specialNotesLog', JSON.stringify(list));
+  }
+  // 네이티브 prompt()는 일부 임베디드 웹뷰에서 안 뜨는 문제가 있었다(말풍선 수정 기능과
+  // 동일한 교훈) — 그래서 여기도 페이지 안 커스텀 모달로 암호를 입력받는다.
+  function showPasswordConfirmModal(title, onConfirmed){
+    const existing = document.getElementById('hubPwConfirmOverlay');
+    if(existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'hubPwConfirmOverlay';
+    overlay.className = 'hub-pw-confirm-overlay';
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.remove(); });
+
+    const card = document.createElement('div');
+    card.className = 'hub-pw-confirm-card';
+    const h3 = document.createElement('h3');
+    h3.textContent = title;
+    card.appendChild(h3);
+
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.inputMode = 'numeric';
+    input.placeholder = '이중 암호';
+    card.appendChild(input);
+
+    const errEl = document.createElement('div');
+    errEl.className = 'hub-pw-confirm-error';
+    card.appendChild(errEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'hub-pw-confirm-btnrow';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = '취소';
+    cancelBtn.addEventListener('click', ()=> overlay.remove());
+    const okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.className = 'primary';
+    okBtn.textContent = '확인';
+    const attempt = ()=>{
+      if(input.value === SPECIAL_NOTE_PASSWORD){
+        overlay.remove();
+        onConfirmed();
+      } else {
+        errEl.textContent = '암호가 올바르지 않습니다.';
+        input.value = '';
+        input.focus();
+      }
+    };
+    okBtn.addEventListener('click', attempt);
+    input.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') attempt(); });
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(okBtn);
+    card.appendChild(btnRow);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    input.focus();
+  }
+  function renderSpecialNotes(){
+    const notes = getSpecialNotes();
+    if(notes.length === 0){
+      specialNotesList.innerHTML = '<div class="special-note-empty">등록된 특이사항이 없습니다.</div>';
+      return;
+    }
+    specialNotesList.innerHTML = notes.map((n, idx)=>`
+      <div class="special-note-row">
+        <div class="special-note-ts">${esc(fmtTs(n.at))}</div>
+        <div class="special-note-text">${esc(n.text)}</div>
+        <button type="button" class="special-note-del" data-del-note-idx="${idx}">삭제</button>
+      </div>
+    `).join('');
+  }
+  specialNotesBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    renderSpecialNotes();
+    specialNotesPanel.classList.remove('login-hidden');
+  });
+  document.getElementById('btnSpecialNotesClose').addEventListener('click', ()=>{
+    specialNotesPanel.classList.add('login-hidden');
+  });
+  document.getElementById('btnSpecialNoteAdd').addEventListener('click', ()=>{
+    const input = document.getElementById('specialNoteNewInput');
+    const text = input.value.trim();
+    if(!text) return;
+    showPasswordConfirmModal('특이사항 등록 — 이중 암호 확인', ()=>{
+      const notes = getSpecialNotes();
+      notes.unshift({ at: new Date().toISOString(), text });
+      setSpecialNotes(notes);
+      input.value = '';
+      renderSpecialNotes();
+    });
+  });
+  specialNotesList.addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-del-note-idx]');
+    if(!btn) return;
+    const idx = Number(btn.getAttribute('data-del-note-idx'));
+    showPasswordConfirmModal('특이사항 삭제 — 이중 암호 확인', ()=>{
+      const notes = getSpecialNotes();
+      notes.splice(idx, 1);
+      setSpecialNotes(notes);
+      renderSpecialNotes();
+    });
+  });
   function ensureHubButtonInfoIcons(){
     const notes = getHubButtonNotes();
     document.querySelectorAll('#hubMainGrid .hub-btn[data-hub-key]').forEach(btn=>{
@@ -6223,6 +6372,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       sec.classList.toggle('login-hidden', !anyVisible);
     });
     visibilitySettingsBtn.classList.toggle('login-hidden', !isAdmin);
+    specialNotesBtn.classList.toggle('login-hidden', !isAdmin); // 지사 로그인에는 이 링크 자체가 안 보인다 — 화면 구성 설정으로도 못 바꿈
   }
   function renderHubCategoryManager(){
     customCategoryList.innerHTML = getAllHubCategories().map(({id,label,builtin})=>
