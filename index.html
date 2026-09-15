@@ -566,6 +566,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">사건사고관리</span>
             <span class="hub-btn-desc">현장 사건사고 등록·관리</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubVocManagement" data-hub-key="vocManagement">
+            <span class="hub-btn-icon">📞</span>
+            <span class="hub-btn-title">VOC관리</span>
+            <span class="hub-btn-desc">VOC 정보조회 · 시설매칭</span>
+          </button>
         </div>
       </div>
     </div>
@@ -5630,6 +5635,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubIncidentManagement').addEventListener('click', ()=>{
     window.open('https://field-incident-app-2fuqcrjhybm6epcnulmrzv.streamlit.app/', '_blank');
   });
+  document.getElementById('btnHubVocManagement').addEventListener('click', ()=>{
+    // VOC관리는 자체 PIN 로그인 체계를 쓰는 별도 앱이라(공유 세션 아님) 새 탭으로 연다.
+    window.open('voc-management.html', '_blank');
+  });
 
   /* ---- 회선관리(기본 MVNO/WCDMA) · 입찰/공사팀신청(기본 입찰일정등록/공사팀신청) ----
      이 그룹 안의 항목은 고정된 2개가 아니라, 관리자가 "⚙️ 항목 관리"에서 자유롭게
@@ -5804,7 +5813,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'salesWeekly',       label:'영업주간업무',           defaultCategory:'sales' },
     { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
     { key:'collection',        label:'체납관리',              defaultCategory:'customer' },
-    { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' }
+    { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' },
+    { key:'vocManagement',     label:'VOC관리',               defaultCategory:'customer' }
   ];
   // 기본 3분류는 항상 존재(삭제 불가). "협력사"처럼 관리자가 더 추가한 분류는
   // hubCustomCategories(localStorage)에 저장되고, 필요하면 다시 삭제할 수도 있다.

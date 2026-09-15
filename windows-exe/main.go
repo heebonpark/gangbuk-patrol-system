@@ -14,6 +14,10 @@
 // "엑셀 업로드"로 그 자리에서 직접 올려 쓰며, 그 값은 이 소스 파일이 아니라 실행
 // 중인 브라우저의 localStorage에만 저장된다.
 //
+// voc-management.html(VOC관리)도 같은 방식으로 embed한다 — 시드 데이터 없이 CSV를 그
+// 자리에서 업로드해 쓰는 구조라 처음부터 개인정보가 들어있지 않다. 다만 xlsx.js·Chart.js를
+// CDN(cdnjs)에서 불러오므로, 이 화면만은 실행 PC에 인터넷 연결이 있어야 정상 동작한다.
+//
 // 주의: 이 실행 파일은 빌드 시점의 스냅샷을 담고 있습니다.
 // 앱이 업데이트되면 이 실행 파일도 새로 빌드해서 다시 배포해야 최신 화면이 보입니다.
 package main
@@ -34,6 +38,9 @@ var indexHTML []byte
 
 //go:embed vehicle-management.html
 var vehicleManagementHTML []byte
+
+//go:embed voc-management.html
+var vocManagementHTML []byte
 
 func messageBox(title, text string) {
 	user32 := syscall.NewLazyDLL("user32.dll")
@@ -65,6 +72,10 @@ func main() {
 		return
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, "vehicle-management.html"), vehicleManagementHTML, 0644); err != nil {
+		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
+		return
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "voc-management.html"), vocManagementHTML, 0644); err != nil {
 		messageBox("PatrolOps 실행 오류", "실행에 필요한 파일을 준비하지 못했습니다.\n"+err.Error())
 		return
 	}

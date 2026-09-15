@@ -12,9 +12,11 @@ cd "$(dirname "$0")"
 
 node make-blank-html.js ../index.html ./index.html
 cp ../vehicle-management.html ./vehicle-management.html
+cp ../voc-management.html ./voc-management.html
 # vehicle-management.html은 시드 데이터 자체가 항상 마스킹되어 있어(2026-09-15 이후)
 # 배포용 exe에 그대로 담아도 안전하다. 완전히 빈 상태는 아니므로, 새 고객 배포판에서는
-# 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다.
+# 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다. voc-management.html은 시드
+# 데이터가 아예 없어(CSV를 그 자리에서 업로드하는 구조) 배포판에 그대로 담아도 된다.
 
 if ! command -v goversioninfo >/dev/null 2>&1; then
   GOVERSIONINFO_BIN="$(go env GOPATH)/bin/goversioninfo"
