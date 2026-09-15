@@ -429,6 +429,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .hub-note-bubble .hub-note-title{font-weight:700;margin-bottom:4px;color:#fff;}
 .hub-note-bubble .hub-note-empty{color:#B7C0D6;font-style:italic;}
 .hub-note-bubble .hub-note-edit{display:inline-block;margin-top:8px;color:#9FC1FF;text-decoration:underline;cursor:pointer;font-size:11.5px;}
+.hub-note-edit-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:3100;display:flex;align-items:center;justify-content:center;padding:16px;}
+.hub-note-edit-card{width:100%;max-width:420px;background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow-lg);}
+.hub-note-edit-card h3{margin:0 0 12px;font-size:15px;font-weight:700;color:var(--text);}
+.hub-note-edit-textarea{width:100%;min-height:110px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-family:var(--sans);font-size:13px;color:var(--text);resize:vertical;box-sizing:border-box;}
+.hub-note-edit-btnrow{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+.hub-note-edit-btnrow button{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.hub-note-edit-btnrow button.primary{border-color:var(--accent);background:var(--accent);color:#fff;}
   .hub-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:var(--shadow-md);}
   .hub-btn-icon{font-size:26px;}
   .hub-btn-title{font-size:14.5px;font-weight:700;color:var(--text);}
@@ -6087,11 +6094,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       editEl.textContent = note ? '✏️ 수정' : '✏️ 설명 등록';
       editEl.addEventListener('click', (e)=>{
         e.preventDefault(); e.stopPropagation();
-        const input = prompt(`"${label}" 버튼에 표시할 업무 상세설명을 입력하세요.`, note);
-        if(input === null) return; // 취소
-        setHubButtonNote(key, input.trim());
         closeHubNoteBubble();
-        ensureHubButtonInfoIcons();
+        showHubNoteEditModal(key, label, note);
       });
       bubble.appendChild(editEl);
     }
@@ -6105,6 +6109,56 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     bubble.style.top = (r.bottom + 8) + 'px';
     hubNoteBubbleEl = bubble;
     setTimeout(()=> document.addEventListener('click', onHubNoteOutsideClick, true), 0);
+  }
+  // 일부 브라우저(카카오톡 인앱 브라우저 등 임베디드 웹뷰)는 window.prompt()를
+  // 지원하지 않거나 조용히 무시해서 "수정 창이 안 뜬다"는 문제가 있었다 — 그래서
+  // 네이티브 prompt() 대신 페이지 안에 직접 입력창(모달)을 만든다.
+  function closeHubNoteEditModal(){
+    const overlay = document.getElementById('hubNoteEditOverlay');
+    if(overlay) overlay.remove();
+  }
+  function showHubNoteEditModal(key, label, note){
+    closeHubNoteEditModal();
+    const overlay = document.createElement('div');
+    overlay.id = 'hubNoteEditOverlay';
+    overlay.className = 'hub-note-edit-overlay';
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeHubNoteEditModal(); });
+
+    const card = document.createElement('div');
+    card.className = 'hub-note-edit-card';
+
+    const titleEl = document.createElement('h3');
+    titleEl.textContent = `"${label}" 설명 등록/수정`;
+    card.appendChild(titleEl);
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'hub-note-edit-textarea';
+    textarea.value = note || '';
+    textarea.placeholder = '이 버튼에 대한 업무 상세설명을 입력하세요.';
+    card.appendChild(textarea);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'hub-note-edit-btnrow';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = '취소';
+    cancelBtn.addEventListener('click', closeHubNoteEditModal);
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'primary';
+    saveBtn.textContent = '저장';
+    saveBtn.addEventListener('click', ()=>{
+      setHubButtonNote(key, textarea.value.trim());
+      closeHubNoteEditModal();
+      ensureHubButtonInfoIcons();
+    });
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(saveBtn);
+    card.appendChild(btnRow);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    textarea.focus();
   }
   function ensureHubButtonInfoIcons(){
     const notes = getHubButtonNotes();
