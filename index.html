@@ -411,7 +411,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
      그대로 재사용하고, 여기 버튼 그리드만 추가한다. 근태관리 쪽 로직/화면은 전혀 건드리지 않고
      이 화면이 그 위에 한 겹 얹혔다가 "근태관리"를 누르면 사라지는 방식. */
   .hub-btn-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:6px;}
-  @media (max-width:640px){ .hub-btn-grid{grid-template-columns:1fr;} }
+  /* 메뉴가 18개까지 늘어나면서 한 줄에 적게 들어가면 세로로 너무 길게 늘어지는 문제가
+     있었다 — 모바일에서도 한 줄에 1개씩이 아니라 2개씩 보이게 하고, 버튼 자체 크기(패딩·
+     아이콘·글자)도 조금 줄여서 좁은 화면에서 두 칸이 여유 있게 들어가게 한다. */
+  @media (max-width:640px){
+    .hub-btn-grid{grid-template-columns:repeat(2, 1fr);gap:8px;}
+    .hub-btn{padding:12px 8px;gap:3px;}
+    .hub-btn-icon{font-size:20px;}
+    .hub-btn-title{font-size:12.5px;}
+    .hub-btn-desc{font-size:10px;}
+  }
   .hub-section{margin-bottom:20px;}
   .hub-section:last-child{margin-bottom:0;}
   .hub-section-title{font-size:11px;font-weight:800;color:var(--text-mute);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;text-align:left;}
@@ -533,7 +542,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
      렌더링되어 있고, "근태관리"를 누르면 이 화면만 사라진다(기존 로직 변경 없음).
      "차량관리"는 완전히 별도 파일(vehicle-management.html)로 이동한다. -->
 <div class="login-gate login-hidden" id="systemHub">
-  <div class="login-box" style="max-width:760px;text-align:center;">
+  <div class="login-box" style="max-width:1040px;text-align:center;">
     <h1>어떤 업무를 여시겠어요?</h1>
     <p class="sub" id="hubLoginLabel"></p>
     <!-- 공지사항: 관리자만 쓰고 전체(지사 포함)가 볼 수 있는 배너. 등록된 공지가
