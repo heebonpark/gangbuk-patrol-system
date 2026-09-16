@@ -609,7 +609,7 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
     <label class="ubtn">📋 VOC<input type="file" id="vocF" accept=".xls,.xlsx" style="display:none" onchange="loadVOC(event)"></label>
     <label class="ubtn">🏢 시설CSV<input type="file" id="facF" accept=".csv" style="display:none" onchange="loadFAC(event)"></label>
     <label class="ubtn" style="background:rgba(220,38,38,.2)">❌ 해지시설CSV<input type="file" id="termFacF" accept=".csv" style="display:none" onchange="loadTermFAC(event)"></label>
-    <label class="ubtn">👤 영업담당자<input type="file" id="zoneF" accept=".xlsx,.xls" style="display:none" onchange="loadZoneMap(event)"></label>
+    <label class="ubtn">👤 영업담당자<input type="file" id="zoneF" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadZoneMap(event)"></label>
     <label class="ubtn">🎯 2026관리<input type="file" id="mg26F" accept=".csv,.xls,.xlsx" style="display:none" onchange="loadMgmt2026(event)"></label>
     <button class="ubtn" onclick="openCfg()">⚙ 시트설정</button>
     <button class="ubtn" onclick="exportCSV()">⬇ CSV</button>
@@ -1444,7 +1444,7 @@ function loadZoneMap(e){
       const nameIdx = findCol('담당자명','영업담당자명');
       const telIdx  = findCol('연략처','연락처');
       const telIdx2 = findCol('연락처');  // 두번째 연락처 컬럼(ID1 옆)이 있는 경우
-      const branchIdx = findCol('관리지사');
+      const branchIdx = findCol('관리지사','관리지사명');
       const mgrIdx = findCol('지사내근');
       const teamIdx = findCol('비고');
 
