@@ -601,6 +601,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">작업전 TBM 및 위험성평가</span>
             <span class="hub-btn-desc">공사팀 작성</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubAsInspection" data-hub-key="asInspection" title="영상통화/방문 점검">
+            <span class="hub-btn-icon">🪜</span>
+            <span class="hub-btn-title">AS·공사현장 안전점검</span>
+            <span class="hub-btn-desc">일일점검 결과 보고</span>
+          </button>
           <button type="button" class="hub-btn" id="btnHubSecurityNewsLLM" data-hub-key="securityNewsLLM">
             <span class="hub-btn-icon">🛡️</span>
             <span class="hub-btn-title">보안뉴스 LLM</span>
@@ -5780,6 +5785,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubTbmRisk').addEventListener('click', ()=>{
     window.open('https://heebonpark.github.io/tbm-risk-assessment-app/', '_blank');
   });
+  document.getElementById('btnHubAsInspection').addEventListener('click', ()=>{
+    // 작업전 TBM과 같은 방식(별도 Firebase 백엔드 앱) — 새 탭으로 연다.
+    window.open('https://heebonpark.github.io/as-safety-inspection-app/', '_blank');
+  });
   document.getElementById('btnHubSecurityNewsLLM').addEventListener('click', ()=>{
     window.open('https://bough38-web.github.io/security-report/', '_blank');
   });
@@ -5982,6 +5991,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'assetManagement',   label:'자산관리',              defaultCategory:'common' },
     { key:'collabTower',       label:'본부-지사 협업',         defaultCategory:'common' },
     { key:'tbmRisk',           label:'작업전 TBM 및 위험성평가', defaultCategory:'common' },
+    { key:'asInspection',      label:'AS·공사현장 안전점검',    defaultCategory:'common' },
     { key:'securityNewsLLM',   label:'보안뉴스 LLM',           defaultCategory:'common' },
     { key:'management',       label:'경영',                  defaultCategory:'common' },
     { key:'cisSms',           label:'CIS 문자보내기',         defaultCategory:'common' },
