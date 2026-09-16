@@ -636,7 +636,7 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
     <span class="hdr-badge">VOC 관리시스템</span>
     <span class="hdr-t">정보조회 · 시설매칭 · 워크플로우 분석</span>
     <span class="hdr-s">강북/강원사업지원팀 · KT Security</span>
-    <span class="hdr-s" id="appVerBadge" style="color:#4ade80;opacity:1;white-space:nowrap" title="이 페이지가 반영하고 있는 최종 업데이트 시각">· 🔄9/16 13:29</span>
+    <span class="hdr-s" id="appVerBadge" style="color:#4ade80;opacity:1;white-space:nowrap" title="이 페이지가 반영하고 있는 최종 업데이트 시각">· 🔄9/16 13:45</span>
   </div>
   <div class="hdr-r">
     <span id="fpill" class="fpill ok">✅ 전체 8개 지사 시설DB 내장 (91,543건)</span>
@@ -3887,9 +3887,31 @@ function showTab(id,btn){
   document.getElementById('tab-'+id).classList.add('on');
 }
 
+// 같은 시설(계약번호 우선, 없으면 서비스번호)의 다른 VOC 접수 이력 — 리텐션+타VOC 등 교차확인용
+function relatedVocsFor(r){
+  const k=r['계약번호']||r['서비스번호']||'';
+  if(!k) return [];
+  return ALL.filter(x=>x!==r && (x['계약번호']||x['서비스번호']||'')===k)
+    .sort((a,b)=>(b['접수일시']||'').localeCompare(a['접수일시']||''));
+}
+function jumpToVoc(key){
+  const r=ALL.find(x=>vocKey(x)===key);
+  if(r) openDbyR(r);
+}
+
 function renderTV(r){
   const risk=calcR(r),rC=risk>=20?'var(--red)':risk>=10?'var(--org)':'var(--grn)';
+  const rel=relatedVocsFor(r);
   document.getElementById('tab-v').innerHTML=`
+  ${rel.length?`<div class="ds"><div class="mbox" style="background:linear-gradient(135deg,#fff7ed,#fef2f2);border-color:#fdba74">
+    <h4 style="color:#c2410c">🔁 같은 시설의 다른 VOC 내역 <span style="font-size:11px;font-weight:400;color:var(--t3)">(${rel.length}건 · 계약번호/서비스번호 동일)</span></h4>
+    <div style="max-height:220px;overflow-y:auto;margin-top:6px">
+      ${rel.map(x=>`<div onclick='jumpToVoc(${JSON.stringify(vocKey(x))})' style="cursor:pointer;padding:7px 9px;border-bottom:1px solid rgba(0,0,0,.06);font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;border-radius:6px" onmouseover="this.style.background='rgba(255,255,255,.7)'" onmouseout="this.style.background='transparent'">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="bdg ${SC[x['상태']]||'bgr'}" style="font-size:9px">${x['상태']||'—'}</span> <b>${esc(x['VOC유형대']||'')}</b> · ${esc((x['VOC유형']||'').slice(0,24))}</span>
+        <span style="color:var(--t3);white-space:nowrap;font-size:11px">${(x['접수일시']||'—').slice(0,10)} ›</span>
+      </div>`).join('')}
+    </div>
+  </div></div>`:''}
   <div class="ds"><h4>📌 기본정보</h4><div class="dg dg3">
     <div class="di"><label>고객번호</label><div class="v">${r['고객번호']||'—'}</div></div>
     <div class="di"><label>계약번호</label><div class="v">${r['계약번호']||'—'}</div></div>
