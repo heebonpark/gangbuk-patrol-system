@@ -636,7 +636,7 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
     <span class="hdr-badge">VOC 관리시스템</span>
     <span class="hdr-t">정보조회 · 시설매칭 · 워크플로우 분석</span>
     <span class="hdr-s">강북/강원사업지원팀 · KT Security</span>
-    <span class="hdr-s" id="appVerBadge" style="color:#4ade80;opacity:1;white-space:nowrap" title="이 페이지가 반영하고 있는 최종 업데이트 시각">· 🔄9/16 11:27</span>
+    <span class="hdr-s" id="appVerBadge" style="color:#4ade80;opacity:1;white-space:nowrap" title="이 페이지가 반영하고 있는 최종 업데이트 시각">· 🔄9/16 13:29</span>
   </div>
   <div class="hdr-r">
     <span id="fpill" class="fpill ok">✅ 전체 8개 지사 시설DB 내장 (91,543건)</span>
@@ -838,6 +838,8 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
     <button class="mb" onclick="setMF('not_term',this)">🚫 매칭 해지제외</button>
     <button class="mb mp" onclick="setMF('memo',this)">📝 메모있음</button>
     <button class="mb mp" onclick="setMF('memoOpen',this)">📌 미완료메모</button>
+    <button class="mb mo" onclick="setMF('retention_plus',this)">🔁 리텐션+타VOC(+)</button>
+    <button class="mb" onclick="setMF('retention_minus',this)">➖ 리텐션단독(−)</button>
     <span class="mlbl" id="mlbl"></span>
   </div>
 
@@ -2153,6 +2155,22 @@ function af(){
 
   window.termExcludedVOCs = 0; // Global for display
 
+  // ── 리텐션 시설 중 타VOC 이력 여부 판정 (+ 타VOC있음 / − 리텐션단독) ──
+  // ★ 계약번호 우선, 없으면 서비스번호로 시설을 단일 식별(facKey) — cno/svc를 각각 독립 매칭하면
+  //   동일 계약번호에 서비스번호가 다른 여러 회선이 있을 때 다른 시설과 뒤섞이는 오판정이 발생함
+  const facKey=r=>r['계약번호']||r['서비스번호']||'';
+  let retentionPlusKeys=null, retentionMinusKeys=null;
+  if(MF==='retention_plus'||MF==='retention_minus'){
+    const retKeys=new Set(), otherKeys=new Set();
+    ALL.forEach(r=>{
+      const k=facKey(r); if(!k) return;
+      if(r['VOC유형대']==='리텐션') retKeys.add(k);
+      else otherKeys.add(k);
+    });
+    retentionPlusKeys=new Set([...retKeys].filter(k=>otherKeys.has(k)));
+    retentionMinusKeys=new Set([...retKeys].filter(k=>!otherKeys.has(k)));
+  }
+
   filtered=ALL.filter(r=>{
     if(MF==='matched'&&!r._mt)return false;
     if(MF==='unmatched'&&r._mt)return false;
@@ -2163,6 +2181,8 @@ function af(){
     if(MF==='term'&&!['일반해지','명변해지','전출해지'].includes(r._csm))return false;
     if(MF==='memo'&&memoCountFor(vocKey(r))===0)return false;
     if(MF==='memoOpen'&&!getMemosFor(vocKey(r)).some(m=>!m.done))return false;
+    if(MF==='retention_plus'&&!retentionPlusKeys.has(facKey(r)))return false;
+    if(MF==='retention_minus'&&!retentionMinusKeys.has(facKey(r)))return false;
     
     // 해지제외 (not_term) 로직 및 카운트
     if(MF==='not_term') {
