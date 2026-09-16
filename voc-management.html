@@ -469,6 +469,39 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
   </div>
 </div>
 
+<!-- ══════════ ZONE MANAGER (담당자관리) MODAL ══════════ -->
+<div class="ov" id="zoneMgrOv" onclick="if(event.target===this)closeZoneMgr()">
+  <div class="modal" style="width:640px">
+    <div class="mhd">
+      <div><div style="font-size:16px;font-weight:700">👥 영업담당자 관리</div><div style="font-size:12px;color:var(--t3);margin-top:2px">구역별 담당자를 직접 추가·수정·삭제합니다 (현재 브라우저 세션에 즉시 반영)</div></div>
+      <button class="mc" onclick="closeZoneMgr()">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="ds">
+        <h4 id="zmFormTitle">➕ 담당자 추가</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="cfg-fg"><label>구역번호 *</label><input type="text" id="zmZone" placeholder="예: G000101" style="width:100%;border:1.5px solid var(--bd2);border-radius:8px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit"></div>
+          <div class="cfg-fg"><label>담당자명 *</label><input type="text" id="zmName" placeholder="예: 홍길동" style="width:100%;border:1.5px solid var(--bd2);border-radius:8px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit"></div>
+          <div class="cfg-fg"><label>관리지사</label><input type="text" id="zmBranch" placeholder="예: 강북지사" style="width:100%;border:1.5px solid var(--bd2);border-radius:8px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit"></div>
+          <div class="cfg-fg"><label>팀/비고</label><input type="text" id="zmTeam" placeholder="선택" style="width:100%;border:1.5px solid var(--bd2);border-radius:8px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bp" id="zmSaveBtn" style="flex:1" onclick="zmSaveEntry()">💾 저장</button>
+          <button class="btn bs" onclick="zmClearForm()">취소</button>
+        </div>
+      </div>
+      <div class="ds" style="margin-top:16px">
+        <h4>📋 현재 등록된 담당자 <span id="zmCount" style="font-weight:400;color:var(--t3)"></span></h4>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input type="text" id="zmSearch" placeholder="구역번호·담당자명·지사 검색" oninput="renderZoneMgrList()" style="flex:1;border:1px solid var(--bd2);border-radius:6px;padding:6px 8px;font-size:12px;outline:none">
+          <button class="btn bs" onclick="zmExportCsv()">⬇ CSV 내보내기</button>
+        </div>
+        <div id="zmList" style="max-height:340px;overflow-y:auto;font-size:12px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════ REPORT MODAL ══════════ -->
 <div class="ov" id="reportOv" onclick="if(event.target===this)closeReport()">
   <div class="modal" style="width:480px">
@@ -610,6 +643,7 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
     <label class="ubtn">🏢 시설CSV<input type="file" id="facF" accept=".csv" style="display:none" onchange="loadFAC(event)"></label>
     <label class="ubtn" style="background:rgba(220,38,38,.2)">❌ 해지시설CSV<input type="file" id="termFacF" accept=".csv" style="display:none" onchange="loadTermFAC(event)"></label>
     <label class="ubtn">👤 영업담당자<input type="file" id="zoneF" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadZoneMap(event)"></label>
+    <button class="ubtn" onclick="openZoneMgr()">👥 담당자관리</button>
     <label class="ubtn">🎯 2026관리<input type="file" id="mg26F" accept=".csv,.xls,.xlsx" style="display:none" onchange="loadMgmt2026(event)"></label>
     <button class="ubtn" onclick="openCfg()">⚙ 시트설정</button>
     <button class="ubtn" onclick="exportCSV()">⬇ CSV</button>
@@ -1084,7 +1118,7 @@ let DUP_FAC = {byCno:{}, bySvc:{}};
 // ★ 영업담당자매칭 — 영업구역번호 → 실제 구역담당자 (영업사원담당구역변경현황)
 //   매칭체인: VOC(계약/서비스번호) → 시설CSV(영업구역번호 도출) → 본 테이블(구역번호→담당자명)
 // 2026-09-15: 영업담당자 실명·휴대폰번호가 담겨있어 비움 — 구역담당자 매핑파일(zoneF/loadZoneMap) 업로드로 다시 채워짐
-const _ZONE_MAP = {};
+const _ZONE_MAP = {"G000405":{"name":"이석봉","tel":"","branch":"중앙지사","manager":"","team":""},"G000404":{"name":"권대호","tel":"","branch":"중앙지사","manager":"","team":""},"G000409":{"name":"김주택","tel":"","branch":"중앙지사","manager":"","team":""},"G000401":{"name":"송민철","tel":"","branch":"중앙지사","manager":"","team":""},"G000402":{"name":"양현성","tel":"","branch":"중앙지사","manager":"","team":""},"G000407":{"name":"문성진","tel":"","branch":"중앙지사","manager":"","team":""},"G000410":{"name":"양현성","tel":"","branch":"중앙지사","manager":"","team":""},"G000403":{"name":"오광훈","tel":"","branch":"중앙지사","manager":"","team":""},"G000103":{"name":"김의겸","tel":"","branch":"강북지사","manager":"","team":""},"G000101":{"name":"성진수","tel":"","branch":"강북지사","manager":"","team":""},"G000106":{"name":"김태규","tel":"","branch":"강북지사","manager":"","team":""},"G000104":{"name":"정수현","tel":"","branch":"강북지사","manager":"","team":""},"G000102":{"name":"박이균","tel":"","branch":"강북지사","manager":"","team":""},"G000205":{"name":"이정도","tel":"","branch":"서대문지사","manager":"","team":""},"G000201":{"name":"고승남","tel":"","branch":"서대문지사","manager":"","team":""},"G000203":{"name":"안근영","tel":"","branch":"서대문지사","manager":"","team":""},"G000207":{"name":"유범식","tel":"","branch":"서대문지사","manager":"","team":""},"G000206":{"name":"우동주","tel":"","branch":"서대문지사","manager":"","team":""},"G000202":{"name":"안수호","tel":"","branch":"서대문지사","manager":"","team":""},"G000204":{"name":"최용호","tel":"","branch":"서대문지사","manager":"","team":""},"G000302":{"name":"황상대","tel":"","branch":"고양지사","manager":"","team":""},"G000308":{"name":"조현웅","tel":"","branch":"고양지사","manager":"","team":""},"G000303":{"name":"강경필","tel":"","branch":"고양지사","manager":"","team":""},"G000310":{"name":"엄태일","tel":"","branch":"고양지사","manager":"박희준","team":""},"G000301":{"name":"박흥수","tel":"","branch":"고양지사","manager":"","team":""},"G000307":{"name":"김현교","tel":"","branch":"고양지사","manager":"","team":""},"G000306":{"name":"박민준","tel":"","branch":"고양지사","manager":"","team":""},"G000304":{"name":"최우석","tel":"","branch":"고양지사","manager":"","team":""},"G000309":{"name":"조현웅","tel":"","branch":"고양지사","manager":"박희준","team":""},"G000305":{"name":"성형래","tel":"","branch":"고양지사","manager":"","team":""},"G000503":{"name":"정양진","tel":"","branch":"의정부지사","manager":"","team":""},"G000504":{"name":"김진회","tel":"","branch":"의정부지사","manager":"","team":""},"G000505":{"name":"정성록","tel":"","branch":"의정부지사","manager":"","team":""},"G000501":{"name":"정양진","tel":"","branch":"의정부지사","manager":"","team":""},"G000602":{"name":"조형근","tel":"","branch":"남양주지사","manager":"","team":""},"G000605":{"name":"김현돈","tel":"","branch":"남양주지사","manager":"","team":""},"G000604":{"name":"이현배","tel":"","branch":"남양주지사","manager":"","team":""},"G000603":{"name":"원동현","tel":"","branch":"남양주지사","manager":"","team":""},"G000601":{"name":"홍종철","tel":"","branch":"남양주지사","manager":"","team":""},"P000104":{"name":"김완용","tel":"","branch":"강릉지사","manager":"","team":""},"P000103":{"name":"이성원","tel":"","branch":"강릉지사","manager":"","team":""},"P000101":{"name":"최정훈","tel":"","branch":"강릉지사","manager":"","team":""},"P000102":{"name":"김성래","tel":"","branch":"강릉지사","manager":"","team":""},"P000202":{"name":"김광호","tel":"","branch":"원주지사","manager":"","team":""},"P000207":{"name":"경규원","tel":"","branch":"원주지사","manager":"","team":""},"P000201":{"name":"이승주","tel":"","branch":"원주지사","manager":"","team":""},"P000206":{"name":"안상현","tel":"","branch":"원주지사","manager":"","team":""},"G000105":{"name":"강민수","tel":"","branch":"강북지사","manager":"","team":""},"G000107":{"name":"백석현","tel":"","branch":"강북지사","manager":"","team":""},"G000406":{"name":"이석봉","tel":"","branch":"중앙지사","manager":"","team":""},"G000506":{"name":"이윤재","tel":"","branch":"의정부지사","manager":"","team":""},"G000606":{"name":"이한구","tel":"","branch":"남양주지사","manager":"","team":""},"P000203":{"name":"김상태","tel":"","branch":"원주지사","manager":"","team":""},"P000208":{"name":"경규원","tel":"","branch":"원주지사","manager":"","team":""},"P000209":{"name":"안상현","tel":"","branch":"원주지사","manager":"","team":""}};
 let ZONE_MAP = {..._ZONE_MAP};
 let zoneLoaded = true;  // 내장 데이터로 시작
 
@@ -1486,6 +1520,100 @@ function loadZoneMap(e){
     }
   };
   rd.readAsBinaryString(file);
+}
+
+// ══ 영업담당자 수동 관리 (담당자관리 모달) — 매월 소수 인원 변경분을 CSV 재업로드 없이 직접 수정 ══
+let zmEditKey = null;
+
+function openZoneMgr(){
+  document.getElementById('zoneMgrOv').classList.add('on');
+  zmClearForm();
+  renderZoneMgrList();
+}
+function closeZoneMgr(){ document.getElementById('zoneMgrOv').classList.remove('on'); }
+
+function zmClearForm(){
+  document.getElementById('zmZone').value='';
+  document.getElementById('zmName').value='';
+  document.getElementById('zmBranch').value='';
+  document.getElementById('zmTeam').value='';
+  zmEditKey=null;
+  document.getElementById('zmFormTitle').textContent='➕ 담당자 추가';
+  document.getElementById('zmSaveBtn').textContent='💾 저장';
+}
+
+function zmSaveEntry(){
+  const zone=document.getElementById('zmZone').value.trim();
+  const name=document.getElementById('zmName').value.trim();
+  const branch=document.getElementById('zmBranch').value.trim();
+  const team=document.getElementById('zmTeam').value.trim();
+  if(!zone||!name){ alert('구역번호와 담당자명은 필수입니다.'); return; }
+  // 구역번호를 변경한 채로 수정 저장한 경우 기존 키 제거
+  if(zmEditKey && zmEditKey!==zone){ delete ZONE_MAP[zmEditKey]; }
+  const prev=ZONE_MAP[zone]||{};
+  ZONE_MAP[zone]={name, tel:prev.tel||'', branch, manager:prev.manager||'', team};
+  zoneLoaded=true;
+  zmClearForm();
+  renderZoneMgrList();
+  mergeMatch();
+}
+
+function zmEditRow(zone){
+  const z=ZONE_MAP[zone]; if(!z) return;
+  document.getElementById('zmZone').value=zone;
+  document.getElementById('zmName').value=z.name||'';
+  document.getElementById('zmBranch').value=z.branch||'';
+  document.getElementById('zmTeam').value=z.team||'';
+  zmEditKey=zone;
+  document.getElementById('zmFormTitle').textContent=`✏️ 담당자 수정 (구역 ${zone})`;
+  document.getElementById('zmSaveBtn').textContent='💾 수정 저장';
+}
+
+function zmDeleteRow(zone){
+  const z=ZONE_MAP[zone];
+  if(!confirm(`구역 ${zone}${z?' ('+z.name+')':''} 담당자 정보를 삭제할까요?`)) return;
+  delete ZONE_MAP[zone];
+  if(zmEditKey===zone) zmClearForm();
+  renderZoneMgrList();
+  mergeMatch();
+}
+
+function renderZoneMgrList(){
+  const listEl=document.getElementById('zmList');
+  const q=(document.getElementById('zmSearch')?.value||'').trim().toLowerCase();
+  const entries=Object.entries(ZONE_MAP)
+    .filter(([zone,z])=>!q||zone.toLowerCase().includes(q)||(z.name||'').toLowerCase().includes(q)||(z.branch||'').toLowerCase().includes(q))
+    .sort((a,b)=>(a[1].branch||'').localeCompare(b[1].branch||'','ko')||a[0].localeCompare(b[0]));
+  document.getElementById('zmCount').textContent=`(${entries.length}건)`;
+  if(!entries.length){ listEl.innerHTML='<div style="color:var(--t3);padding:10px 0">등록된 담당자가 없습니다.</div>'; return; }
+  listEl.innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--bg2)">
+      <th style="text-align:left;padding:5px 6px">구역</th><th style="text-align:left;padding:5px 6px">담당자</th><th style="text-align:left;padding:5px 6px">지사</th><th style="text-align:left;padding:5px 6px">팀/비고</th><th></th>
+    </tr></thead>
+    <tbody>${entries.map(([zone,z])=>`
+      <tr style="border-bottom:1px solid var(--bd)">
+        <td style="padding:5px 6px;font-family:monospace">${esc(zone)}</td>
+        <td style="padding:5px 6px">${esc(z.name||'')}</td>
+        <td style="padding:5px 6px">${esc(z.branch||'')}</td>
+        <td style="padding:5px 6px">${esc(z.team||'')}</td>
+        <td style="padding:5px 6px;white-space:nowrap;text-align:right">
+          <button class="btn bs" style="padding:2px 6px;font-size:10px" onclick="zmEditRow('${zone.replace(/'/g,"\\'")}')">수정</button>
+          <button class="btn bs" style="padding:2px 6px;font-size:10px;color:var(--red)" onclick="zmDeleteRow('${zone.replace(/'/g,"\\'")}')">삭제</button>
+        </td>
+      </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function zmExportCsv(){
+  const rows=[['구역번호','담당자명','관리지사명','팀']];
+  Object.entries(ZONE_MAP).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([zone,z])=>{
+    rows.push([zone, z.name||'', z.branch||'', z.team||'']);
+  });
+  const csv='\uFEFF'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=`영업담당자매칭_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
 }
 
 // ══ FAC LOAD - ArrayBuffer + TextDecoder 방식 (cp949/euc-kr 정확 처리) ══
