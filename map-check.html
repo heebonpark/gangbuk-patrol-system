@@ -354,6 +354,7 @@ async function restoreDraft(){
   }
   buildFilterColumnOptions();
   renderSideList();
+  setBizControlsLocked(!batchResults.some(r=>r.ok));
 }
 function dismissDraft(){
   document.getElementById('draftBanner').classList.remove('show');
@@ -482,13 +483,24 @@ function switchMode(mode){
       const hasDraft = !!window.__pendingDraft;
       document.getElementById('sideList').innerHTML = hasDraft
         ? '<div class="res-empty">이전에 조회한 결과가 남아 있습니다.<br><button class="btn sm" style="margin-top:8px" onclick="restoreDraft()">불러오기</button></div>'
-        : '<div class="res-empty">먼저 "파일 업로드" 탭에서 설치주소를 조회해주세요.<br>그래야 색상 구분/밀집도/리포트 기능을 쓸 수 있습니다.</div>';
+        : '<div class="res-empty">영업분석은 먼저 설치주소 목록이 있어야 합니다.<br>(기존 고객 위치와 비교해서 영업기회를 찾는 기능이라, 비교할 데이터가 필요합니다)<br><button class="btn sm" style="margin-top:8px" onclick="switchMode(\'batch\')">📄 파일 업로드하러 가기</button></div>';
       document.getElementById('exportBtn').style.display='none';
     }else{
       buildBizColumnOptions();
       renderLeadList();
     }
+    setBizControlsLocked(!batchResults.some(r=>r.ok));
   }
+}
+
+// 설치주소 데이터가 없을 때는 영업분석의 조작부(색상구분/밀집도/리포트/영업기회 찾기)를
+// 아예 눌러도 소용없게 막아서, "눌렀는데 왜 안 되지" 하는 혼란을 미리 방지한다.
+function setBizControlsLocked(locked){
+  document.querySelectorAll('#bizBar select, #bizBar button, #bizChips .cat-chip, #bizChips input, #bizChips select, #bizChips button, #bizReportBar select, #bizReportBar button')
+    .forEach(el=>{
+      if(locked){ el.setAttribute('disabled',''); el.style.opacity='0.4'; el.style.pointerEvents='none'; }
+      else{ el.removeAttribute('disabled'); el.style.opacity=''; el.style.pointerEvents=''; }
+    });
 }
 
 // ═══════════════════════════════════════════════
@@ -741,6 +753,7 @@ async function runBatchSearch(){
     document.getElementById('filterBar').classList.add('show');
     renderSideList();
     scheduleSaveDraft();
+    setBizControlsLocked(!batchResults.some(r=>r.ok));
   }catch(e){
     alert('처리 중 오류: '+e.message);
   }finally{
@@ -1293,6 +1306,7 @@ function focusPoi(i){
 // ═══════════════════════════════════════════════
 loadTags();
 checkDraftOnLoad();
+setBizControlsLocked(true);
 </script>
 </body>
 </html>
