@@ -476,7 +476,13 @@ function switchMode(mode){
   else if(mode==='biz'){
     if(!batchResults.length){
       document.getElementById('sideTitle').textContent='영업분석';
-      document.getElementById('sideList').innerHTML='<div class="res-empty">먼저 "파일 업로드" 탭에서 설치주소를 조회해주세요.<br>그래야 색상 구분/밀집도/리포트 기능을 쓸 수 있습니다.</div>';
+      // 새로고침 등으로 batchResults가 비어 있어도, 자동저장된 이전 조회 결과(드래프트)가
+      // 남아있으면 여기서 바로 불러올 수 있게 한다 — "분명 업로드했는데 또 하라고 한다"는
+      // 혼란을 줄이기 위함(업로드 자체를 다시 할 필요 없이 이전 결과를 복원하면 된다).
+      const hasDraft = !!window.__pendingDraft;
+      document.getElementById('sideList').innerHTML = hasDraft
+        ? '<div class="res-empty">이전에 조회한 결과가 남아 있습니다.<br><button class="btn sm" style="margin-top:8px" onclick="restoreDraft()">불러오기</button></div>'
+        : '<div class="res-empty">먼저 "파일 업로드" 탭에서 설치주소를 조회해주세요.<br>그래야 색상 구분/밀집도/리포트 기능을 쓸 수 있습니다.</div>';
       document.getElementById('exportBtn').style.display='none';
     }else{
       buildBizColumnOptions();
@@ -492,14 +498,18 @@ function getCurrentPosition(){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation){ reject(new Error('이 브라우저는 위치 확인을 지원하지 않습니다.')); return; }
     navigator.geolocation.getCurrentPosition(
-      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
+      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:pos.coords.accuracy}),
       err=>reject(new Error('위치 확인 실패: '+err.message)),
-      {enableHighAccuracy:true,timeout:8000}
+      // maximumAge:0 — 캐시된(오래된) 위치를 재사용하지 않고 매번 새로 측정한다.
+      // Windows 데스크톱처럼 GPS가 없는 기기는 브라우저가 Wi-Fi/IP 기반으로 위치를
+      // 추정하는데, 이 경우 accuracy(정확도, 미터)가 수백~수천m로 클 수 있다 — 이건
+      // 이 기기·네트워크 환경의 한계이지 이 페이지의 버그가 아니다.
+      {enableHighAccuracy:true,timeout:8000,maximumAge:0}
     );
   });
 }
 
-let myLocMarker=null;
+let myLocMarker=null, myLocAccuracyCircle=null;
 async function goToMyLocation(){
   try{
     await ensureMap();
@@ -508,11 +518,27 @@ async function goToMyLocation(){
     map.setCenter(new kakao.maps.LatLng(pos.lat,pos.lng));
     map.setLevel(4);
     if(myLocMarker) myLocMarker.setMap(null);
+    if(myLocAccuracyCircle) myLocAccuracyCircle.setMap(null);
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="8" fill="#4f8ef7" stroke="#fff" stroke-width="3"/></svg>`;
     myLocMarker=new kakao.maps.Marker({
       position:new kakao.maps.LatLng(pos.lat,pos.lng), map,
       image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,26), {offset:new kakao.maps.Point(13,13)})
     });
+    const accTxt = pos.accuracy ? `정확도 반경 약 ${Math.round(pos.accuracy)}m` : '';
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">📍 내 위치${accTxt?' ('+accTxt+')':''}</div>`});
+    kakao.maps.event.addListener(myLocMarker,'click',()=>iw.open(map,myLocMarker));
+    // 정확도가 낮을 때(예: GPS 없는 PC에서 Wi-Fi/IP로 추정) 원으로 오차 범위를 보여줘서
+    // "내 위치가 이상한 데 찍힌다"는 오해를 줄인다 — 실제로는 위치 자체가 대략적인 것.
+    if(pos.accuracy && pos.accuracy>300){
+      myLocAccuracyCircle=new kakao.maps.Circle({
+        center:new kakao.maps.LatLng(pos.lat,pos.lng), radius:pos.accuracy,
+        strokeWeight:1, strokeColor:'#4f8ef7', strokeOpacity:0.6,
+        fillColor:'#4f8ef7', fillOpacity:0.12
+      });
+      myLocAccuracyCircle.setMap(map);
+      map.setLevel(Math.min(8, Math.max(4, Math.round(Math.log2(pos.accuracy/50)))));
+      console.warn('내 위치 정확도가 낮습니다(약 '+Math.round(pos.accuracy)+'m) — GPS가 없는 PC/노트북은 Wi-Fi·IP 기반으로 위치를 추정해 실제와 다를 수 있습니다. Windows 설정 > 개인정보 > 위치에서 위치 서비스가 켜져 있는지 확인해보세요.');
+    }
   }catch(e){ alert(e.message); }
 }
 
@@ -971,7 +997,12 @@ async function findLeads(){
   await ensureMap();
   const radius=parseInt(document.getElementById('leadRadius').value,10);
   const minDistM=parseFloat(document.getElementById('leadMinDist').value)||200;
-  const center=map.getCenter();
+  // "주변시설 검색"과 동일하게, 내 위치를 확인해둔 상태면 지도 중심이 아니라 실제 내 위치를
+  // 기준으로 찾는다 — 이걸 안 맞춰두면 지도가 우연히 다른 곳에 가 있을 때 엉뚱한 위치
+  // 기준으로 검색돼 "내 위치가 잘못 잡힌다"처럼 보일 수 있다.
+  const center = window.__myLocation
+    ? new kakao.maps.LatLng(window.__myLocation.lat, window.__myLocation.lng)
+    : map.getCenter();
   clearLeadMarkers();
   places.keywordSearch(keyword, (data,status)=>{
     if(status!==kakao.maps.services.Status.OK || !data.length){
