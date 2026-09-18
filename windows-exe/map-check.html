@@ -43,6 +43,21 @@ input[type=number]{width:70px;cursor:text}
 .maptype-toggle button{padding:5px 9px;background:transparent;border:none;border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer}
 .maptype-toggle button.active{background:var(--accent);color:#fff}
 
+.cat-chips{display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.cat-chip{padding:4px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;font-size:11px;cursor:pointer;color:var(--text2);transition:all .15s}
+.cat-chip:hover{border-color:var(--orange);color:var(--orange)}
+
+.map-btns{position:absolute;top:10px;left:10px;z-index:100;display:flex;flex-direction:column;gap:6px}
+.btn-mapaction{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:all .15s}
+.btn-mapaction:hover{border-color:var(--accent);color:var(--accent)}
+.btn-mapaction.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.1)}
+
+.copy-btn{background:none;border:none;color:var(--text2);cursor:pointer;font-size:11px;padding:2px 5px;border-radius:4px}
+.copy-btn:hover{color:var(--accent);background:rgba(79,142,247,.1)}
+
+.poi-link{color:var(--accent);text-decoration:none;font-size:10.5px}
+.poi-link:hover{text-decoration:underline}
+
 .draft-banner{background:rgba(79,142,247,.1);border-bottom:1px solid rgba(79,142,247,.3);padding:8px 14px;display:none;align-items:center;gap:10px;font-size:12px;flex-shrink:0}
 .draft-banner.show{display:flex}
 
@@ -61,8 +76,9 @@ input[type=number]{width:70px;cursor:text}
 .filter-chip .x{opacity:.6}
 .filter-sep{width:1px;height:20px;background:var(--border)}
 
-.main{display:flex;flex:1;overflow:hidden;position:relative}
-#map{flex:1}
+.main{display:flex;flex:1;overflow:hidden}
+.map-wrap{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
 .map-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;pointer-events:none}
 
 .side{width:310px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
@@ -145,6 +161,16 @@ input[type=number]{width:70px;cursor:text}
   </div>
 </div>
 
+<div class="cat-chips" id="catChips" style="display:none">
+  <span class="cat-chip" onclick="quickPlacesSearch('맛집')">🍽 맛집</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('카페')">☕ 카페</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('편의점')">🏪 편의점</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('주차장')">🅿 주차장</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('약국')">💊 약국</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('은행')">🏦 은행</span>
+  <span class="cat-chip" onclick="quickPlacesSearch('주유소')">⛽ 주유소</span>
+</div>
+
 <div class="draft-banner" id="draftBanner">
   <span>⏱ 이전에 조회하던 결과가 남아 있습니다.</span>
   <button class="btn sm" onclick="restoreDraft()">불러오기</button>
@@ -166,14 +192,22 @@ input[type=number]{width:70px;cursor:text}
   <div class="filter-sep"></div>
   <input type="text" id="radiusCenterAddr" placeholder="반경 기준 주소" style="width:150px;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
   <input type="number" id="radiusKm" placeholder="km" value="1" min="0.1" step="0.1">
+  <button class="btn sm ghost" onclick="useMyLocationForRadius()">📍 내 위치로</button>
   <button class="btn sm" onclick="applyRadiusFilter()">반경적용</button>
   <button class="btn sm ghost" id="radiusClearBtn" onclick="clearRadiusFilter()" style="display:none">반경해제</button>
 </div>
 
 <div class="main">
-  <div id="map"></div>
-  <div class="map-empty" id="mapEmpty">주소를 입력하거나 파일을 업로드하면 위치가 표시됩니다</div>
-  <div class="single-card" id="singleCard"></div>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-empty" id="mapEmpty">주소를 입력하거나 파일을 업로드하면 위치가 표시됩니다</div>
+    <div class="map-btns">
+      <button type="button" class="btn-mapaction" onclick="goToMyLocation()">📍 내 위치</button>
+      <button type="button" class="btn-mapaction" id="reverseGeoBtn" onclick="toggleReverseGeocode()">🖱 지도클릭 주소확인</button>
+    </div>
+    <div class="single-card" id="singleCard"></div>
+    <div class="single-card" id="reverseGeoCard" style="left:auto;right:12px"></div>
+  </div>
   <div class="side" id="sideBatch" style="display:none">
     <div class="side-head"><span id="sideTitle">결과</span><button class="btn ghost" id="exportBtn" style="padding:3px 9px;font-size:10.5px;display:none" onclick="exportResults()">엑셀 내보내기</button></div>
     <div class="side-list" id="sideList"><div class="res-empty">아직 조회 결과가 없습니다.</div></div>
@@ -183,7 +217,7 @@ input[type=number]{width:70px;cursor:text}
 <!-- 상세보기 모달 -->
 <div class="modal-overlay" id="detailModal">
   <div class="modal">
-    <div class="modal-head"><h3 id="detailTitle">상세보기</h3><button class="modal-close" onclick="closeDetail()">✕</button></div>
+    <div class="modal-head"><h3 id="detailTitle">상세보기</h3><div><button class="copy-btn" onclick="copyText(document.getElementById('detailTitle').textContent)">복사</button><button class="modal-close" onclick="closeDetail()">✕</button></div></div>
     <div class="modal-body">
       <div class="modal-section" id="detailOriginalSection" style="display:none">
         <h4>업로드된 원본 데이터</h4>
@@ -400,9 +434,95 @@ function switchMode(mode){
   document.getElementById('placesBar').style.display=mode==='places'?'flex':'none';
   document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places')?'flex':'none';
   document.getElementById('filterBar').classList.toggle('show', mode==='batch' && batchResults.length>0);
+  document.getElementById('catChips').style.display = mode==='places' ? 'flex' : 'none';
   document.getElementById('singleCard').classList.remove('show');
   if(mode==='places'){ document.getElementById('sideTitle').textContent='주변시설 검색 결과'; renderPoiList(); }
   else if(mode==='batch'){ renderSideList(); }
+}
+
+// ═══════════════════════════════════════════════
+//  현위치 / 지도클릭 역지오코딩 / 주소 복사 (전문가 자주쓰는 기능)
+// ═══════════════════════════════════════════════
+function getCurrentPosition(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){ reject(new Error('이 브라우저는 위치 확인을 지원하지 않습니다.')); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}),
+      err=>reject(new Error('위치 확인 실패: '+err.message)),
+      {enableHighAccuracy:true,timeout:8000}
+    );
+  });
+}
+
+let myLocMarker=null;
+async function goToMyLocation(){
+  try{
+    await ensureMap();
+    const pos=await getCurrentPosition();
+    window.__myLocation=pos;
+    map.setCenter(new kakao.maps.LatLng(pos.lat,pos.lng));
+    map.setLevel(4);
+    if(myLocMarker) myLocMarker.setMap(null);
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="8" fill="#4f8ef7" stroke="#fff" stroke-width="3"/></svg>`;
+    myLocMarker=new kakao.maps.Marker({
+      position:new kakao.maps.LatLng(pos.lat,pos.lng), map,
+      image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,26), {offset:new kakao.maps.Point(13,13)})
+    });
+  }catch(e){ alert(e.message); }
+}
+
+async function useMyLocationForRadius(){
+  try{
+    const pos=await getCurrentPosition();
+    window.__myLocation=pos;
+    radiusFilter={lat:pos.lat, lng:pos.lng, km:parseFloat(document.getElementById('radiusKm').value)||1};
+    document.getElementById('radiusCenterAddr').value='내 위치';
+    document.getElementById('radiusClearBtn').style.display='inline-block';
+    renderSideList();
+  }catch(e){ alert(e.message); }
+}
+
+let reverseGeoArmed=false;
+async function toggleReverseGeocode(){
+  await ensureMap();
+  reverseGeoArmed=!reverseGeoArmed;
+  document.getElementById('reverseGeoBtn').classList.toggle('on', reverseGeoArmed);
+  document.getElementById('reverseGeoCard').classList.remove('show');
+  if(reverseGeoArmed && !window.__reverseGeoListenerAdded){
+    window.__reverseGeoListenerAdded=true;
+    kakao.maps.event.addListener(map,'click', e=>{
+      if(!reverseGeoArmed) return;
+      const lat=e.latLng.getLat(), lng=e.latLng.getLng();
+      geocoder.coord2Address(lng, lat, (result,status)=>{
+        const card=document.getElementById('reverseGeoCard');
+        card.className='single-card show';
+        if(status===kakao.maps.services.Status.OK && result.length){
+          const road=result[0].road_address?.address_name||'';
+          const jibun=result[0].address?.address_name||'';
+          const addr=road||jibun;
+          card.innerHTML=`
+            <div class="sc-addr">🖱 ${addr} <button class="copy-btn" onclick="copyText('${addr.replace(/'/g,"\\'")}')">복사</button></div>
+            <div class="sc-coord">위도 ${lat.toFixed(6)} · 경도 ${lng.toFixed(6)}</div>
+            <div class="sc-actions">
+              <button class="btn sm ghost" onclick="openDetailByAddr('${addr.replace(/'/g,"\\'")}'); (window.__lastSingle={addr:'${addr.replace(/'/g,"\\'")}',lat:${lat},lng:${lng},row:null})">상세/태그</button>
+              <button class="btn sm ghost" onclick="openRoadviewAt(${lat},${lng})">📷 로드뷰</button>
+            </div>`;
+        }else{
+          card.innerHTML=`<div class="sc-fail">이 위치의 주소를 찾을 수 없습니다.</div>`;
+        }
+      });
+    });
+  }
+}
+
+function copyText(text){
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=document.createElement('div');
+    t.textContent='📋 주소를 복사했습니다';
+    t.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--accent);color:var(--text);padding:8px 16px;border-radius:8px;font-size:12px;z-index:2000';
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 1500);
+  }).catch(()=>{});
 }
 
 // ═══════════════════════════════════════════════
@@ -443,7 +563,7 @@ function renderSingleCard(r, addrKey){
   const tags=getTags(addrKey);
   card.className='single-card show';
   card.innerHTML=`
-    <div class="sc-addr">✅ ${r.roadAddr||r.jibunAddr}</div>
+    <div class="sc-addr">✅ ${r.roadAddr||r.jibunAddr} <button class="copy-btn" onclick="copyText('${(r.roadAddr||r.jibunAddr).replace(/'/g,"\\'")}')">복사</button></div>
     <div class="sc-coord">위도 ${r.lat.toFixed(6)} · 경도 ${r.lng.toFixed(6)}</div>
     <div class="sc-tags">${tags.map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>
     <div class="sc-actions">
@@ -797,12 +917,20 @@ function openDirectionsAt(lat,lng,name){
 function clearPois(){ poiMarkers.forEach(m=>m.marker.setMap(null)); poiMarkers=[]; }
 function clearPlaces(){ clearPois(); renderPoiList(); }
 
+function quickPlacesSearch(keyword){
+  document.getElementById('placesKeyword').value=keyword;
+  runPlacesSearch();
+}
+
 async function runPlacesSearch(){
   const keyword=document.getElementById('placesKeyword').value.trim();
   if(!keyword) return;
   await ensureMap();
   const radius=parseInt(document.getElementById('placesRadius').value,10);
-  const center=map.getCenter();
+  // 내 위치를 확인해둔 상태면 그걸 기준으로, 아니면 현재 지도 중심을 기준으로 검색한다.
+  const center = window.__myLocation
+    ? new kakao.maps.LatLng(window.__myLocation.lat, window.__myLocation.lng)
+    : map.getCenter();
   const btn=document.getElementById('placesBtn');
   btn.disabled=true; btn.textContent='검색 중...';
   clearPois();
@@ -813,6 +941,10 @@ async function runPlacesSearch(){
       alert('검색 결과가 없습니다.');
       return;
     }
+    // 카카오 API는 평점/리뷰 수를 안 주기 때문에 "유명한지"는 직접 판단할 수 없다 —
+    // 대신 가까운 순으로 정렬하고, 목록에서 카카오맵 상세페이지(리뷰/평점 확인 가능)로
+    // 바로 연결해준다.
+    data.sort((a,b)=>(parseInt(a.distance)||0)-(parseInt(b.distance)||0));
     const bounds=new kakao.maps.LatLngBounds();
     data.forEach(place=>{
       const pos=new kakao.maps.LatLng(place.y, place.x);
@@ -826,19 +958,21 @@ async function runPlacesSearch(){
     });
     map.setBounds(bounds);
     renderPoiList();
-  }, {location:center, radius});
+  }, {location:center, radius, sort:kakao.maps.services.SortBy.DISTANCE});
 }
 
 function renderPoiList(){
   if(!document.getElementById('tabPlaces').classList.contains('active')) return;
   const list=document.getElementById('sideList');
   document.getElementById('exportBtn').style.display='none';
-  if(!poiMarkers.length){ list.innerHTML='<div class="res-empty">키워드로 주변시설을 검색해보세요.</div>'; return; }
-  document.getElementById('sideTitle').textContent=`주변시설 ${poiMarkers.length}건`;
+  if(!poiMarkers.length){ list.innerHTML='<div class="res-empty">키워드로 주변시설을 검색해보세요. 카카오 API는 평점 정보를 제공하지 않아, 가까운 순으로 보여주고 카카오맵 상세페이지로 리뷰 확인 링크를 제공합니다.</div>'; return; }
+  document.getElementById('sideTitle').textContent=`주변시설 ${poiMarkers.length}건 (가까운 순)`;
   list.innerHTML=poiMarkers.map((p,i)=>`
-    <div class="res-item" onclick="focusPoi(${i})">
-      <div class="ri-addr">🏪 ${p.place.place_name}</div>
-      <div class="ri-sub">${p.place.road_address_name||p.place.address_name} · ${p.place.distance?p.place.distance+'m':''}</div>
+    <div class="res-item">
+      <div class="ri-addr" onclick="focusPoi(${i})">🏪 ${p.place.place_name}</div>
+      <div class="ri-sub">${p.place.category_name?p.place.category_name.split(' > ').pop()+' · ':''}${p.place.distance?p.place.distance+'m':''}</div>
+      <div class="ri-sub">${p.place.road_address_name||p.place.address_name}</div>
+      ${p.place.place_url?`<a class="poi-link" href="${p.place.place_url}" target="_blank" onclick="event.stopPropagation()">카카오맵에서 리뷰·평점 보기 ↗</a>`:''}
     </div>
   `).join('');
 }
