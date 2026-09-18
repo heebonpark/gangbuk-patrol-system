@@ -217,6 +217,8 @@ input[type=number]{width:70px;cursor:text}
 </div>
 
 <div class="filter-bar" id="filterBar">
+  <input type="text" id="quickSearchInput" placeholder="🔍 상호로 빠른 검색" oninput="updateQuickSearch(this.value)" style="width:160px;padding:5px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+  <div class="filter-sep"></div>
   <span style="font-size:11px;color:var(--text2)">필터</span>
   <select id="filterColSelect" onchange="addColumnFilter()"><option value="">+ 컬럼 필터 추가</option></select>
   <div id="activeFilterChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
@@ -319,6 +321,7 @@ let columnFilters={}; // { colName: Set(values) }
 let activeTagFilters=new Set();
 let radiusFilter=null; // {lat,lng,km}
 let advancedFilters=[]; // [{col, op, val}] — 컬럼/연산자(포함·일치·제외·크거나같음·작거나같음)/값 조합
+let quickSearchText=''; // 상호(업체명 등) 빠른 검색어
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
 
@@ -869,6 +872,19 @@ function guessAddrCol(hdrs){
   return partial||hdrs[0]||'';
 }
 
+// 빠른 검색이 기준으로 삼을 "상호(업체명 등)" 컬럼을 자동 감지한다. 못 찾으면
+// updateQuickSearch/passesFilters 쪽에서 행 전체를 뒤져 대신 검색한다.
+function guessNameCol(hdrs){
+  const exact=hdrs.find(h=>['상호','업체명','고객명','성명','회사명'].includes(String(h).trim()));
+  if(exact) return exact;
+  return hdrs.find(h=>/상호|업체|고객명|성명|회사명|name/i.test(String(h))) || '';
+}
+
+function updateQuickSearch(val){
+  quickSearchText=(val||'').trim().toLowerCase();
+  renderSideList();
+}
+
 async function handleFile(file){
   if(!file)return;
   document.getElementById('fileBadge').textContent='분석 중...';
@@ -892,6 +908,9 @@ async function handleFile(file){
     document.getElementById('batchBtn').disabled=false;
     columnFilters={}; activeTagFilters.clear(); radiusFilter=null;
     advancedFilters=[]; document.getElementById('advFilterPanel').style.display='none';
+    quickSearchText=''; document.getElementById('quickSearchInput').value='';
+    const nameCol=guessNameCol(headers);
+    document.getElementById('quickSearchInput').placeholder = nameCol ? `🔍 ${nameCol}로 빠른 검색` : '🔍 상호로 빠른 검색';
   }catch(e){
     document.getElementById('fileBadge').textContent='파일 오류: '+e.message;
   }
@@ -1128,7 +1147,7 @@ function clearVisitRoute(){
 
 function passesFilters(r){
   const hasAnyFilter = Object.keys(columnFilters).length>0 || activeTagFilters.size>0 || !!radiusFilter
-    || advancedFilters.some(f=>f.col && f.val!=='');
+    || advancedFilters.some(f=>f.col && f.val!=='') || !!quickSearchText;
   if(!r.ok) return !hasAnyFilter; // 실패 항목은 필터 없을 때만 보여줌
   for(const col in columnFilters){
     const val=String((r.row||{})[col]??'').trim();
@@ -1141,6 +1160,11 @@ function passesFilters(r){
   }
   if(radiusFilter){
     if(haversineKm(radiusFilter.lat,radiusFilter.lng,r.lat,r.lng) > radiusFilter.km) return false;
+  }
+  if(quickSearchText){
+    const nameCol=guessNameCol(headers);
+    const hay = nameCol ? String((r.row||{})[nameCol]??'') : Object.values(r.row||{}).join(' ');
+    if(!hay.toLowerCase().includes(quickSearchText)) return false;
   }
   if(!passesAdvancedFilters(r)) return false;
   return true;
@@ -1474,12 +1498,14 @@ function renderSideList(){
   document.getElementById('exportBtn').style.display=batchResults.length?'block':'none';
   const list=document.getElementById('sideList');
   if(!filtered.length){list.innerHTML='<div class="res-empty">조건에 맞는 결과가 없습니다.</div>';return;}
+  const nameCol=guessNameCol(headers);
   list.innerHTML=filtered.map((r,i)=>{
     const idx=batchResults.indexOf(r);
     const tags=getTags(r.addr);
+    const name = nameCol ? String((r.row||{})[nameCol]??'').trim() : '';
     return `
     <div class="res-item ${r.ok?'':'fail'}" onclick="focusResult(${idx})">
-      <div class="ri-addr">${r.ok?'📍':'❌'} ${r.addr}</div>
+      <div class="ri-addr">${r.ok?'📍':'❌'} ${name ? name+' · ' : ''}${r.addr}</div>
       <div class="ri-sub">${r.ok?(r.matched||'위치 확인됨'):'위치를 찾을 수 없음'}</div>
       ${tags.length?`<div class="ri-tags">${tags.map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>`:''}
     </div>`;
