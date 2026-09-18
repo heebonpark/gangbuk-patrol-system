@@ -31,6 +31,7 @@ button{font-family:inherit}
 .btn:hover{opacity:.88}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn.ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.btn.on{background:rgba(249,115,22,.2);border:1px solid var(--orange);color:var(--orange)}
 .btn.sm{padding:4px 9px;font-size:11px;border-radius:6px}
 .btn.danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--red)}
 
@@ -136,6 +137,7 @@ input[type=number]{width:70px;cursor:text}
     <button class="mode-tab active" id="tabSingle" onclick="switchMode('single')">개별 검색</button>
     <button class="mode-tab" id="tabBatch" onclick="switchMode('batch')">파일 업로드</button>
     <button class="mode-tab" id="tabPlaces" onclick="switchMode('places')">주변시설 검색</button>
+    <button class="mode-tab" id="tabBiz" onclick="switchMode('biz')">영업분석</button>
   </div>
 
   <div class="searchbar" id="singleBar">
@@ -159,6 +161,13 @@ input[type=number]{width:70px;cursor:text}
     <button class="btn" id="placesBtn" onclick="runPlacesSearch()">검색</button>
     <button class="btn ghost" onclick="clearPlaces()">지우기</button>
   </div>
+
+  <div class="searchbar" id="bizBar" style="display:none">
+    <select id="bizColorCol"><option value="">색상 구분: 컬럼 선택</option></select>
+    <button class="btn ghost sm" onclick="applyColorByColumn()">적용</button>
+    <button class="btn ghost sm" onclick="clearColorByColumn()">해제</button>
+    <button type="button" class="btn ghost sm" id="densityToggleBtn" onclick="toggleDensityGrid()">🔥 밀집도 그리드</button>
+  </div>
 </div>
 
 <div class="cat-chips" id="catChips" style="display:none">
@@ -169,6 +178,28 @@ input[type=number]{width:70px;cursor:text}
   <span class="cat-chip" onclick="quickPlacesSearch('약국')">💊 약국</span>
   <span class="cat-chip" onclick="quickPlacesSearch('은행')">🏦 은행</span>
   <span class="cat-chip" onclick="quickPlacesSearch('주유소')">⛽ 주유소</span>
+</div>
+
+<div class="cat-chips" id="bizChips" style="display:none">
+  <span style="font-size:11px;color:var(--text2);align-self:center">영업기회 발굴 대상:</span>
+  <span class="cat-chip" onclick="setLeadKeyword('아파트')">🏢 아파트</span>
+  <span class="cat-chip" onclick="setLeadKeyword('상가')">🏬 상가</span>
+  <span class="cat-chip" onclick="setLeadKeyword('오피스텔')">🏙 오피스텔</span>
+  <span class="cat-chip" onclick="setLeadKeyword('공장')">🏭 공장</span>
+  <span class="cat-chip" onclick="setLeadKeyword('빌딩')">🏗 빌딩</span>
+  <input type="text" id="leadKeyword" placeholder="직접 입력" style="width:100px;padding:4px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;color:var(--text);font-size:11px">
+  <select id="leadRadius"><option value="500">500m</option><option value="1000" selected>1km</option><option value="2000">2km</option><option value="3000">3km</option></select>
+  <input type="number" id="leadMinDist" value="200" min="0" step="50" style="width:60px" title="이 거리(m) 이내에 기존 고객이 없으면 영업기회로 표시">m 이내 무고객
+  <button class="btn sm" onclick="findLeads()">🎯 찾기</button>
+  <button class="btn sm ghost" onclick="clearLeads()">지우기</button>
+</div>
+
+<div class="filter-bar" id="bizReportBar">
+  <span style="font-size:11px;color:var(--text2)">영업현황 리포트</span>
+  <select id="reportGroupCol"><option value="">기준 컬럼 선택</option></select>
+  <button class="btn sm" onclick="generateReport()">리포트 생성</button>
+  <div id="reportSummary" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--text2)"></div>
+  <button class="btn sm ghost" id="reportExportBtn" onclick="exportReport()" style="display:none;margin-left:auto">엑셀로 내보내기</button>
 </div>
 
 <div class="draft-banner" id="draftBanner">
@@ -429,15 +460,29 @@ function switchMode(mode){
   document.getElementById('tabSingle').classList.toggle('active',mode==='single');
   document.getElementById('tabBatch').classList.toggle('active',mode==='batch');
   document.getElementById('tabPlaces').classList.toggle('active',mode==='places');
+  document.getElementById('tabBiz').classList.toggle('active',mode==='biz');
   document.getElementById('singleBar').style.display=mode==='single'?'flex':'none';
   document.getElementById('batchBar').style.display=mode==='batch'?'flex':'none';
   document.getElementById('placesBar').style.display=mode==='places'?'flex':'none';
-  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places')?'flex':'none';
+  document.getElementById('bizBar').style.display=mode==='biz'?'flex':'none';
+  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places'||mode==='biz')?'flex':'none';
   document.getElementById('filterBar').classList.toggle('show', mode==='batch' && batchResults.length>0);
   document.getElementById('catChips').style.display = mode==='places' ? 'flex' : 'none';
+  document.getElementById('bizChips').style.display = mode==='biz' ? 'flex' : 'none';
+  document.getElementById('bizReportBar').classList.toggle('show', mode==='biz');
   document.getElementById('singleCard').classList.remove('show');
   if(mode==='places'){ document.getElementById('sideTitle').textContent='주변시설 검색 결과'; renderPoiList(); }
   else if(mode==='batch'){ renderSideList(); }
+  else if(mode==='biz'){
+    if(!batchResults.length){
+      document.getElementById('sideTitle').textContent='영업분석';
+      document.getElementById('sideList').innerHTML='<div class="res-empty">먼저 "파일 업로드" 탭에서 설치주소를 조회해주세요.<br>그래야 색상 구분/밀집도/리포트 기능을 쓸 수 있습니다.</div>';
+      document.getElementById('exportBtn').style.display='none';
+    }else{
+      buildBizColumnOptions();
+      renderLeadList();
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -779,6 +824,236 @@ function passesFilters(r){
 }
 
 // ═══════════════════════════════════════════════
+//  영업분석 (비즈니스 활용) — 구역 색상구분 / 밀집도 그리드 /
+//  영업현황 리포트 / 영업기회(미개척지역) 발굴
+// ═══════════════════════════════════════════════
+const CATEGORY_COLORS=['#4f8ef7','#f97316','#22c55e','#a855f7','#ef4444','#06b6d4','#eab308','#ec4899','#14b8a6','#8b5cf6'];
+let colorByCol=null;
+let colorLegendEl=null;
+
+function buildBizColumnOptions(){
+  const opts='<option value="">색상 구분: 컬럼 선택</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+  document.getElementById('bizColorCol').innerHTML=opts;
+  document.getElementById('reportGroupCol').innerHTML='<option value="">기준 컬럼 선택</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+}
+
+function colorForValue(col,val){
+  const values=[...new Set(batchResults.map(r=>String((r.row||{})[col]??'').trim()))].sort();
+  const idx=values.indexOf(val);
+  return CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+}
+
+function applyColorByColumn(){
+  const col=document.getElementById('bizColorCol').value;
+  if(!col) return;
+  colorByCol=col;
+  redrawBatchMarkers();
+  renderColorLegend(col);
+}
+function clearColorByColumn(){
+  colorByCol=null;
+  redrawBatchMarkers();
+  if(colorLegendEl){ colorLegendEl.remove(); colorLegendEl=null; }
+}
+function renderColorLegend(col){
+  if(colorLegendEl) colorLegendEl.remove();
+  const values=[...new Set(batchResults.map(r=>String((r.row||{})[col]??'').trim()).filter(v=>v))].sort();
+  colorLegendEl=document.createElement('div');
+  colorLegendEl.style.cssText='position:absolute;bottom:12px;left:12px;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:10.5px;box-shadow:0 2px 8px rgba(0,0,0,.5);max-width:220px';
+  colorLegendEl.innerHTML=`<div style="font-weight:700;margin-bottom:4px">${col} 색상 구분</div>`+values.map((v,i)=>`<div style="display:flex;align-items:center;gap:5px;margin-top:2px"><span style="width:9px;height:9px;border-radius:50%;background:${CATEGORY_COLORS[i%CATEGORY_COLORS.length]};flex-shrink:0"></span>${v}</div>`).join('');
+  document.querySelector('.map-wrap').appendChild(colorLegendEl);
+}
+
+function coloredMarkerImage(hexColor){
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="10" fill="${hexColor}" stroke="#fff" stroke-width="2.5"/></svg>`;
+  return new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,26), {offset:new kakao.maps.Point(13,13)});
+}
+
+// 색상 구분을 켜고 끌 때 배치 마커를 그 상태에 맞게 다시 그린다(재지오코딩 없이 좌표 재사용).
+function redrawBatchMarkers(){
+  if(!map) return;
+  clearMarkers();
+  batchResults.forEach(r=>{
+    if(!r.ok) return;
+    const marker=new kakao.maps.Marker({
+      position:new kakao.maps.LatLng(r.lat,r.lng),
+      image: colorByCol ? coloredMarkerImage(colorForValue(colorByCol, String((r.row||{})[colorByCol]??'').trim())) : undefined
+    });
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">${r.matched||r.addr}</div>`});
+    kakao.maps.event.addListener(marker,'click',()=>{iw.open(map,marker); openDetailByAddr(r.addr);});
+    markers.push(marker);
+    if(clusterer) clusterer.addMarker(marker); else marker.setMap(map);
+  });
+}
+
+// ── 밀집도 그리드 (설치 밀집지역/공백지역 시각화) ──
+let densityRects=[];
+let densityOn=false;
+function toggleDensityGrid(){
+  densityOn=!densityOn;
+  document.getElementById('densityToggleBtn').classList.toggle('on', densityOn);
+  if(densityOn) drawDensityGrid(); else clearDensityGrid();
+}
+function clearDensityGrid(){ densityRects.forEach(r=>r.setMap(null)); densityRects=[]; }
+function drawDensityGrid(){
+  clearDensityGrid();
+  if(!map) return;
+  const bounds=map.getBounds();
+  const sw=bounds.getSouthWest(), ne=bounds.getNorthEast();
+  const GRID_N=10; // 화면을 10x10 격자로 나눠 밀도를 센다
+  const latStep=(ne.getLat()-sw.getLat())/GRID_N;
+  const lngStep=(ne.getLng()-sw.getLng())/GRID_N;
+  if(latStep<=0||lngStep<=0) return;
+  const counts={};
+  let maxCount=0;
+  batchResults.filter(r=>r.ok).forEach(r=>{
+    const gi=Math.floor((r.lat-sw.getLat())/latStep);
+    const gj=Math.floor((r.lng-sw.getLng())/lngStep);
+    const key=gi+'_'+gj;
+    counts[key]=(counts[key]||0)+1;
+    if(counts[key]>maxCount) maxCount=counts[key];
+  });
+  for(let i=0;i<GRID_N;i++){
+    for(let j=0;j<GRID_N;j++){
+      const key=i+'_'+j;
+      const c=counts[key]||0;
+      const cellSW=new kakao.maps.LatLng(sw.getLat()+i*latStep, sw.getLng()+j*lngStep);
+      const cellNE=new kakao.maps.LatLng(sw.getLat()+(i+1)*latStep, sw.getLng()+(j+1)*lngStep);
+      let fillColor, fillOpacity;
+      if(c===0){ fillColor='#4f8ef7'; fillOpacity=0.04; } // 공백지역: 옅은 파랑
+      else{ fillColor='#ef4444'; fillOpacity=0.12 + 0.55*(c/maxCount); } // 밀집지역일수록 진한 빨강
+      const rect=new kakao.maps.Rectangle({
+        bounds:new kakao.maps.LatLngBounds(cellSW,cellNE),
+        strokeWeight:0.5, strokeColor:'#fff', strokeOpacity:0.15,
+        fillColor, fillOpacity
+      });
+      rect.setMap(map);
+      densityRects.push(rect);
+    }
+  }
+}
+
+// ── 영업현황 리포트 ──
+let lastReport=null;
+function generateReport(){
+  const col=document.getElementById('reportGroupCol').value;
+  if(!col){ alert('기준 컬럼을 선택해주세요.'); return; }
+  const okResults=batchResults.filter(r=>r.ok);
+  const groups={};
+  okResults.forEach(r=>{
+    const v=String((r.row||{})[col]??'').trim()||'(미기재)';
+    groups[v]=(groups[v]||0)+1;
+  });
+  const rows=Object.entries(groups).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({[col]:k, 설치건수:v, 비율:((v/okResults.length)*100).toFixed(1)+'%'}));
+  lastReport=rows;
+  const wrap=document.getElementById('reportSummary');
+  wrap.innerHTML=rows.map(r=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 9px">${r[col]}: <b style="color:var(--text)">${r.설치건수}</b>건 (${r.비율})</span>`).join('');
+  document.getElementById('reportExportBtn').style.display='inline-block';
+}
+function exportReport(){
+  if(!lastReport) return;
+  const ws=XLSX.utils.json_to_sheet(lastReport);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'영업현황리포트');
+  const dateStr=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`영업현황리포트_${dateStr}.xlsx`);
+}
+
+// ── 영업기회(미개척지역) 발굴 ──
+let leadMarkers=[];
+let leadResults=[];
+function setLeadKeyword(kw){ document.getElementById('leadKeyword').value=kw; }
+
+async function findLeads(){
+  const keyword=document.getElementById('leadKeyword').value.trim();
+  if(!keyword){ alert('찾을 대상(아파트/상가 등)을 선택하거나 입력해주세요.'); return; }
+  if(!batchResults.some(r=>r.ok)){ alert('먼저 파일 업로드에서 설치주소를 조회해주세요.'); return; }
+  await ensureMap();
+  const radius=parseInt(document.getElementById('leadRadius').value,10);
+  const minDistM=parseFloat(document.getElementById('leadMinDist').value)||200;
+  const center=map.getCenter();
+  clearLeadMarkers();
+  places.keywordSearch(keyword, (data,status)=>{
+    if(status!==kakao.maps.services.Status.OK || !data.length){
+      alert('검색 결과가 없습니다.');
+      leadResults=[];
+      renderLeadList();
+      return;
+    }
+    const existing=batchResults.filter(r=>r.ok);
+    leadResults=data.map(place=>{
+      const lat=parseFloat(place.y), lng=parseFloat(place.x);
+      let nearestM=Infinity;
+      existing.forEach(r=>{
+        const d=haversineKm(lat,lng,r.lat,r.lng)*1000;
+        if(d<nearestM) nearestM=d;
+      });
+      const isLead = nearestM===Infinity || nearestM>=minDistM;
+      return {name:place.place_name, addr:place.road_address_name||place.address_name, lat, lng, nearestM:Math.round(nearestM), isLead, place_url:place.place_url};
+    }).sort((a,b)=>(b.isLead-a.isLead) || (a.nearestM-b.nearestM));
+
+    const bounds=new kakao.maps.LatLngBounds();
+    leadResults.forEach(l=>{
+      const pos=new kakao.maps.LatLng(l.lat,l.lng);
+      const svg=l.isLead
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="12" fill="#22c55e" stroke="#fff" stroke-width="2"/><text x="14" y="19" font-size="14" text-anchor="middle" fill="#fff">★</text></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="9" fill="#7880a0" stroke="#fff" stroke-width="2"/></svg>`;
+      const marker=new kakao.maps.Marker({position:pos, map, image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(l.isLead?28:22,l.isLead?28:22))});
+      const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">${l.isLead?'🎯 영업기회: ':''}${l.name}</div>`});
+      kakao.maps.event.addListener(marker,'click',()=>iw.open(map,marker));
+      leadMarkers.push(marker);
+      bounds.extend(pos);
+    });
+    map.setBounds(bounds);
+    renderLeadList();
+  }, {location:center, radius});
+}
+
+function clearLeadMarkers(){ leadMarkers.forEach(m=>m.setMap(null)); leadMarkers=[]; }
+function clearLeads(){ clearLeadMarkers(); leadResults=[]; renderLeadList(); }
+
+function renderLeadList(){
+  if(!document.getElementById('tabBiz').classList.contains('active')) return;
+  if(!batchResults.length) return; // switchMode에서 이미 안내 문구를 띄움
+  const list=document.getElementById('sideList');
+  const leadCount=leadResults.filter(l=>l.isLead).length;
+  document.getElementById('sideTitle').textContent = leadResults.length ? `영업기회 ${leadCount}건 / 전체 ${leadResults.length}건` : '영업분석';
+  document.getElementById('exportBtn').style.display = leadResults.length ? 'block' : 'none';
+  if(!leadResults.length){
+    list.innerHTML='<div class="res-empty">위의 "영업분석" 바에서 색상 구분·밀집도·리포트를 확인하거나,<br>"영업기회 발굴 대상"에서 아파트/상가 등을 찾아보세요.<br>기존 설치주소로부터 일정 거리 이상 떨어진 곳을 🎯로 표시합니다.</div>';
+    return;
+  }
+  list.innerHTML=leadResults.map((l,i)=>`
+    <div class="res-item" onclick="focusLead(${i})">
+      <div class="ri-addr">${l.isLead?'🎯':'⚪'} ${l.name}</div>
+      <div class="ri-sub">${l.addr}</div>
+      <div class="ri-sub">${l.nearestM===Infinity?'주변에 설치 고객 없음':'가장 가까운 기존 고객까지 '+l.nearestM+'m'}</div>
+      ${l.place_url?`<a class="poi-link" href="${l.place_url}" target="_blank" onclick="event.stopPropagation()">카카오맵에서 보기 ↗</a>`:''}
+    </div>
+  `).join('');
+}
+function focusLead(i){
+  const l=leadResults[i];
+  map.setCenter(new kakao.maps.LatLng(l.lat,l.lng));
+  map.setLevel(3);
+}
+
+// 영업분석 모드의 엑셀 내보내기는 리드 목록이 있으면 그걸, 없으면 기존 배치결과 내보내기를 재사용한다.
+// (exportBatchResults는 아래 "결과 목록 렌더링" 섹션에 정의되어 있다.)
+function exportResults(){
+  if(document.getElementById('tabBiz').classList.contains('active') && leadResults.length){
+    const rows=leadResults.map(l=>({시설명:l.name, 주소:l.addr, 영업기회:l.isLead?'O':'X', 최근접고객거리_m:l.nearestM===Infinity?'':l.nearestM}));
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'영업기회');
+    const dateStr=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`영업기회_${dateStr}.xlsx`);
+    return;
+  }
+  exportBatchResults();
+}
+
+// ═══════════════════════════════════════════════
 //  결과 목록 렌더링
 // ═══════════════════════════════════════════════
 function renderSideList(){
@@ -813,7 +1088,7 @@ function focusResult(i){
   openDetailByAddr(r.addr);
 }
 
-function exportResults(){
+function exportBatchResults(){
   const rows=batchResults.map(r=>({설치주소:r.addr, 확인결과:r.ok?'확인됨':'위치 찾을 수 없음', 매칭주소:r.matched, 위도:r.lat, 경도:r.lng, 태그:getTags(r.addr).join(', ')}));
   const ws=XLSX.utils.json_to_sheet(rows);
   const wb=XLSX.utils.book_new();
