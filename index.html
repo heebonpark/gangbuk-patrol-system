@@ -651,6 +651,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">체납관리</span>
             <span class="hub-btn-desc">체납 현황 대시보드</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubBizCheck" data-hub-key="bizCheck">
+            <span class="hub-btn-icon">🔍</span>
+            <span class="hub-btn-title">사업자진위확인</span>
+            <span class="hub-btn-desc">로그인 없이 바로 조회</span>
+          </button>
           <button type="button" class="hub-btn" id="btnHubIncidentManagement" data-hub-key="incidentManagement">
             <span class="hub-btn-icon">🚨</span>
             <span class="hub-btn-title">사건사고관리</span>
@@ -5774,6 +5779,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 그 앱 자체의 로그인은 사용자가 그 탭에서 별도로 진행해야 한다.
     window.open('https://collection-management-dashboard.vercel.app/', '_blank');
   });
+  document.getElementById('btnHubBizCheck').addEventListener('click', ()=>{
+    // 체납관리 대시보드(로그인 필요)를 거치지 않고 바로 쓰는 로그인 불필요 standalone 페이지.
+    window.open('https://collection-management-dashboard.vercel.app/biz-check.html', '_blank');
+  });
   document.getElementById('btnHubAssetManagement').addEventListener('click', ()=>{
     window.open('https://py-asset-manager-gkfcukfyhwgyq5xvijzvmb.streamlit.app/', '_blank');
   });
@@ -5999,6 +6008,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'bidConstruction',   label:'입찰/공사팀신청',        defaultCategory:'sales' },
     { key:'subscriptionDashboard', label:'청약현황대시보드',    defaultCategory:'sales' },
     { key:'collection',        label:'체납관리',              defaultCategory:'customer' },
+    { key:'bizCheck',          label:'사업자진위확인',         defaultCategory:'customer' },
     { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' },
     { key:'vocManagement',     label:'VOC관리',               defaultCategory:'customer' },
     { key:'kakaoMap',          label:'고객지도',              defaultCategory:'customer' }
