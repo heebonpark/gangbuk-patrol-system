@@ -3,7 +3,9 @@ chcp 65001 >nul
 setlocal
 title PatrolOps 다운로드 및 실행
 
-set "URL=https://raw.githubusercontent.com/heebonpark/gangbuk-patrol-system/main/windows-exe/PatrolOps_Blank.exe"
+rem raw.githubusercontent.com은 백신/브라우저 보안 프로그램이 더 의심스럽게 취급하는 경우가
+rem 많아(다운로드가 검사 단계에서 멈추거나 막힘), 정식 배포 채널인 GitHub Releases를 쓴다.
+set "URL=https://github.com/heebonpark/gangbuk-patrol-system/releases/download/latest/PatrolOps_Blank.exe"
 set "OUT=%~dp0PatrolOps_Blank.exe"
 
 echo ============================================
