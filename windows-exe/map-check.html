@@ -232,6 +232,16 @@ input[type=number]{width:70px;cursor:text}
   <div class="filter-sep"></div>
   <button class="btn sm ghost" onclick="planVisitRoute()">🧭 동선 최적화</button>
   <button class="btn sm ghost" id="routeClearBtn" onclick="clearVisitRoute()" style="display:none">경로지우기</button>
+  <div class="filter-sep"></div>
+  <button class="btn sm ghost" id="advFilterToggleBtn" onclick="toggleAdvancedFilterPanel()">🔧 고급 필터</button>
+  <div id="advFilterPanel" style="display:none;flex-basis:100%;background:var(--surface2);border-radius:8px;padding:10px;margin-top:2px">
+    <div style="font-size:10.5px;color:var(--text2);margin-bottom:6px">컬럼 + 연산자 + 값 조합으로 세밀하게 걸러냅니다 (여러 조건은 모두 동시에 만족해야 함).</div>
+    <div id="advFilterRows"></div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn sm ghost" onclick="addAdvFilterRow()">+ 조건 추가</button>
+      <button class="btn sm ghost" onclick="resetAdvFilters()">전체 초기화</button>
+    </div>
+  </div>
 </div>
 
 <div class="main">
@@ -242,6 +252,7 @@ input[type=number]{width:70px;cursor:text}
       <button type="button" class="btn-mapaction" onclick="goToMyLocation()">📍 내 위치</button>
       <button type="button" class="btn-mapaction" id="reverseGeoBtn" onclick="toggleReverseGeocode()">🖱 지도클릭 주소확인</button>
       <button type="button" class="btn-mapaction" id="rulerBtn" onclick="toggleRuler()">📏 거리재기</button>
+      <button type="button" class="btn-mapaction" id="markerRegBtn" onclick="toggleMarkerReg()">📌 마커 등록</button>
     </div>
     <div class="single-card" id="singleCard"></div>
     <div class="single-card" id="reverseGeoCard" style="left:auto;right:12px"></div>
@@ -250,6 +261,7 @@ input[type=number]{width:70px;cursor:text}
       <div class="sc-coord">지도를 순서대로 클릭해서 점을 찍어보세요. "거리재기" 버튼을 다시 누르면 종료.</div>
       <div class="sc-actions"><button class="btn sm ghost" onclick="clearRuler()">지우기</button></div>
     </div>
+    <div class="single-card" id="markerRegCard" style="left:auto;right:12px"></div>
   </div>
   <div class="side" id="sideBatch" style="display:none">
     <div class="side-head"><span id="sideTitle">결과</span><button class="btn ghost" id="exportBtn" style="padding:3px 9px;font-size:10.5px;display:none" onclick="exportResults()">엑셀 내보내기</button></div>
@@ -306,6 +318,7 @@ let rawRows=[], headers=[], batchResults=[];
 let columnFilters={}; // { colName: Set(values) }
 let activeTagFilters=new Set();
 let radiusFilter=null; // {lat,lng,km}
+let advancedFilters=[]; // [{col, op, val}] — 컬럼/연산자(포함·일치·제외·크거나같음·작거나같음)/값 조합
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
 
@@ -404,6 +417,7 @@ async function ensureMap(){
         {width:'50px',height:'50px',background:'rgba(239,68,68,.85)',borderRadius:'25px',color:'#fff',textAlign:'center',lineHeight:'50px',fontSize:'12px',fontWeight:'700'}
       ]
     });
+    renderCustomMarkers(); // 등록해둔 마커가 있으면 지도가 처음 뜰 때 바로 표시
   }
   document.getElementById('mapEmpty').style.display='none';
 }
@@ -581,7 +595,9 @@ let reverseGeoArmed=false;
 async function toggleReverseGeocode(){
   await ensureMap();
   reverseGeoArmed=!reverseGeoArmed;
-  if(reverseGeoArmed && rulerArmed) toggleRuler(); // 두 지도클릭 도구는 동시에 켤 수 없다
+  // 지도 클릭을 쓰는 도구(주소확인/거리재기/마커등록)는 한 번에 하나만 켤 수 있다.
+  if(reverseGeoArmed && rulerArmed) toggleRuler();
+  if(reverseGeoArmed && markerRegArmed) toggleMarkerReg();
   document.getElementById('reverseGeoBtn').classList.toggle('on', reverseGeoArmed);
   document.getElementById('reverseGeoCard').classList.remove('show');
   if(reverseGeoArmed && !window.__reverseGeoListenerAdded){
@@ -633,7 +649,8 @@ let rulerDotMarkers=[];
 async function toggleRuler(){
   await ensureMap();
   rulerArmed=!rulerArmed;
-  if(rulerArmed && reverseGeoArmed) toggleReverseGeocode(); // 두 지도클릭 도구는 동시에 켤 수 없다
+  if(rulerArmed && reverseGeoArmed) toggleReverseGeocode();
+  if(rulerArmed && markerRegArmed) toggleMarkerReg();
   document.getElementById('rulerBtn').classList.toggle('on', rulerArmed);
   document.getElementById('rulerCard').classList.toggle('show', rulerArmed);
   if(rulerArmed && !window.__rulerListenerAdded){
@@ -672,6 +689,104 @@ function clearRuler(){
   rulerDotMarkers.forEach(m=>m.setMap(null));
   rulerDotMarkers=[];
   document.getElementById('rulerDist').textContent='0m';
+}
+
+// ── 📌 마커 등록 (업로드한 데이터와 무관하게, 지도 위 아무 지점에나 직접 핀을
+//    찍어 이름을 붙여 저장하는 기능 — 순찰 포인트, 경쟁사 위치, 신규 후보지 등을
+//    기록해두고 다음에 다시 열어도 남아있게 한다. localStorage에 영구 저장된다.) ──
+const MARKERS_KEY='mapcheck_custom_markers_v1';
+const MARKER_CATEGORIES={'일반':'#4f8ef7','중요':'#ef4444','후보지':'#22c55e','경쟁사':'#f97316','기타':'#a855f7'};
+let customMarkers=[];
+let customMarkerObjs=[];
+let markerRegArmed=false;
+let pendingMarkerPos=null;
+
+function loadCustomMarkers(){
+  try{ customMarkers=JSON.parse(localStorage.getItem(MARKERS_KEY)||'[]'); }catch{ customMarkers=[]; }
+}
+function saveCustomMarkersList(){
+  try{ localStorage.setItem(MARKERS_KEY, JSON.stringify(customMarkers)); }catch{}
+}
+
+async function toggleMarkerReg(){
+  await ensureMap();
+  markerRegArmed=!markerRegArmed;
+  if(markerRegArmed && reverseGeoArmed) toggleReverseGeocode();
+  if(markerRegArmed && rulerArmed) toggleRuler();
+  document.getElementById('markerRegBtn').classList.toggle('on', markerRegArmed);
+  if(!markerRegArmed) document.getElementById('markerRegCard').classList.remove('show');
+  if(markerRegArmed && !window.__markerRegListenerAdded){
+    window.__markerRegListenerAdded=true;
+    kakao.maps.event.addListener(map,'click', e=>{
+      if(!markerRegArmed) return;
+      pendingMarkerPos={lat:e.latLng.getLat(), lng:e.latLng.getLng()};
+      showMarkerRegCard();
+    });
+  }
+}
+
+function showMarkerRegCard(){
+  const card=document.getElementById('markerRegCard');
+  const catOpts=Object.keys(MARKER_CATEGORIES).map(c=>`<option value="${c}">${c}</option>`).join('');
+  card.className='single-card show';
+  card.innerHTML=`
+    <div class="sc-addr">📌 새 마커 등록</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+      <input type="text" id="markerNameInput" placeholder="마커 이름 (예: 신규 영업 후보지)" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+      <select id="markerCatSelect" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">${catOpts}</select>
+    </div>
+    <div class="sc-actions">
+      <button class="btn sm" onclick="confirmMarkerReg()">저장</button>
+      <button class="btn sm ghost" onclick="cancelMarkerReg()">취소</button>
+    </div>
+  `;
+  document.getElementById('markerNameInput').focus();
+}
+function confirmMarkerReg(){
+  if(!pendingMarkerPos) return;
+  const name=(document.getElementById('markerNameInput').value||'').trim() || '이름 없는 마커';
+  const category=document.getElementById('markerCatSelect').value;
+  customMarkers.push({
+    id:'m'+Date.now()+Math.random().toString(36).slice(2,6),
+    lat:pendingMarkerPos.lat, lng:pendingMarkerPos.lng, name, category, createdAt:Date.now()
+  });
+  saveCustomMarkersList();
+  renderCustomMarkers();
+  cancelMarkerReg();
+}
+function cancelMarkerReg(){
+  pendingMarkerPos=null;
+  document.getElementById('markerRegCard').classList.remove('show');
+}
+
+function renderCustomMarkers(){
+  customMarkerObjs.forEach(m=>m.setMap(null));
+  customMarkerObjs=[];
+  if(!map) return;
+  customMarkers.forEach(cm=>{
+    const color=MARKER_CATEGORIES[cm.category]||'#4f8ef7';
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.7 13 19 13 19s13-9.3 13-19C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="13" cy="13" r="4.5" fill="#fff"/></svg>`;
+    const marker=new kakao.maps.Marker({
+      position:new kakao.maps.LatLng(cm.lat,cm.lng), map, zIndex:20,
+      image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,32), {offset:new kakao.maps.Point(13,32)})
+    });
+    const safeName=String(cm.name).replace(/'/g,"\\'");
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:8px 10px;font-size:11px;min-width:150px">
+      <div style="font-weight:700;margin-bottom:3px">📌 ${cm.name}</div>
+      <div style="color:#7880a0;margin-bottom:6px">${cm.category}</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="deleteCustomMarker('${cm.id}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #ef4444;background:none;color:#ef4444;cursor:pointer">삭제</button>
+        <button onclick="openDirectionsAt(${cm.lat},${cm.lng},'${safeName}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4f8ef7;background:none;color:#4f8ef7;cursor:pointer">길찾기</button>
+      </div>
+    </div>`});
+    kakao.maps.event.addListener(marker,'click',()=>iw.open(map,marker));
+    customMarkerObjs.push(marker);
+  });
+}
+function deleteCustomMarker(id){
+  customMarkers=customMarkers.filter(m=>m.id!==id);
+  saveCustomMarkersList();
+  renderCustomMarkers();
 }
 
 // ═══════════════════════════════════════════════
@@ -776,6 +891,7 @@ async function handleFile(file){
     sel.style.display='inline-block';
     document.getElementById('batchBtn').disabled=false;
     columnFilters={}; activeTagFilters.clear(); radiusFilter=null;
+    advancedFilters=[]; document.getElementById('advFilterPanel').style.display='none';
   }catch(e){
     document.getElementById('fileBadge').textContent='파일 오류: '+e.message;
   }
@@ -1011,7 +1127,9 @@ function clearVisitRoute(){
 }
 
 function passesFilters(r){
-  if(!r.ok) return Object.keys(columnFilters).length===0 && activeTagFilters.size===0 && !radiusFilter; // 실패 항목은 필터 없을 때만 보여줌
+  const hasAnyFilter = Object.keys(columnFilters).length>0 || activeTagFilters.size>0 || !!radiusFilter
+    || advancedFilters.some(f=>f.col && f.val!=='');
+  if(!r.ok) return !hasAnyFilter; // 실패 항목은 필터 없을 때만 보여줌
   for(const col in columnFilters){
     const val=String((r.row||{})[col]??'').trim();
     if(!columnFilters[col].has(val)) return false;
@@ -1024,7 +1142,82 @@ function passesFilters(r){
   if(radiusFilter){
     if(haversineKm(radiusFilter.lat,radiusFilter.lng,r.lat,r.lng) > radiusFilter.km) return false;
   }
+  if(!passesAdvancedFilters(r)) return false;
   return true;
+}
+
+// 컬럼+연산자(포함/일치/제외/크거나같음/작거나같음)+값 조합 필터 — 모든 조건을 동시에
+// 만족해야 통과한다(AND). 값이 비어있는 조건은 아직 입력 중인 것으로 보고 건너뛴다.
+function passesAdvancedFilters(r){
+  for(const cond of advancedFilters){
+    if(!cond.col || cond.val==='' || cond.val==null) continue;
+    const raw=(r.row||{})[cond.col];
+    const strVal=String(raw??'').trim();
+    switch(cond.op){
+      case '포함':
+        if(!strVal.toLowerCase().includes(String(cond.val).toLowerCase())) return false;
+        break;
+      case '일치':
+        if(strVal!==String(cond.val)) return false;
+        break;
+      case '제외':
+        if(strVal.toLowerCase().includes(String(cond.val).toLowerCase())) return false;
+        break;
+      case '크거나같음': {
+        const n=parseFloat(strVal.replace(/[^0-9.-]/g,''));
+        if(isNaN(n) || n < parseFloat(cond.val)) return false;
+        break;
+      }
+      case '작거나같음': {
+        const n=parseFloat(strVal.replace(/[^0-9.-]/g,''));
+        if(isNaN(n) || n > parseFloat(cond.val)) return false;
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+function toggleAdvancedFilterPanel(){
+  const el=document.getElementById('advFilterPanel');
+  const opening = el.style.display==='none' || !el.style.display;
+  el.style.display = opening ? 'block' : 'none';
+  if(opening && advancedFilters.length===0) addAdvFilterRow();
+}
+function renderAdvFilterRows(){
+  const wrap=document.getElementById('advFilterRows');
+  const ops=['포함','일치','제외','크거나같음','작거나같음'];
+  wrap.innerHTML = advancedFilters.length ? advancedFilters.map((f,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <select onchange="updateAdvFilter(${i},'col',this.value)" style="padding:5px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+        ${headers.map(h=>`<option value="${h}" ${f.col===h?'selected':''}>${h}</option>`).join('')}
+      </select>
+      <select onchange="updateAdvFilter(${i},'op',this.value)" style="padding:5px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+        ${ops.map(op=>`<option ${f.op===op?'selected':''}>${op}</option>`).join('')}
+      </select>
+      <input type="text" value="${(f.val??'').toString().replace(/"/g,'&quot;')}" oninput="updateAdvFilter(${i},'val',this.value)" placeholder="값" style="flex:1;padding:5px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+      <button class="btn sm ghost" onclick="removeAdvFilter(${i})">✕</button>
+    </div>
+  `).join('') : '<div style="color:var(--text3);font-size:11px">조건이 없습니다. "+ 조건 추가"를 눌러보세요.</div>';
+}
+function addAdvFilterRow(){
+  advancedFilters.push({col:headers[0]||'', op:'포함', val:''});
+  renderAdvFilterRows();
+}
+function updateAdvFilter(i,key,val){
+  advancedFilters[i][key]=val;
+  if(key!=='val') renderAdvFilterRows(); // 텍스트 입력 중엔 다시 그리지 않아야 커서가 안 튄다
+  renderSideList();
+}
+function removeAdvFilter(i){
+  advancedFilters.splice(i,1);
+  renderAdvFilterRows();
+  renderSideList();
+}
+function resetAdvFilters(){
+  advancedFilters=[];
+  renderAdvFilterRows();
+  renderSideList();
 }
 
 // ═══════════════════════════════════════════════
@@ -1479,6 +1672,7 @@ function focusPoi(i){
 //  초기화
 // ═══════════════════════════════════════════════
 loadTags();
+loadCustomMarkers();
 checkDraftOnLoad();
 setBizControlsLocked(true);
 </script>
