@@ -671,6 +671,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">고객지도</span>
             <span class="hub-btn-desc">주소 지도 마커 · 방문경로</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubMapCheck" data-hub-key="mapCheck">
+            <span class="hub-btn-icon">📍</span>
+            <span class="hub-btn-title">지도위치확인</span>
+            <span class="hub-btn-desc">설치주소 검색 · 업로드로 위치 확인</span>
+          </button>
         </div>
       </div>
     </div>
@@ -5825,6 +5830,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 고객지도(카카오맵)도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
     window.open('kakao-map.html', '_blank');
   });
+  document.getElementById('btnHubMapCheck').addEventListener('click', ()=>{
+    // 지도위치확인도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
+    window.open('map-check.html', '_blank');
+  });
   document.getElementById('btnHubSubscriptionDashboard').addEventListener('click', ()=>{
     // 청약현황대시보드도 CSV를 그 자리에서 업로드해 쓰는 자체 완결형 앱이라 새 탭으로 연다.
     window.open('subscription-dashboard.html', '_blank');
@@ -6011,7 +6020,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'bizCheck',          label:'사업자진위확인',         defaultCategory:'customer' },
     { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' },
     { key:'vocManagement',     label:'VOC관리',               defaultCategory:'customer' },
-    { key:'kakaoMap',          label:'고객지도',              defaultCategory:'customer' }
+    { key:'kakaoMap',          label:'고객지도',              defaultCategory:'customer' },
+    { key:'mapCheck',          label:'지도위치확인',           defaultCategory:'customer' }
   ];
   // 기본 3분류는 항상 존재(삭제 불가). "협력사"처럼 관리자가 더 추가한 분류는
   // hubCustomCategories(localStorage)에 저장되고, 필요하면 다시 삭제할 수도 있다.

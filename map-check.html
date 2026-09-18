@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>📍 지도위치확인</title>
+<style>
+:root{
+  --bg:#0b0d14;--surface:#141720;--surface2:#1c2030;--surface3:#242840;
+  --border:#2a3050;--accent:#4f8ef7;--accent2:#7c3aed;
+  --text:#e4e8f5;--text2:#7880a0;--text3:#40486a;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:13px}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.topbar{background:linear-gradient(90deg,#0d1220,#141a2e);border-bottom:1px solid var(--border);padding:0 14px;height:50px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:10}
+.logo{font-size:14px;font-weight:800;color:var(--accent);white-space:nowrap}
+
+.mode-tabs{display:flex;gap:6px;margin-left:8px}
+.mode-tab{padding:6px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;color:var(--text2);transition:all .15s}
+.mode-tab.active{background:rgba(79,142,247,.18);border-color:var(--accent);color:var(--accent);font-weight:700}
+
+.searchbar{margin-left:auto;display:flex;align-items:center;gap:6px}
+.searchbar input[type=text]{width:340px;padding:7px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:inherit}
+.searchbar input[type=text]:focus{outline:none;border-color:var(--accent)}
+.btn{padding:7px 14px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+
+.upload-row{margin-left:auto;display:flex;align-items:center;gap:8px}
+.file-badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text2);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+select{padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit;cursor:pointer}
+
+.prog-wrap{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 14px;display:none;flex-shrink:0}
+.prog-wrap.show{display:block}
+.prog-track{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));width:0%;transition:width .2s;border-radius:2px}
+.prog-row{display:flex;justify-content:space-between;font-size:11px;color:var(--text2)}
+
+.main{display:flex;flex:1;overflow:hidden;position:relative}
+#map{flex:1}
+.map-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px;pointer-events:none}
+
+.side{width:300px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.side-head{padding:9px 12px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;justify-content:space-between;align-items:center}
+.side-list{flex:1;overflow-y:auto}
+.res-item{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.res-item:hover{background:var(--surface2)}
+.res-item .ri-addr{font-size:12px;color:var(--text);margin-bottom:2px}
+.res-item .ri-sub{font-size:10.5px;color:var(--text2)}
+.res-item.fail .ri-addr{color:var(--red)}
+.res-empty{padding:24px 14px;text-align:center;color:var(--text3);font-size:12px;line-height:1.7}
+
+.single-card{position:absolute;top:12px;left:12px;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.6);display:none}
+.single-card.show{display:block}
+.single-card .sc-addr{font-size:13px;font-weight:700;margin-bottom:4px}
+.single-card .sc-coord{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}
+.single-card .sc-fail{color:var(--red);font-size:12px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">📍 지도위치확인</div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" id="tabSingle" onclick="switchMode('single')">개별 검색</button>
+    <button class="mode-tab" id="tabBatch" onclick="switchMode('batch')">파일 업로드</button>
+  </div>
+
+  <div class="searchbar" id="singleBar">
+    <input type="text" id="singleAddr" placeholder="설치주소 입력 (예: 경기 고양시 일산서구 덕이동 1551)" onkeydown="if(event.key==='Enter')runSingleSearch()">
+    <button class="btn" id="singleBtn" onclick="runSingleSearch()">검색</button>
+  </div>
+
+  <div class="upload-row" id="batchBar" style="display:none">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" hidden onchange="handleFile(this.files[0])">
+    <button class="btn ghost" onclick="document.getElementById('fileInput').click()">파일 선택</button>
+    <div class="file-badge" id="fileBadge">파일 없음</div>
+    <select id="addrColSelect" style="display:none"></select>
+    <button class="btn" id="batchBtn" onclick="runBatchSearch()" disabled>지도에서 확인</button>
+  </div>
+</div>
+
+<div class="prog-wrap" id="progWrap">
+  <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+  <div class="prog-row"><span id="progLabel">처리 중...</span><span id="progCount"></span></div>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="map-empty" id="mapEmpty">주소를 입력하거나 파일을 업로드하면 위치가 표시됩니다</div>
+  <div class="single-card" id="singleCard"></div>
+  <div class="side" id="sideBatch" style="display:none">
+    <div class="side-head"><span id="sideTitle">결과</span><button class="btn ghost" id="exportBtn" style="padding:3px 9px;font-size:10.5px;display:none" onclick="exportResults()">엑셀 내보내기</button></div>
+    <div class="side-list" id="sideList"><div class="res-empty">아직 조회 결과가 없습니다.</div></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const LS_KEY='geomapper_jskey', JS_KEY_DEFAULT='2320a9f89f1db0ed876709922947edfb';
+let map, geocoder, sdkLoaded=false;
+let markers=[];
+let rawRows=[], headers=[], batchResults=[];
+
+function loadKakaoSDK(){
+  return new Promise((res,rej)=>{
+    if(sdkLoaded){res();return;}
+    const key = localStorage.getItem(LS_KEY) || JS_KEY_DEFAULT;
+    const s=document.createElement('script');
+    s.src=`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&libraries=services&autoload=false`;
+    s.onload=()=>kakao.maps.load(()=>{sdkLoaded=true;res();});
+    s.onerror=()=>rej(new Error('카카오맵 SDK 로드 실패'));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureMap(){
+  await loadKakaoSDK();
+  if(!map){
+    map=new kakao.maps.Map(document.getElementById('map'),{center:new kakao.maps.LatLng(37.56,126.97),level:8});
+    map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
+    geocoder=new kakao.maps.services.Geocoder();
+  }
+  document.getElementById('mapEmpty').style.display='none';
+}
+
+function cleanAddr(a){
+  if(!a)return'';
+  a=String(a).trim().replace(/\s+/g,' ');
+  a=a.replace(/\s*(지하\s*\d+층|\d+층).*$/,'');
+  a=a.replace(/(번지)\s*[가-힣].*/,'$1');
+  a=a.replace(/\s+\d+호.*$/,'');
+  return a.trim();
+}
+
+function geocodeOne(addr){
+  return new Promise(resolve=>{
+    geocoder.addressSearch(addr,(result,status)=>{
+      if(status===kakao.maps.services.Status.OK&&result.length)
+        resolve({lat:parseFloat(result[0].y),lng:parseFloat(result[0].x),roadAddr:result[0].road_address?.address_name||'',jibunAddr:result[0].address?.address_name||''});
+      else resolve(null);
+    });
+  });
+}
+
+function clearMarkers(){markers.forEach(m=>m.setMap(null));markers=[];}
+
+function dropMarker(lat,lng,title){
+  const marker=new kakao.maps.Marker({position:new kakao.maps.LatLng(lat,lng),map});
+  if(title){
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">${title}</div>`});
+    kakao.maps.event.addListener(marker,'click',()=>iw.open(map,marker));
+  }
+  markers.push(marker);
+  return marker;
+}
+
+// ── 모드 전환 ──
+function switchMode(mode){
+  document.getElementById('tabSingle').classList.toggle('active',mode==='single');
+  document.getElementById('tabBatch').classList.toggle('active',mode==='batch');
+  document.getElementById('singleBar').style.display=mode==='single'?'flex':'none';
+  document.getElementById('batchBar').style.display=mode==='batch'?'flex':'none';
+  document.getElementById('sideBatch').style.display=mode==='batch'?'flex':'none';
+  document.getElementById('singleCard').classList.remove('show');
+}
+
+// ── 개별 검색 (네이버지도 검색처럼: 입력 → 검색 → 지도 이동) ──
+async function runSingleSearch(){
+  const raw=document.getElementById('singleAddr').value.trim();
+  if(!raw){return;}
+  const btn=document.getElementById('singleBtn');
+  btn.disabled=true; btn.textContent='검색 중...';
+  const card=document.getElementById('singleCard');
+  try{
+    await ensureMap();
+    clearMarkers();
+    const clean=cleanAddr(raw);
+    const r=await geocodeOne(clean) || await geocodeOne(raw);
+    if(r){
+      map.setCenter(new kakao.maps.LatLng(r.lat,r.lng));
+      map.setLevel(3);
+      dropMarker(r.lat,r.lng,r.roadAddr||r.jibunAddr||raw);
+      card.className='single-card show';
+      card.innerHTML=`<div class="sc-addr">✅ ${r.roadAddr||r.jibunAddr||raw}</div><div class="sc-coord">위도 ${r.lat.toFixed(6)} · 경도 ${r.lng.toFixed(6)}</div>`;
+    }else{
+      card.className='single-card show';
+      card.innerHTML=`<div class="sc-fail">❌ "${raw}" 위치를 찾을 수 없습니다. 주소를 다시 확인해주세요.</div>`;
+    }
+  }catch(e){
+    card.className='single-card show';
+    card.innerHTML=`<div class="sc-fail">⚠ ${e.message}</div>`;
+  }finally{
+    btn.disabled=false; btn.textContent='검색';
+  }
+}
+
+// ── 파일 업로드 (단체) ──
+function guessAddrCol(hdrs){
+  const exact=hdrs.find(h=>String(h).replace(/\s/g,'')==='설치주소');
+  if(exact)return exact;
+  const partial=hdrs.find(h=>String(h).includes('주소'));
+  return partial||hdrs[0]||'';
+}
+
+async function handleFile(file){
+  if(!file)return;
+  document.getElementById('fileBadge').textContent='분석 중...';
+  try{
+    let rows;
+    if(file.name.toLowerCase().endsWith('.csv')){
+      const text=await readText(file);
+      rows=parseCSV(text);
+    }else{
+      const b=await file.arrayBuffer();
+      const wb=XLSX.read(b,{type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+    }
+    if(!rows.length){document.getElementById('fileBadge').textContent='데이터 없음';return;}
+    rawRows=rows; headers=Object.keys(rows[0]);
+    document.getElementById('fileBadge').textContent=`📄 ${file.name} · ${rows.length.toLocaleString()}행`;
+    const sel=document.getElementById('addrColSelect');
+    sel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+    sel.value=guessAddrCol(headers);
+    sel.style.display='inline-block';
+    document.getElementById('batchBtn').disabled=false;
+  }catch(e){
+    document.getElementById('fileBadge').textContent='파일 오류: '+e.message;
+  }
+}
+
+function readText(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=e=>{let t=e.target.result;if(/[�]/.test(t)){const r2=new FileReader();r2.onload=e2=>res(e2.target.result);r2.onerror=rej;r2.readAsText(file,'euc-kr');}else res(t);};
+    r.onerror=rej;r.readAsText(file,'utf-8');
+  });
+}
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  const hdr=splitLine(lines[0]);
+  return lines.slice(1).map(l=>{const v=splitLine(l);const o={};hdr.forEach((h,i)=>{o[h]=(v[i]??'').trim();});return o;}).filter(r=>Object.values(r).some(v=>v));
+}
+function splitLine(line){const out=[];let cur='';let q=false;for(const c of line){if(c==='"'){q=!q;continue;}if(c===','&&!q){out.push(cur.trim());cur='';}else cur+=c;}out.push(cur.trim());return out;}
+
+async function runBatchSearch(){
+  const addrCol=document.getElementById('addrColSelect').value;
+  if(!addrCol)return;
+  const btn=document.getElementById('batchBtn');
+  btn.disabled=true;
+  const pw=document.getElementById('progWrap'); pw.classList.add('show');
+  try{
+    await ensureMap();
+    clearMarkers();
+    batchResults=[];
+
+    const targets=[];
+    const seen=new Set();
+    rawRows.forEach(row=>{
+      const raw=String(row[addrCol]||'').trim();
+      if(!raw||seen.has(raw))return;
+      seen.add(raw);
+      targets.push({raw, clean:cleanAddr(raw), row});
+    });
+
+    const total=targets.length;
+    for(let i=0;i<total;i++){
+      const t=targets[i];
+      document.getElementById('progLabel').textContent='주소 확인 중: '+t.raw;
+      document.getElementById('progCount').textContent=`${i+1}/${total}`;
+      document.getElementById('progFill').style.width=((i+1)/total*100)+'%';
+      const r=await geocodeOne(t.clean) || await geocodeOne(t.raw);
+      if(r){
+        dropMarker(r.lat,r.lng,r.roadAddr||r.jibunAddr||t.raw);
+        batchResults.push({addr:t.raw, lat:r.lat, lng:r.lng, matched:r.roadAddr||r.jibunAddr, ok:true});
+      }else{
+        batchResults.push({addr:t.raw, lat:'', lng:'', matched:'', ok:false});
+      }
+    }
+
+    if(markers.length){
+      const bounds=new kakao.maps.LatLngBounds();
+      markers.forEach(m=>bounds.extend(m.getPosition()));
+      map.setBounds(bounds);
+    }
+    renderSideList();
+  }catch(e){
+    alert('처리 중 오류: '+e.message);
+  }finally{
+    btn.disabled=false;
+    pw.classList.remove('show');
+  }
+}
+
+function renderSideList(){
+  const okCount=batchResults.filter(r=>r.ok).length;
+  document.getElementById('sideTitle').textContent=`결과 ${okCount}/${batchResults.length}건 확인됨`;
+  document.getElementById('exportBtn').style.display=batchResults.length?'block':'none';
+  const list=document.getElementById('sideList');
+  if(!batchResults.length){list.innerHTML='<div class="res-empty">아직 조회 결과가 없습니다.</div>';return;}
+  list.innerHTML=batchResults.map((r,i)=>`
+    <div class="res-item ${r.ok?'':'fail'}" onclick="focusResult(${i})">
+      <div class="ri-addr">${r.ok?'📍':'❌'} ${r.addr}</div>
+      <div class="ri-sub">${r.ok?(r.matched||'위치 확인됨'):'위치를 찾을 수 없음'}</div>
+    </div>
+  `).join('');
+}
+
+function focusResult(i){
+  const r=batchResults[i];
+  if(!r.ok)return;
+  map.setCenter(new kakao.maps.LatLng(r.lat,r.lng));
+  map.setLevel(3);
+}
+
+function exportResults(){
+  const rows=batchResults.map(r=>({설치주소:r.addr, 확인결과:r.ok?'확인됨':'위치 찾을 수 없음', 매칭주소:r.matched, 위도:r.lat, 경도:r.lng}));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'지도위치확인');
+  const dateStr=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,`지도위치확인_${dateStr}.xlsx`);
+}
+</script>
+</body>
+</html>
