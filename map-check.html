@@ -427,6 +427,13 @@ input[type=number]{width:70px;cursor:text}
         <h4>업로드된 원본 데이터</h4>
         <div class="kv-table" id="detailKvTable"></div>
       </div>
+      <div class="modal-section" id="detailAddrSection" style="display:none">
+        <h4>확인된 주소</h4>
+        <div class="kv-table">
+          <div class="kv-row"><span class="k">도로명주소</span><span class="v" id="detailRoadAddr"></span></div>
+          <div class="kv-row" id="detailJibunRow" style="display:none"><span class="k">지번(구주소)</span><span class="v" id="detailJibunAddr"></span></div>
+        </div>
+      </div>
       <div class="modal-section">
         <h4>좌표</h4>
         <div class="kv-row"><span class="k">위도/경도</span><span class="v" id="detailCoord"></span></div>
@@ -691,6 +698,14 @@ function placeSearchOne(keyword){
   });
 }
 
+// 도로명주소(신주소)만 보여주면, 아직 지번(구주소) 기준으로 위치를 확인하는
+// 사용자는 매칭이 맞는지 헷갈릴 수 있다 — 둘 다 있으면 같이 보여준다.
+function addrPairLabel(roadAddr, jibunAddr){
+  roadAddr=(roadAddr||'').trim(); jibunAddr=(jibunAddr||'').trim();
+  if(roadAddr && jibunAddr && roadAddr!==jibunAddr) return `${roadAddr} (지번: ${jibunAddr})`;
+  return roadAddr || jibunAddr || '';
+}
+
 function haversineKm(lat1,lng1,lat2,lng2){
   const R=6371, toRad=d=>d*Math.PI/180;
   const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
@@ -717,7 +732,7 @@ function dropMarker(lat,lng,title){
 function dropMarkerClustered(lat,lng,title,addr){
   const marker=new kakao.maps.Marker({position:new kakao.maps.LatLng(lat,lng)});
   if(title){
-    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">${title}</div>`});
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:normal;max-width:240px">${title}</div>`});
     kakao.maps.event.addListener(marker,'click',()=>{iw.open(map,marker); if(addr) openDetailByAddr(addr);});
   }
   markers.push(marker);
@@ -1201,12 +1216,14 @@ function renderSingleCard(r, addrKey){
   const card=document.getElementById('singleCard');
   const tags=getTags(addrKey);
   const addrLine=r.roadAddr||r.jibunAddr||'';
+  const jibunLine = r.jibunAddr && r.jibunAddr!==addrLine ? r.jibunAddr : '';
   const copyTarget=(addrLine||addrKey).replace(/'/g,"\\'");
   const outsideLock = isOutsideRegionLock(r);
   card.className='single-card show';
   card.innerHTML=`
     <div class="sc-addr">✅ ${r.placeName ? `🏪 ${r.placeName}` : addrLine} <button class="copy-btn" onclick="copyText('${copyTarget}')">복사</button></div>
     ${r.placeName && addrLine ? `<div class="sc-coord">${addrLine}</div>` : ''}
+    ${jibunLine ? `<div class="sc-coord">지번(구주소): ${jibunLine}</div>` : ''}
     <div class="sc-coord">위도 ${r.lat.toFixed(6)} · 경도 ${r.lng.toFixed(6)}</div>
     ${outsideLock ? `<div class="sc-fail" style="margin-top:4px">⚠ 관리자 지정 지역(${regionLockLabel()}) 밖입니다</div>` : ''}
     <div class="sc-tags">${tags.map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>
@@ -1315,11 +1332,13 @@ async function runBatchSearch(){
       const r=await geocodeOne(t.clean) || await geocodeOne(t.raw);
       if(r){
         const matched=r.roadAddr||r.jibunAddr||t.raw;
-        dropMarkerClustered(r.lat,r.lng,matched,t.raw);
+        dropMarkerClustered(r.lat,r.lng,addrPairLabel(r.roadAddr,r.jibunAddr)||matched,t.raw);
         batchResults.push({addr:t.raw, lat:r.lat, lng:r.lng, matched, ok:true, row:t.row,
+          roadAddr:r.roadAddr||'', jibunAddr:r.jibunAddr||'',
           region1:r.region1||'', region2:r.region2||'', region3:r.region3||''});
       }else{
         batchResults.push({addr:t.raw, lat:'', lng:'', matched:'', ok:false, row:t.row,
+          roadAddr:'', jibunAddr:'',
           region1:'', region2:'', region3:''});
       }
     }
@@ -2351,7 +2370,7 @@ function redrawBatchMarkers(){
       position:new kakao.maps.LatLng(r.lat,r.lng),
       image: colorByCol ? coloredMarkerImage(colorForValue(colorByCol, String((r.row||{})[colorByCol]??'').trim())) : undefined
     });
-    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:nowrap">${r.matched||r.addr}</div>`});
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:6px 10px;font-size:11px;white-space:normal;max-width:240px">${addrPairLabel(r.roadAddr,r.jibunAddr)||r.matched||r.addr}</div>`});
     kakao.maps.event.addListener(marker,'click',()=>{iw.open(map,marker); openDetailByAddr(r.addr);});
     markers.push(marker);
     if(clusterer) clusterer.addMarker(marker); else marker.setMap(map);
@@ -2571,10 +2590,12 @@ function renderSideList(){
       const idx=batchResults.indexOf(r);
       const tags=getTags(r.addr);
       const name = nameCol ? String((r.row||{})[nameCol]??'').trim() : '';
+      const jibunLine = r.ok && r.jibunAddr && r.jibunAddr!==r.matched ? `<div class="ri-sub">지번(구주소): ${r.jibunAddr}</div>` : '';
       return `
       <div class="res-item ${r.ok?'':'fail'}" onclick="focusResult(${idx})">
         <div class="ri-addr">${r.ok?'📍':'❌'} ${name ? name+' · ' : ''}${r.addr}</div>
         <div class="ri-sub">${r.ok?(r.matched||'위치 확인됨'):'위치를 찾을 수 없음'}</div>
+        ${jibunLine}
         ${tags.length?`<div class="ri-tags">${tags.map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>`:''}
       </div>`;
     }).join('');
@@ -2598,7 +2619,7 @@ function focusResult(i){
 }
 
 function exportBatchResults(){
-  const rows=batchResults.map(r=>({설치주소:r.addr, 확인결과:r.ok?'확인됨':'위치 찾을 수 없음', 매칭주소:r.matched, 위도:r.lat, 경도:r.lng, 태그:getTags(r.addr).join(', ')}));
+  const rows=batchResults.map(r=>({설치주소:r.addr, 확인결과:r.ok?'확인됨':'위치 찾을 수 없음', 도로명주소:r.roadAddr||r.matched||'', '지번(구주소)':r.jibunAddr||'', 위도:r.lat, 경도:r.lng, 태그:getTags(r.addr).join(', ')}));
   const ws=XLSX.utils.json_to_sheet(rows);
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'지도위치확인');
@@ -2658,8 +2679,8 @@ function exportPdfReport(){
     title='지도위치확인 결과';
     condLines=buildConditionSummary();
     const filtered=batchResults.filter(passesFilters);
-    cols=['주소','확인결과','매칭주소','태그'];
-    rows=filtered.map(r=>({'주소':r.addr, '확인결과':r.ok?'확인됨':'위치 찾을 수 없음', '매칭주소':r.matched||'', '태그':getTags(r.addr).join(', ')}));
+    cols=['주소','확인결과','도로명주소','지번(구주소)','태그'];
+    rows=filtered.map(r=>({'주소':r.addr, '확인결과':r.ok?'확인됨':'위치 찾을 수 없음', '도로명주소':r.roadAddr||r.matched||'', '지번(구주소)':r.jibunAddr||'', '태그':getTags(r.addr).join(', ')}));
   }
   if(!rows.length){ alert('내보낼 결과가 없습니다.'); return; }
   openPrintReport(title, condLines, cols, rows);
@@ -2709,6 +2730,20 @@ function openDetailByAddr(addr){
     kv.innerHTML=Object.entries(r.row).map(([k,v])=>`<div class="kv-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
   }else{
     origSection.style.display='none';
+  }
+  const addrSection=document.getElementById('detailAddrSection');
+  if(r && (r.roadAddr || r.jibunAddr)){
+    addrSection.style.display='block';
+    document.getElementById('detailRoadAddr').textContent = r.roadAddr || r.matched || '(도로명주소 없음)';
+    const jibunRow=document.getElementById('detailJibunRow');
+    if(r.jibunAddr && r.jibunAddr!==r.roadAddr){
+      jibunRow.style.display='flex';
+      document.getElementById('detailJibunAddr').textContent=r.jibunAddr;
+    }else{
+      jibunRow.style.display='none';
+    }
+  }else{
+    addrSection.style.display='none';
   }
   document.getElementById('detailCoord').textContent = r && r.lat ? `${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}` : '확인 안 됨';
   renderDetailTags();
