@@ -33,6 +33,10 @@ button{font-family:inherit}
 .mode-tab.active{background:rgba(79,142,247,.18);border-color:var(--accent);color:var(--accent);font-weight:700}
 
 .searchbar{margin-left:auto;display:flex;align-items:center;gap:6px}
+/* 관리구역 조건 바는 요소가 많아 한 줄에 다 안 들어가면 라벨 글자가 한 글자씩
+   세로로 쪼개지며 헤더 전체 높이가 터지는 문제가 있었다 — 항상 줄바꿈되게 한다. */
+#mgmtCondBar,#mgmtContractBar{flex-wrap:wrap;row-gap:6px}
+#mgmtCondBar label,#mgmtContractBar label,#mgmtCondBar span,#mgmtContractBar span{white-space:nowrap;flex-shrink:0}
 .searchbar input[type=text]{width:320px;padding:7px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:inherit}
 .searchbar input[type=text]:focus{outline:none;border-color:var(--accent)}
 .btn{padding:7px 14px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:opacity .15s}
@@ -57,6 +61,8 @@ input[type=number]{width:70px;cursor:text}
 .cat-chip:hover{border-color:var(--orange);color:var(--orange)}
 
 .map-btns{position:absolute;top:10px;left:10px;z-index:100;display:flex;flex-direction:column;gap:6px}
+.map-btns-toggle{width:34px;padding:7px 0!important;text-align:center;flex-shrink:0}
+.map-btns.collapsed>.btn-mapaction:not(.map-btns-toggle){display:none}
 .marker-cat-filter{position:absolute;left:10px;bottom:10px;z-index:100;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 20px)}
 .marker-cat-chip{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:10.5px;color:var(--text2);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55}
 .marker-cat-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--chip-color)}
@@ -80,6 +86,10 @@ input[type=number]{width:70px;cursor:text}
 #mgmtDashboardTable th,#mgmtDashboardTable td{border:1px solid var(--border);padding:6px 8px;text-align:left}
 #mgmtDashboardTable th{background:var(--surface2);color:var(--text2);font-weight:600}
 #mgmtDashboardTable td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mgmt-cond-arrow{color:var(--text3);font-size:14px;align-self:center}
+.mgmt-alias-item{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px}
+.mgmt-alias-item .arrow{color:var(--text3)}
+.mgmt-alias-item .x{margin-left:auto;color:var(--red);cursor:pointer;font-size:14px}
 .btn-mapaction{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:all .15s}
 .btn-mapaction:hover{border-color:var(--accent);color:var(--accent)}
 .btn-mapaction.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.1)}
@@ -314,6 +324,34 @@ input[type=number]{width:70px;cursor:text}
 
 <div class="cat-chips" id="mgmtZoneChipsBar" style="display:none"></div>
 
+<div class="filter-bar" id="mgmtCondBar" style="display:none">
+  <select id="mgmtCondCol1" onchange="onMgmtConditionColChange(1)"></select>
+  <select id="mgmtCondVal1" onchange="applyMgmtCondition()"><option value="">전체</option></select>
+  <span class="mgmt-cond-arrow">›</span>
+  <select id="mgmtCondCol2" onchange="onMgmtConditionColChange(2)"></select>
+  <select id="mgmtCondVal2" onchange="applyMgmtCondition()"><option value="">전체</option></select>
+  <span class="mgmt-cond-arrow">›</span>
+  <select id="mgmtCondCol3" onchange="onMgmtConditionColChange(3)"></select>
+  <select id="mgmtCondVal3" onchange="applyMgmtCondition()"><option value="">전체</option></select>
+  <button class="btn ghost sm" onclick="clearMgmtCondition()">조건 초기화</button>
+  <button class="btn ghost sm" onclick="openMgmtAliasModal()">🔤 명칭 치환</button>
+</div>
+<div class="filter-bar" id="mgmtContractBar" style="display:none">
+  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)">
+    <input type="checkbox" id="mgmtContractToggle" onchange="applyMgmtCondition()"> 계약 유효기간 조건
+  </label>
+  <select id="mgmtContractStartCol"><option value="">시작일 컬럼</option></select>
+  <span style="font-size:11px;color:var(--text2)">~</span>
+  <select id="mgmtContractEndCol"><option value="">종료일 컬럼</option></select>
+  <span style="font-size:11px;color:var(--text2)">기준일</span>
+  <input type="date" id="mgmtContractAsOf" onchange="applyMgmtCondition()">
+  <span id="mgmtCondResultText" style="font-size:11px;color:var(--text2);margin-left:auto"></span>
+  <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)">
+    <input type="checkbox" id="mgmtShareLockChk"> 조건 고정(잠금)
+  </label>
+  <button class="btn ghost sm" onclick="copyMgmtConditionLink()">🔗 공유 링크 만들기</button>
+</div>
+
 <div class="cat-chips" id="catChips" style="display:none">
   <span class="cat-chip" onclick="quickPlacesSearch('맛집')">🍽 맛집</span>
   <span class="cat-chip" onclick="quickPlacesSearch('카페')">☕ 카페</span>
@@ -399,7 +437,8 @@ input[type=number]{width:70px;cursor:text}
   <div class="map-wrap">
     <div id="map"></div>
     <div class="map-empty" id="mapEmpty">주소를 입력하거나 파일을 업로드하면 위치가 표시됩니다</div>
-    <div class="map-btns">
+    <div class="map-btns" id="mapBtns">
+      <button type="button" class="btn-mapaction map-btns-toggle" id="mapBtnsToggle" onclick="toggleMapBtnsCollapsed()" title="버튼 접기/펼치기">☰</button>
       <button type="button" class="btn-mapaction" onclick="goToMyLocation()">📍 내 위치</button>
       <button type="button" class="btn-mapaction" id="reverseGeoBtn" onclick="toggleReverseGeocode()">🖱 지도클릭 주소확인</button>
       <button type="button" class="btn-mapaction" id="rulerBtn" onclick="toggleRuler()">📏 거리재기</button>
@@ -502,6 +541,25 @@ input[type=number]{width:70px;cursor:text}
   </div>
 </div>
 
+<!-- 관리구역 명칭 치환 설정 모달 -->
+<div class="modal-overlay" id="mgmtAliasModal">
+  <div class="modal" style="width:440px">
+    <div class="modal-head"><h3>🔤 명칭 치환 설정</h3><button class="modal-close" onclick="closeMgmtAliasModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px">
+        조직 개편 등으로 이름이 바뀐 경우, 예전 값을 새 이름으로 바꿔서 보여줍니다.<br>
+        예: "서부본부" → "강남/서부본부". 팀 전체에 공유됩니다.
+      </div>
+      <div id="mgmtAliasList"></div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input type="text" id="mgmtAliasFrom" placeholder="찾을 값 (예: 서부본부)" style="flex:1">
+        <input type="text" id="mgmtAliasTo" placeholder="바꿀 값 (예: 강남/서부본부)" style="flex:1">
+        <button class="btn sm" onclick="addMgmtAlias()">추가</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 등록된 마커 목록 모달(빠른 조회 + 사진 포함 엑셀 다운로드) -->
 <div class="modal-overlay" id="markerListModal">
   <div class="modal" style="width:520px">
@@ -590,6 +648,11 @@ let districtConditions=[]; // [{id,label,type:'polygon'|'marker',color,features?
 let mgmtGroupCol=''; // 관리본부/관리지사/영업구역/기술구역/출동구역 등 — 관리구역 색상 구분 기준 컬럼
 let mgmtRevenueCol=''; // 구역별 합계로 표시할 숫자 컬럼(선택, 매출 등)
 let mgmtZones=[]; // [{name,color,sigunguSet:Set('시도|시군구'),rows,count,revenueSum,mapObjs:[],overlay,visible}]
+let mgmtAliases=[]; // [{from,to}] — 관리구역 값 명칭 치환(조직개편 등으로 바뀐 이름 대응), 팀 공유
+let mgmtViewerMode=false; // URL에 ?mode=viewer가 있으면 true — 업로드/관리자 등 편집 기능을 숨기고 조건 조회만 허용
+let mgmtViewerLocked=false; // ?lock=1 — 조건 선택 자체를 못 바꾸게(그 담당구역만 보이게) 고정
+let contractDateFilter=null; // {startCol, endCol, asOf} — 계약 유효기간 조건(관리구역 다중조건 조회)
+let mgmtCondActiveCols=[]; // applyMgmtCondition()이 columnFilters에 심어둔 컬럼들(다음 적용 때 지워야 함)
 let districtFilterActive=false;
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
@@ -753,6 +816,16 @@ function addrPairLabel(roadAddr, jibunAddr){
   return roadAddr || jibunAddr || '';
 }
 
+// 엑셀/CSV에는 "2026-03-01", "2026.3.1", "2026/03/01" 등 구분자가 제각각인 날짜가
+// 섞여 들어오는 경우가 흔해서, 구분자를 통일해 Date로 파싱한다.
+function parseKoreanDate(v){
+  if(!v) return null;
+  const s=String(v).trim().replace(/[./]/g,'-').replace(/-+$/,'');
+  if(!s) return null;
+  const d=new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function haversineKm(lat1,lng1,lat2,lng2){
   const R=6371, toRad=d=>d*Math.PI/180;
   const dLat=toRad(lat2-lat1), dLng=toRad(lng2-lng1);
@@ -803,6 +876,8 @@ function switchMode(mode){
   document.getElementById('bizBar').style.display=mode==='biz'?'flex':'none';
   document.getElementById('districtBar').style.display=mode==='district'?'flex':'none';
   document.getElementById('mgmtBar').style.display=mode==='mgmt'?'flex':'none';
+  document.getElementById('mgmtCondBar').style.display=mode==='mgmt'?'flex':'none';
+  document.getElementById('mgmtContractBar').style.display=mode==='mgmt'?'flex':'none';
   document.getElementById('analyticsBar').style.display=mode==='analytics'?'flex':'none';
   document.getElementById('patrolBar').style.display=mode==='patrol'?'flex':'none';
   document.querySelector('.map-wrap').style.display = mode==='analytics' ? 'none' : '';
@@ -826,11 +901,21 @@ function switchMode(mode){
   else if(mode==='mgmt'){
     ensureMap(); loadDongBoundaries();
     buildMgmtColumnOptions();
+    buildMgmtConditionOptions();
+    loadMgmtAliases().then(()=>{ refreshMgmtConditionValueOptions(); });
     renderMgmtSideList();
     renderMgmtShareStatus();
     // 이 브라우저에서 아직 아무것도 계산해두지 않았다면, 팀이 공유해둔 관리구역이
     // 있는지 조용히 확인해서 있으면 바로 보여준다(없으면 조용히 넘어감).
-    if(!mgmtZones.length) loadSharedMgmtZones(true);
+    const needsSharedLoad = !mgmtZones.length || mgmtViewerMode;
+    if(needsSharedLoad){
+      loadSharedMgmtZones(true).then(()=>{
+        buildMgmtConditionOptions();
+        applyPendingViewerCondition();
+      });
+    }else{
+      applyPendingViewerCondition();
+    }
   }
   else if(mode==='analytics'){
     buildAnalyticsColumnOptions();
@@ -890,6 +975,26 @@ function getCurrentPosition(){
     );
   });
 }
+
+// 지도 좌상단 버튼 묶음이 화면(특히 모바일)을 많이 가릴 수 있어, 접어서 아이콘
+// 하나로 줄일 수 있게 한다. 마지막 상태는 다음에 열 때도 그대로 유지된다.
+const MAP_BTNS_COLLAPSED_KEY='mapcheck_btns_collapsed_v1';
+function toggleMapBtnsCollapsed(){
+  const el=document.getElementById('mapBtns');
+  const collapsed=el.classList.toggle('collapsed');
+  document.getElementById('mapBtnsToggle').textContent = collapsed ? '☰' : '✕';
+  try{ localStorage.setItem(MAP_BTNS_COLLAPSED_KEY, collapsed ? '1' : '0'); }catch{}
+}
+(function initMapBtnsCollapsed(){
+  try{
+    if(localStorage.getItem(MAP_BTNS_COLLAPSED_KEY)==='1'){
+      document.getElementById('mapBtns').classList.add('collapsed');
+      document.getElementById('mapBtnsToggle').textContent='☰';
+    }else{
+      document.getElementById('mapBtnsToggle').textContent='✕';
+    }
+  }catch{}
+})();
 
 let myLocMarker=null, myLocAccuracyCircle=null;
 async function goToMyLocation(){
@@ -1907,8 +2012,14 @@ function passesFilters(r){
   const regionFilterActive = !!(regionFilter.region1 || regionFilter.region2 || regionFilter.region3);
   const hasAnyFilter = Object.keys(columnFilters).length>0 || activeTagFilters.size>0 || !!radiusFilter
     || advancedFilters.some(f=>f.col && f.val!=='') || !!quickSearchText || regionFilterActive || lockActive
-    || districtFilterActive;
+    || districtFilterActive || !!contractDateFilter;
   if(!r.ok) return !hasAnyFilter; // 실패 항목은 필터 없을 때만 보여줌
+  if(contractDateFilter){
+    const asOf=parseKoreanDate(contractDateFilter.asOf);
+    const start=parseKoreanDate((r.row||{})[contractDateFilter.startCol]);
+    const end=parseKoreanDate((r.row||{})[contractDateFilter.endCol]);
+    if(!asOf || !start || !end || !(start<=asOf && asOf<=end)) return false;
+  }
   // 관리자 지역 잠금이 가장 먼저 — 다른 필터와 무관하게 항상 적용되는 강제 제한이다.
   if(lockActive){
     if(regionLock.region1 && r.region1!==regionLock.region1) return false;
@@ -2334,11 +2445,31 @@ function clearMgmtZones(){
 // 않는다(원본 행이 없어서 그룹 평균 대비 개별 값을 다시 계산할 수 없음).
 const MGMT_SHARE_AUTHOR_KEY='mapcheck_mgmt_share_author_v1';
 
+// 다중조건 조회(관리본부›관리지사›영업구역, 계약일)가 공유 링크에서도 동작하려면
+// 주소별 원본 데이터가 조금은 같이 공유되어야 한다 — 다만 업로드 파일의 모든 컬럼을
+// 그대로 넘기지 않고, 지금 조건 조회에 실제로 쓰이는 컬럼(그룹 기준·1~3단계·계약일·
+// 매출)만 추려서 담는다. 전화번호 등 무관한 개인정보 컬럼은 공유 데이터에 들어가지 않는다.
+function collectMgmtRelevantColumns(){
+  const cols=new Set();
+  [mgmtGroupCol, mgmtRevenueCol,
+   document.getElementById('mgmtCondCol1').value, document.getElementById('mgmtCondCol2').value, document.getElementById('mgmtCondCol3').value,
+   document.getElementById('mgmtContractStartCol').value, document.getElementById('mgmtContractEndCol').value
+  ].forEach(c=>{ if(c) cols.add(c); });
+  return [...cols];
+}
+
 async function shareMgmtZones(){
   if(!mgmtZones.length){ alert('먼저 그룹 기준 컬럼을 골라 "적용"을 눌러주세요.'); return; }
   const savedAuthor=localStorage.getItem(MGMT_SHARE_AUTHOR_KEY)||'';
   const author=(prompt('공유자 이름(선택, 팀원들에게 "누가 언제 공유"로 표시됩니다)', savedAuthor)||'').trim();
   if(author) localStorage.setItem(MGMT_SHARE_AUTHOR_KEY, author);
+  const relevantCols=collectMgmtRelevantColumns();
+  const rows=batchResults.filter(r=>r.ok).map(r=>{
+    const row={};
+    relevantCols.forEach(c=>{ row[c]=(r.row||{})[c]??''; });
+    return {addr:r.addr, lat:r.lat, lng:r.lng, matched:r.matched, roadAddr:r.roadAddr||'', jibunAddr:r.jibunAddr||'',
+      region1:r.region1||'', region2:r.region2||'', region3:r.region3||'', row};
+  });
   const payload={
     id:'current',
     group_col: mgmtGroupCol,
@@ -2347,6 +2478,8 @@ async function shareMgmtZones(){
       name:z.name, color:z.color, count:z.count, revenueSum:z.revenueSum,
       sigungu:[...z.sigunguSet].map(k=>k.split('|'))
     })),
+    aliases: mgmtAliases,
+    rows,
     updated_by: author,
     updated_at: new Date().toISOString()
   };
@@ -2355,7 +2488,7 @@ async function shareMgmtZones(){
     if(error) throw error;
     window.__mgmtSharedMeta={updatedBy:author, updatedAt:payload.updated_at};
     renderMgmtShareStatus();
-    alert('팀과 공유했습니다. 이 링크를 여는 누구나 "관리구역" 탭에서 바로 볼 수 있습니다.');
+    alert(`팀과 공유했습니다(주소 ${rows.length}건, 컬럼: ${relevantCols.join(', ')||'없음'}). 이 링크를 여는 누구나 "관리구역" 탭에서 바로 볼 수 있고, 조건 조회 버튼도 그대로 씁니다.`);
   }catch(e){ alert('공유 저장에 실패했습니다: '+e.message); }
 }
 
@@ -2371,12 +2504,20 @@ async function loadSharedMgmtZones(silent){
     }
     mgmtGroupCol=data.group_col||'';
     mgmtRevenueCol=data.revenue_col||'';
+    if(data.aliases) mgmtAliases=data.aliases;
     mgmtZones=data.zones.map((z,i)=>({
       name:z.name, color:z.color||DISTRICT_COLORS[i%DISTRICT_COLORS.length],
       sigunguSet:new Set((z.sigungu||[]).map(pair=>pair.join('|'))),
       count:z.count||0, revenueSum:z.revenueSum||0,
       visible:true, rows:[], mapObjs:[], overlay:null
     }));
+    // 공유된 주소별 데이터(다중조건 조회용)가 있으면 이 브라우저의 조회 결과를
+    // 그걸로 교체한다 — 파일을 업로드하지 않은 팀원도 조건 버튼으로 바로 조회 가능.
+    if(data.rows && data.rows.length){
+      batchResults=data.rows.map(r=>({...r, ok:true}));
+      headers=Object.keys(data.rows[0].row||{});
+      buildMgmtConditionOptions();
+    }
     window.__mgmtSharedMeta={updatedBy:data.updated_by||'', updatedAt:data.updated_at||''};
     await ensureMap();
     await loadDongBoundaries();
@@ -2402,6 +2543,223 @@ function renderMgmtShareStatus(){
   }else{
     el.textContent='';
   }
+}
+
+// 아직 관리구역을 한 번도 공유하지 않은 팀이라도 명칭 치환 규칙만 먼저 설정해둘 수
+// 있어야 하므로, 구역 공유 여부와 무관하게 별도로 가볍게 불러온다.
+async function loadMgmtAliases(){
+  try{
+    const {data,error}=await sbClient.from('map_check_mgmt_zones').select('aliases').eq('id','current').maybeSingle();
+    if(!error && data && data.aliases) mgmtAliases=data.aliases;
+  }catch(e){ console.warn('명칭 치환 규칙을 불러오지 못했습니다:', e.message); }
+}
+async function saveMgmtAliases(){
+  try{
+    const {error}=await sbClient.from('map_check_mgmt_zones').upsert({id:'current', aliases:mgmtAliases});
+    if(error) throw error;
+  }catch(e){ console.warn('명칭 치환 규칙 저장에 실패했습니다:', e.message); }
+}
+function openMgmtAliasModal(){ renderMgmtAliasList(); document.getElementById('mgmtAliasModal').classList.add('show'); }
+function closeMgmtAliasModal(){ document.getElementById('mgmtAliasModal').classList.remove('show'); }
+function renderMgmtAliasList(){
+  const list=document.getElementById('mgmtAliasList');
+  if(!mgmtAliases.length){ list.innerHTML='<div class="res-empty">등록된 치환 규칙이 없습니다.</div>'; return; }
+  list.innerHTML=mgmtAliases.map((a,i)=>`
+    <div class="mgmt-alias-item">${escHtml(a.from)}<span class="arrow">→</span>${escHtml(a.to)}<span class="x" onclick="removeMgmtAlias(${i})">✕</span></div>
+  `).join('');
+}
+async function addMgmtAlias(){
+  const from=(document.getElementById('mgmtAliasFrom').value||'').trim();
+  const to=(document.getElementById('mgmtAliasTo').value||'').trim();
+  if(!from || !to){ alert('찾을 값과 바꿀 값을 모두 입력해주세요.'); return; }
+  mgmtAliases=mgmtAliases.filter(a=>a.from!==from);
+  mgmtAliases.push({from,to});
+  document.getElementById('mgmtAliasFrom').value='';
+  document.getElementById('mgmtAliasTo').value='';
+  renderMgmtAliasList();
+  await saveMgmtAliases();
+  refreshMgmtConditionValueOptions();
+  applyMgmtCondition();
+}
+async function removeMgmtAlias(i){
+  mgmtAliases.splice(i,1);
+  renderMgmtAliasList();
+  await saveMgmtAliases();
+  refreshMgmtConditionValueOptions();
+  applyMgmtCondition();
+}
+function resolveAlias(val){
+  const a=mgmtAliases.find(x=>x.from===val);
+  return a ? a.to : val;
+}
+function rawValuesForAliasedTarget(col, targetVal){
+  const set=new Set();
+  batchResults.filter(r=>r.ok).forEach(r=>{
+    const raw=String((r.row||{})[col]??'').trim();
+    if(raw && resolveAlias(raw)===targetVal) set.add(raw);
+  });
+  return [...set];
+}
+
+// ── 관리구역 다중조건 조회(관리본부›관리지사›영업구역 단계적 선택 + 계약일 조건) ──
+// 목록/지도 마커는 이미 있는 passesFilters()/columnFilters 필터 체계에 그대로
+// 얹어서, 조건을 바꾸면 목록·지도·PDF/엑셀 내보내기가 전부 같은 결과를 보게 한다.
+function buildMgmtConditionOptions(){
+  if(!headers.length) return;
+  const sel1=document.getElementById('mgmtCondCol1'), sel2=document.getElementById('mgmtCondCol2'), sel3=document.getElementById('mgmtCondCol3');
+  const opts='<option value="">사용 안 함</option>'+headers.map(h=>`<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+  [sel1,sel2,sel3].forEach(s=>{ const prev=s.value; s.innerHTML=opts; if(prev && headers.includes(prev)) s.value=prev; });
+  if(!sel1.value) sel1.value = headers.find(h=>String(h).trim()==='관리본부') || '';
+  if(!sel2.value) sel2.value = headers.find(h=>String(h).trim()==='관리지사') || '';
+  if(!sel3.value) sel3.value = headers.find(h=>String(h).trim()==='영업구역') || '';
+
+  const startSel=document.getElementById('mgmtContractStartCol'), endSel=document.getElementById('mgmtContractEndCol');
+  const dateOpts='<option value="">컬럼 선택</option>'+headers.map(h=>`<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+  const prevStart=startSel.value, prevEnd=endSel.value;
+  startSel.innerHTML=dateOpts; endSel.innerHTML=dateOpts;
+  startSel.value = prevStart && headers.includes(prevStart) ? prevStart : (headers.find(h=>/시작일/.test(String(h))) || '');
+  endSel.value = prevEnd && headers.includes(prevEnd) ? prevEnd : (headers.find(h=>/종료일/.test(String(h))) || '');
+  if(!document.getElementById('mgmtContractAsOf').value) document.getElementById('mgmtContractAsOf').value=new Date().toISOString().slice(0,10);
+
+  refreshMgmtConditionValueOptions();
+}
+
+function refreshMgmtConditionValueOptions(){
+  const col1=document.getElementById('mgmtCondCol1').value, col2=document.getElementById('mgmtCondCol2').value, col3=document.getElementById('mgmtCondCol3').value;
+  const val1Sel=document.getElementById('mgmtCondVal1'), val2Sel=document.getElementById('mgmtCondVal2'), val3Sel=document.getElementById('mgmtCondVal3');
+  const okResults=batchResults.filter(r=>r.ok);
+
+  function populate(sel, col, filterFn){
+    if(!col){ sel.innerHTML='<option value="">-</option>'; sel.disabled=true; return; }
+    sel.disabled = !!(mgmtViewerMode && mgmtViewerLocked);
+    const prev=sel.value;
+    const rows=filterFn ? okResults.filter(filterFn) : okResults;
+    const set=new Set();
+    rows.forEach(r=>{ const raw=String((r.row||{})[col]??'').trim(); if(raw) set.add(resolveAlias(raw)); });
+    const values=[...set].sort();
+    sel.innerHTML='<option value="">전체</option>'+values.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+    sel.value = values.includes(prev) ? prev : '';
+  }
+
+  populate(val1Sel, col1, null);
+  const val1=val1Sel.value;
+  populate(val2Sel, col2, col2 ? (r=>!val1 || resolveAlias(String((r.row||{})[col1]??'').trim())===val1) : null);
+  const val2=val2Sel.value;
+  populate(val3Sel, col3, col3 ? (r=>(!val1||resolveAlias(String((r.row||{})[col1]??'').trim())===val1) && (!val2||resolveAlias(String((r.row||{})[col2]??'').trim())===val2)) : null);
+}
+
+function onMgmtConditionColChange(level){
+  document.getElementById('mgmtCondVal'+level).value='';
+  refreshMgmtConditionValueOptions();
+  applyMgmtCondition();
+}
+
+function applyMgmtCondition(){
+  mgmtCondActiveCols.forEach(c=>{ delete columnFilters[c]; });
+  mgmtCondActiveCols=[];
+
+  const levels=[
+    [document.getElementById('mgmtCondCol1').value, document.getElementById('mgmtCondVal1').value],
+    [document.getElementById('mgmtCondCol2').value, document.getElementById('mgmtCondVal2').value],
+    [document.getElementById('mgmtCondCol3').value, document.getElementById('mgmtCondVal3').value],
+  ];
+  levels.forEach(([col,val])=>{
+    if(col && val){
+      columnFilters[col]=new Set(rawValuesForAliasedTarget(col,val));
+      mgmtCondActiveCols.push(col);
+    }
+  });
+
+  const contractOn=document.getElementById('mgmtContractToggle').checked;
+  const startCol=document.getElementById('mgmtContractStartCol').value;
+  const endCol=document.getElementById('mgmtContractEndCol').value;
+  const asOf=document.getElementById('mgmtContractAsOf').value;
+  contractDateFilter = (contractOn && startCol && endCol && asOf) ? {startCol,endCol,asOf} : null;
+
+  renderSideList(); // 결과 목록 + 지도 마커를 같은 조건으로 함께 갱신
+
+  const filtered=batchResults.filter(r=>r.ok && passesFilters(r));
+  const resultEl=document.getElementById('mgmtCondResultText');
+  if(resultEl) resultEl.textContent = (mgmtCondActiveCols.length||contractDateFilter) ? `${filtered.length}건 매칭` : '';
+  if(map && filtered.length){
+    const bounds=new kakao.maps.LatLngBounds();
+    filtered.forEach(r=>bounds.extend(new kakao.maps.LatLng(r.lat,r.lng)));
+    map.setBounds(bounds); // 조건을 바꿀 때마다 그 결과가 다 보이게 지도를 바로 옮긴다("빠르게 위치이동")
+  }
+}
+
+function clearMgmtCondition(){
+  ['mgmtCondVal1','mgmtCondVal2','mgmtCondVal3'].forEach(id=>{ document.getElementById(id).value=''; });
+  document.getElementById('mgmtContractToggle').checked=false;
+  refreshMgmtConditionValueOptions();
+  applyMgmtCondition();
+}
+
+// ── 조건이 고정된 개별 공유 링크(뷰어 모드) ──
+// ?mode=viewer 를 붙이면 업로드/관리자 등 편집 기능을 숨기고 조건 조회 버튼만
+// 남긴다. 추가로 ?c1=컬럼&v1=값(&c2/v2, c3/v3)을 붙이면 그 조건이 자동으로
+// 걸리고, &lock=1까지 붙이면 그 조건을 바꾸지 못하게 고정한다 — 담당자별로
+// "이 사람에게는 이 구역만" 보이는 개별 링크를 만들 수 있다.
+function copyMgmtConditionLink(){
+  const col1=document.getElementById('mgmtCondCol1').value, val1=document.getElementById('mgmtCondVal1').value;
+  const col2=document.getElementById('mgmtCondCol2').value, val2=document.getElementById('mgmtCondVal2').value;
+  const col3=document.getElementById('mgmtCondCol3').value, val3=document.getElementById('mgmtCondVal3').value;
+  const locked=document.getElementById('mgmtShareLockChk').checked;
+  const params=new URLSearchParams();
+  params.set('mode','viewer');
+  if(locked) params.set('lock','1');
+  if(col1 && val1){ params.set('c1',col1); params.set('v1',val1); }
+  if(col2 && val2){ params.set('c2',col2); params.set('v2',val2); }
+  if(col3 && val3){ params.set('c3',col3); params.set('v3',val3); }
+  const url=location.origin+location.pathname+'?'+params.toString();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(
+      ()=>alert('공유 링크를 클립보드에 복사했습니다:\n'+url+(locked?'\n\n조건이 고정되어, 받는 사람은 이 조건을 바꿀 수 없습니다.':'\n\n조건은 고정되지 않아, 받는 사람이 다른 구역도 조건 버튼으로 조회할 수 있습니다.')),
+      ()=>prompt('아래 링크를 복사해서 전달하세요:', url)
+    );
+  }else{
+    prompt('아래 링크를 복사해서 전달하세요:', url);
+  }
+}
+
+function applyPendingViewerCondition(){
+  if(!window.__pendingViewerCond) return;
+  const p=window.__pendingViewerCond;
+  window.__pendingViewerCond=null;
+  if(p.c1){ document.getElementById('mgmtCondCol1').value=p.c1; }
+  if(p.c2){ document.getElementById('mgmtCondCol2').value=p.c2; }
+  if(p.c3){ document.getElementById('mgmtCondCol3').value=p.c3; }
+  refreshMgmtConditionValueOptions();
+  if(p.v1) document.getElementById('mgmtCondVal1').value=p.v1;
+  if(p.v2) document.getElementById('mgmtCondVal2').value=p.v2;
+  if(p.v3) document.getElementById('mgmtCondVal3').value=p.v3;
+  refreshMgmtConditionValueOptions(); // 값을 채운 뒤 하위 단계 옵션을 다시 계산
+  applyMgmtCondition();
+}
+
+// 페이지가 열릴 때 한 번만 확인 — URL에 ?mode=viewer가 있으면 업로드·관리자·
+// 마커등록·순찰현황 등 편집 기능을 숨기고 관리구역 조건 조회 화면만 보여준다.
+// 인증이 아니라 UI만 숨기는 방식이라, 링크 자체를 아는 사람은 파라미터를 지워
+// 원래 화면으로 돌아갈 수 있다 — 이 앱 전반의 "가벼운 보호" 수준과 동일하다.
+function applyViewerModeFromUrl(){
+  const params=new URLSearchParams(location.search);
+  if(params.get('mode')!=='viewer') return;
+  mgmtViewerMode=true;
+  mgmtViewerLocked=params.get('lock')==='1';
+  window.__pendingViewerCond={
+    c1:params.get('c1')||'', v1:params.get('v1')||'',
+    c2:params.get('c2')||'', v2:params.get('v2')||'',
+    c3:params.get('c3')||'', v3:params.get('v3')||'',
+  };
+  document.querySelector('.mode-tabs').style.display='none';
+  document.getElementById('adminBtn').style.display='none';
+  ['applyMgmtZones()','clearMgmtZones()','openMgmtDashboard()','shareMgmtZones()','loadSharedMgmtZones(false)']
+    .forEach(fn=>{ const el=document.querySelector(`#mgmtBar button[onclick="${fn}"]`); if(el) el.style.display='none'; });
+  const aliasBtn=document.querySelector('#mgmtCondBar button[onclick="openMgmtAliasModal()"]'); if(aliasBtn) aliasBtn.style.display='none';
+  const clearCondBtn=document.querySelector('#mgmtCondBar button[onclick="clearMgmtCondition()"]'); if(clearCondBtn && mgmtViewerLocked) clearCondBtn.style.display='none';
+  const linkBtn=document.querySelector('#mgmtContractBar button[onclick="copyMgmtConditionLink()"]'); if(linkBtn) linkBtn.style.display='none';
+  document.getElementById('mgmtShareLockChk').closest('label').style.display='none';
+  switchMode('mgmt');
 }
 
 function renderMgmtSideList(){
@@ -3451,6 +3809,7 @@ loadCustomMarkers();
 checkDraftOnLoad();
 setBizControlsLocked(true);
 loadRegionLock();
+applyViewerModeFromUrl();
 
 // PWA: "홈 화면에 추가" 설치를 가능하게 하는 서비스워커 등록(오프라인 캐싱 목적 아님)
 if('serviceWorker' in navigator){
