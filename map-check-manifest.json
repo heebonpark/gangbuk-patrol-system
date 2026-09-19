@@ -1,0 +1,17 @@
+{
+  "name": "지도위치확인",
+  "short_name": "지도위치확인",
+  "description": "설치주소/상호 검색, 행정구역 조회, 팀 공유 마커를 지원하는 영업분석 지도 도구",
+  "start_url": "./map-check.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d14",
+  "theme_color": "#0b0d14",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
