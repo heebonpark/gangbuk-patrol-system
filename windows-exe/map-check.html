@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>📍 지도위치확인</title>
+<!-- PWA: "홈 화면에 추가"로 설치해 앱처럼 쓸 수 있게 한다 -->
+<link rel="manifest" href="map-check-manifest.json">
+<meta name="theme-color" content="#0b0d14">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="지도위치확인">
 <style>
 :root{
   --bg:#0b0d14;--surface:#141720;--surface2:#1c2030;--surface3:#242840;
@@ -847,19 +855,23 @@ function clearRuler(){
 
 // ── 📌 마커 등록 (업로드한 데이터와 무관하게, 지도 위 아무 지점에나 직접 핀을
 //    찍어 이름을 붙여 저장하는 기능 — 순찰 포인트, 경쟁사 위치, 신규 후보지 등을
-//    기록해두고 다음에 다시 열어도 남아있게 한다. localStorage에 영구 저장된다.) ──
-const MARKERS_KEY='mapcheck_custom_markers_v1';
+//    기록해두고 다음에 다시 열어도 남아있게 한다. collection-management-dashboard와
+//    공유하는 Supabase(map_check_markers 테이블)에 저장되어, 이 링크를 쓰는 팀
+//    전체가 같은 마커를 보고 관리하는 공유 지도가 된다(개인 브라우저 저장이 아님).) ──
 const MARKER_CATEGORIES={'일반':'#4f8ef7','중요':'#ef4444','후보지':'#22c55e','경쟁사':'#f97316','기타':'#a855f7'};
 let customMarkers=[];
 let customMarkerObjs=[];
 let markerRegArmed=false;
 let pendingMarkerPos=null;
 
-function loadCustomMarkers(){
-  try{ customMarkers=JSON.parse(localStorage.getItem(MARKERS_KEY)||'[]'); }catch{ customMarkers=[]; }
-}
-function saveCustomMarkersList(){
-  try{ localStorage.setItem(MARKERS_KEY, JSON.stringify(customMarkers)); }catch{}
+async function loadCustomMarkers(){
+  try{
+    const {data,error}=await sbClient.from('map_check_markers').select('*').order('created_at');
+    if(!error && data){
+      customMarkers=data.map(row=>({id:row.id, lat:row.lat, lng:row.lng, name:row.name, category:row.category}));
+      renderCustomMarkers();
+    }
+  }catch(e){ console.warn('공유 마커를 불러오지 못했습니다:', e.message); }
 }
 
 async function toggleMarkerReg(){
@@ -869,6 +881,8 @@ async function toggleMarkerReg(){
   if(markerRegArmed && rulerArmed) toggleRuler();
   document.getElementById('markerRegBtn').classList.toggle('on', markerRegArmed);
   if(!markerRegArmed) document.getElementById('markerRegCard').classList.remove('show');
+  // 등록 모드를 켤 때마다 팀원이 그 사이 추가/삭제한 마커를 최신으로 다시 불러온다.
+  if(markerRegArmed) loadCustomMarkers();
   if(markerRegArmed && !window.__markerRegListenerAdded){
     window.__markerRegListenerAdded=true;
     kakao.maps.event.addListener(map,'click', e=>{
@@ -896,17 +910,19 @@ function showMarkerRegCard(){
   `;
   document.getElementById('markerNameInput').focus();
 }
-function confirmMarkerReg(){
+async function confirmMarkerReg(){
   if(!pendingMarkerPos) return;
   const name=(document.getElementById('markerNameInput').value||'').trim() || '이름 없는 마커';
   const category=document.getElementById('markerCatSelect').value;
-  customMarkers.push({
-    id:'m'+Date.now()+Math.random().toString(36).slice(2,6),
-    lat:pendingMarkerPos.lat, lng:pendingMarkerPos.lng, name, category, createdAt:Date.now()
-  });
-  saveCustomMarkersList();
-  renderCustomMarkers();
+  const pos=pendingMarkerPos;
   cancelMarkerReg();
+  try{
+    const {data,error}=await sbClient.from('map_check_markers')
+      .insert({lat:pos.lat, lng:pos.lng, name, category}).select().single();
+    if(error) throw error;
+    customMarkers.push({id:data.id, lat:data.lat, lng:data.lng, name:data.name, category:data.category});
+    renderCustomMarkers();
+  }catch(e){ alert('마커 저장에 실패했습니다: '+e.message); }
 }
 function cancelMarkerReg(){
   pendingMarkerPos=null;
@@ -937,10 +953,13 @@ function renderCustomMarkers(){
     customMarkerObjs.push(marker);
   });
 }
-function deleteCustomMarker(id){
+async function deleteCustomMarker(id){
   customMarkers=customMarkers.filter(m=>m.id!==id);
-  saveCustomMarkersList();
   renderCustomMarkers();
+  try{
+    const {error}=await sbClient.from('map_check_markers').delete().eq('id', id);
+    if(error) throw error;
+  }catch(e){ alert('마커 삭제에 실패했습니다(다시 열면 되돌아올 수 있음): '+e.message); }
 }
 
 // ═══════════════════════════════════════════════
@@ -2201,6 +2220,13 @@ loadCustomMarkers();
 checkDraftOnLoad();
 setBizControlsLocked(true);
 loadRegionLock();
+
+// PWA: "홈 화면에 추가" 설치를 가능하게 하는 서비스워커 등록(오프라인 캐싱 목적 아님)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('map-check-sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
