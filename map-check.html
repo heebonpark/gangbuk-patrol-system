@@ -144,7 +144,7 @@ input[type=number]{width:70px;cursor:text}
   </div>
 
   <div class="searchbar" id="singleBar">
-    <input type="text" id="singleAddr" placeholder="설치주소 입력 (예: 경기 고양시 일산서구 덕이동 1551)" onkeydown="if(event.key==='Enter')runSingleSearch()">
+    <input type="text" id="singleAddr" placeholder="설치주소 또는 상호 입력 (예: 경기 고양시 일산서구 덕이동 1551 / 스타벅스 강남점)" onkeydown="if(event.key==='Enter')runSingleSearch()">
     <button class="btn" id="singleBtn" onclick="runSingleSearch()">검색</button>
     <div class="maptype-toggle"><button id="mtRoad" class="active" onclick="setMapType('ROADMAP')">일반</button><button id="mtSky" onclick="setMapType('HYBRID')">스카이뷰</button></div>
   </div>
@@ -171,6 +171,7 @@ input[type=number]{width:70px;cursor:text}
     <button class="btn ghost sm" onclick="clearColorByColumn()">해제</button>
     <button type="button" class="btn ghost sm" id="densityToggleBtn" onclick="toggleDensityGrid()">🔥 밀집도 그리드</button>
   </div>
+  <button class="btn ghost sm" style="margin-left:8px" onclick="openAdminRegionPanel()" title="관리자: 표시 지역 제한 설정">🔒 관리자</button>
 </div>
 
 <div class="cat-chips" id="catChips" style="display:none">
@@ -218,6 +219,14 @@ input[type=number]{width:70px;cursor:text}
 
 <div class="filter-bar" id="filterBar">
   <input type="text" id="quickSearchInput" placeholder="🔍 상호로 빠른 검색" oninput="updateQuickSearch(this.value)" style="width:160px;padding:5px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+  <div class="filter-sep"></div>
+  <span style="font-size:11px;color:var(--text2)">지역</span>
+  <div id="regionFilterWrap" style="display:flex;gap:6px;align-items:center">
+    <select id="region1Select" onchange="onRegion1Change(this.value)"><option value="">시/도 전체</option></select>
+    <select id="region2Select" onchange="onRegion2Change(this.value)"><option value="">시/군/구 전체</option></select>
+    <select id="region3Select" onchange="onRegion3Change(this.value)"><option value="">읍/면/동 전체</option></select>
+  </div>
+  <div id="regionLockLabel" style="display:none;font-size:11px;color:var(--yellow);font-weight:700"></div>
   <div class="filter-sep"></div>
   <span style="font-size:11px;color:var(--text2)">필터</span>
   <select id="filterColSelect" onchange="addColumnFilter()"><option value="">+ 컬럼 필터 추가</option></select>
@@ -309,10 +318,45 @@ input[type=number]{width:70px;cursor:text}
   </div>
 </div>
 
+<!-- 관리자: 표시 지역 제한 모달 -->
+<div class="modal-overlay" id="adminRegionModal">
+  <div class="modal">
+    <div class="modal-head"><h3>🔒 관리자: 표시 지역 설정</h3><button class="modal-close" onclick="closeAdminRegionPanel()">✕</button></div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <h4>설명</h4>
+        <p style="font-size:12px;color:var(--text2);line-height:1.6">여기서 지역을 지정하면 이 링크(공유 URL)를 여는 <b>모든 사용자</b>에게 그 지역 밖의 데이터가 숨겨집니다. 비워두면 제한이 풀립니다.</p>
+      </div>
+      <div class="modal-section">
+        <h4>제한할 지역</h4>
+        <div style="display:flex;gap:8px">
+          <select id="adminRegion1Select" onchange="onAdminRegion1Change()" style="flex:1;padding:7px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"><option value="">시/도 전체(제한 없음)</option></select>
+          <select id="adminRegion2Select" style="flex:1;padding:7px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"><option value="">시/군/구 전체</option></select>
+        </div>
+      </div>
+      <div class="modal-section" id="adminRegionStatus" style="font-size:11.5px;color:var(--text2)"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="saveAdminRegionLock()">저장 (모두에게 적용)</button>
+      <button class="btn ghost" onclick="closeAdminRegionPanel()">닫기</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 const LS_KEY='geomapper_jskey', JS_KEY_DEFAULT='2320a9f89f1db0ed876709922947edfb';
 const DRAFT_KEY='mapcheck_draft_v1', TAGS_KEY='mapcheck_tags_v1';
+// collection-management-dashboard와 같은 Supabase 프로젝트를 재사용한다(이 도구 전용으로
+// 새 프로젝트를 또 만들 필요 없이, map_check_config라는 별도 테이블 하나만 둔 것).
+// anon/publishable 키라 클라이언트에 그대로 둬도 안전하며(RLS로 실제 접근을 제어),
+// 실제 쓰기 권한은 아래 ADMIN_PASSWORD로 한 번 더 막는다.
+const SUPABASE_URL='https://ddcsgqfxficuuimpyjyt.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_yKOVQMtmqzN9HY16tQxlIg_YUmMzoAs';
+const ADMIN_PASSWORD='mapcheck2026!';
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let regionLock={region1:'', region2:''}; // 관리자가 설정하면 모든 방문자에게 적용되는 표시 지역 제한
 let map, geocoder, places, sdkLoaded=false, clusterer=null, roadview=null, roadviewClient=null;
 let markers=[];
 let poiMarkers=[];
@@ -322,6 +366,7 @@ let activeTagFilters=new Set();
 let radiusFilter=null; // {lat,lng,km}
 let advancedFilters=[]; // [{col, op, val}] — 컬럼/연산자(포함·일치·제외·크거나같음·작거나같음)/값 조합
 let quickSearchText=''; // 상호(업체명 등) 빠른 검색어
+let regionFilter={region1:'', region2:'', region3:''}; // 시/군/구/읍면동 단위 조회 필터
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
 
@@ -381,6 +426,7 @@ async function restoreDraft(){
     map.setBounds(bounds);
   }
   buildFilterColumnOptions();
+  buildRegionFilterOptions();
   renderSideList();
   setBizControlsLocked(!batchResults.some(r=>r.ok));
 }
@@ -444,9 +490,32 @@ function cleanAddr(a){
 function geocodeOne(addr){
   return new Promise(resolve=>{
     geocoder.addressSearch(addr,(result,status)=>{
-      if(status===kakao.maps.services.Status.OK&&result.length)
-        resolve({lat:parseFloat(result[0].y),lng:parseFloat(result[0].x),roadAddr:result[0].road_address?.address_name||'',jibunAddr:result[0].address?.address_name||''});
-      else resolve(null);
+      if(status===kakao.maps.services.Status.OK&&result.length){
+        const item=result[0];
+        const a=item.address||{};
+        resolve({
+          lat:parseFloat(item.y), lng:parseFloat(item.x),
+          roadAddr:item.road_address?.address_name||'', jibunAddr:a.address_name||'',
+          region1:a.region_1depth_name||'', region2:a.region_2depth_name||'', region3:a.region_3depth_name||'',
+        });
+      } else resolve(null);
+    });
+  });
+}
+
+// 주소로 못 찾으면(상호/장소명을 입력한 경우) 카카오 장소검색(Places)으로 한 번 더
+// 시도한다 — "설치주소로만 검색되던" 개별검색을 상호로도 쓸 수 있게 하는 핵심.
+function placeSearchOne(keyword){
+  return new Promise(resolve=>{
+    places.keywordSearch(keyword, (data,status)=>{
+      if(status===kakao.maps.services.Status.OK && data.length){
+        const p=data[0];
+        resolve({
+          lat:parseFloat(p.y), lng:parseFloat(p.x),
+          roadAddr:p.road_address_name||'', jibunAddr:p.address_name||'',
+          placeName:p.place_name||'',
+        });
+      } else resolve(null);
     });
   });
 }
@@ -826,17 +895,17 @@ async function runSingleSearch(){
             else resolve({lat:coordPair.lat, lng:coordPair.lng, roadAddr:'', jibunAddr:'(주소 없음 — 좌표만 확인됨)'});
           });
         })
-      : (await geocodeOne(cleanAddr(raw)) || await geocodeOne(raw));
+      : (await geocodeOne(cleanAddr(raw)) || await geocodeOne(raw) || await placeSearchOne(raw));
     if(r){
       map.setCenter(new kakao.maps.LatLng(r.lat,r.lng));
       map.setLevel(3);
-      const addrKey=r.roadAddr||r.jibunAddr||raw;
+      const addrKey=r.placeName || r.roadAddr || r.jibunAddr || raw;
       dropMarker(r.lat,r.lng,addrKey);
       window.__lastSingle={addr:addrKey, lat:r.lat, lng:r.lng, row:null};
       renderSingleCard(r, addrKey);
     }else{
       card.className='single-card show';
-      card.innerHTML=`<div class="sc-fail">❌ "${raw}" 위치를 찾을 수 없습니다. 주소를 다시 확인해주세요.</div>`;
+      card.innerHTML=`<div class="sc-fail">❌ "${raw}" 위치를 찾을 수 없습니다. 주소나 상호를 다시 확인해주세요.</div>`;
     }
   }catch(e){
     card.className='single-card show';
@@ -849,10 +918,15 @@ async function runSingleSearch(){
 function renderSingleCard(r, addrKey){
   const card=document.getElementById('singleCard');
   const tags=getTags(addrKey);
+  const addrLine=r.roadAddr||r.jibunAddr||'';
+  const copyTarget=(addrLine||addrKey).replace(/'/g,"\\'");
+  const outsideLock = isOutsideRegionLock(r);
   card.className='single-card show';
   card.innerHTML=`
-    <div class="sc-addr">✅ ${r.roadAddr||r.jibunAddr} <button class="copy-btn" onclick="copyText('${(r.roadAddr||r.jibunAddr).replace(/'/g,"\\'")}')">복사</button></div>
+    <div class="sc-addr">✅ ${r.placeName ? `🏪 ${r.placeName}` : addrLine} <button class="copy-btn" onclick="copyText('${copyTarget}')">복사</button></div>
+    ${r.placeName && addrLine ? `<div class="sc-coord">${addrLine}</div>` : ''}
     <div class="sc-coord">위도 ${r.lat.toFixed(6)} · 경도 ${r.lng.toFixed(6)}</div>
+    ${outsideLock ? `<div class="sc-fail" style="margin-top:4px">⚠ 관리자 지정 지역(${regionLockLabel()}) 밖입니다</div>` : ''}
     <div class="sc-tags">${tags.map(t=>`<span class="tag-pill">${t}</span>`).join('')}</div>
     <div class="sc-actions">
       <button class="btn sm ghost" onclick="openDetailByAddr('${addrKey.replace(/'/g,"\\'")}')">상세/태그</button>
@@ -960,9 +1034,11 @@ async function runBatchSearch(){
       if(r){
         const matched=r.roadAddr||r.jibunAddr||t.raw;
         dropMarkerClustered(r.lat,r.lng,matched,t.raw);
-        batchResults.push({addr:t.raw, lat:r.lat, lng:r.lng, matched, ok:true, row:t.row});
+        batchResults.push({addr:t.raw, lat:r.lat, lng:r.lng, matched, ok:true, row:t.row,
+          region1:r.region1||'', region2:r.region2||'', region3:r.region3||''});
       }else{
-        batchResults.push({addr:t.raw, lat:'', lng:'', matched:'', ok:false, row:t.row});
+        batchResults.push({addr:t.raw, lat:'', lng:'', matched:'', ok:false, row:t.row,
+          region1:'', region2:'', region3:''});
       }
     }
 
@@ -972,6 +1048,7 @@ async function runBatchSearch(){
       map.setBounds(bounds);
     }
     buildFilterColumnOptions();
+    buildRegionFilterOptions();
     document.getElementById('filterBar').classList.add('show');
     renderSideList();
     scheduleSaveDraft();
@@ -1146,9 +1223,16 @@ function clearVisitRoute(){
 }
 
 function passesFilters(r){
+  const lockActive = !!(regionLock.region1 || regionLock.region2);
+  const regionFilterActive = !!(regionFilter.region1 || regionFilter.region2 || regionFilter.region3);
   const hasAnyFilter = Object.keys(columnFilters).length>0 || activeTagFilters.size>0 || !!radiusFilter
-    || advancedFilters.some(f=>f.col && f.val!=='') || !!quickSearchText;
+    || advancedFilters.some(f=>f.col && f.val!=='') || !!quickSearchText || regionFilterActive || lockActive;
   if(!r.ok) return !hasAnyFilter; // 실패 항목은 필터 없을 때만 보여줌
+  // 관리자 지역 잠금이 가장 먼저 — 다른 필터와 무관하게 항상 적용되는 강제 제한이다.
+  if(lockActive){
+    if(regionLock.region1 && r.region1!==regionLock.region1) return false;
+    if(regionLock.region2 && r.region2!==regionLock.region2) return false;
+  }
   for(const col in columnFilters){
     const val=String((r.row||{})[col]??'').trim();
     if(!columnFilters[col].has(val)) return false;
@@ -1166,8 +1250,123 @@ function passesFilters(r){
     const hay = nameCol ? String((r.row||{})[nameCol]??'') : Object.values(r.row||{}).join(' ');
     if(!hay.toLowerCase().includes(quickSearchText)) return false;
   }
+  // 시/군/구/읍면동 단위 조회(사용자가 직접 고르는 필터 — 관리자 잠금과 별개)
+  if(regionFilter.region1 && r.region1!==regionFilter.region1) return false;
+  if(regionFilter.region2 && r.region2!==regionFilter.region2) return false;
+  if(regionFilter.region3 && r.region3!==regionFilter.region3) return false;
   if(!passesAdvancedFilters(r)) return false;
   return true;
+}
+
+// ═══════════════════════════════════════════════
+//  시/군/구/읍면동 단위 조회 (지오코딩 결과의 행정구역 정보 활용)
+// ═══════════════════════════════════════════════
+function buildRegionFilterOptions(){
+  regionFilter={region1:'', region2:'', region3:''};
+  const ok=batchResults.filter(r=>r.ok && r.region1);
+  const region1s=[...new Set(ok.map(r=>r.region1))].sort();
+  const sel1=document.getElementById('region1Select');
+  sel1.innerHTML='<option value="">시/도 전체</option>'+region1s.map(v=>`<option value="${v}">${v}</option>`).join('');
+  sel1.value='';
+  resetRegionSelect('region2Select','시/군/구 전체');
+  resetRegionSelect('region3Select','읍/면/동 전체');
+}
+function resetRegionSelect(id,label){
+  document.getElementById(id).innerHTML=`<option value="">${label}</option>`;
+}
+function onRegion1Change(val){
+  regionFilter.region1=val; regionFilter.region2=''; regionFilter.region3='';
+  const ok=batchResults.filter(r=>r.ok && r.region1===val && r.region2);
+  const region2s=[...new Set(ok.map(r=>r.region2))].sort();
+  const sel2=document.getElementById('region2Select');
+  sel2.innerHTML='<option value="">시/군/구 전체</option>'+region2s.map(v=>`<option value="${v}">${v}</option>`).join('');
+  resetRegionSelect('region3Select','읍/면/동 전체');
+  renderSideList();
+}
+function onRegion2Change(val){
+  regionFilter.region2=val; regionFilter.region3='';
+  const ok=batchResults.filter(r=>r.ok && r.region1===regionFilter.region1 && r.region2===val && r.region3);
+  const region3s=[...new Set(ok.map(r=>r.region3))].sort();
+  const sel3=document.getElementById('region3Select');
+  sel3.innerHTML='<option value="">읍/면/동 전체</option>'+region3s.map(v=>`<option value="${v}">${v}</option>`).join('');
+  renderSideList();
+}
+function onRegion3Change(val){
+  regionFilter.region3=val;
+  renderSideList();
+}
+
+// ═══════════════════════════════════════════════
+//  관리자: 표시 지역 잠금 (Supabase에 저장 — 이 링크를 여는 모든 사용자에게 적용)
+// ═══════════════════════════════════════════════
+async function loadRegionLock(){
+  try{
+    const {data,error}=await sbClient.from('map_check_config').select('allowed_region1,allowed_region2').eq('id','singleton').single();
+    if(!error && data){
+      regionLock={region1:data.allowed_region1||'', region2:data.allowed_region2||''};
+    }
+  }catch(e){ console.warn('지역 잠금 설정을 불러오지 못했습니다(오프라인이거나 최초 설정 전일 수 있음):', e.message); }
+  updateRegionLockBanner();
+}
+function updateRegionLockBanner(){
+  const lockActive=!!(regionLock.region1||regionLock.region2);
+  const label=document.getElementById('regionLockLabel');
+  label.style.display = lockActive ? 'block' : 'none';
+  label.textContent = lockActive ? `🔒 ${regionLockLabel()} 만 표시 중` : '';
+  document.getElementById('regionFilterWrap').style.display = lockActive ? 'none' : 'flex';
+  if(batchResults.length) renderSideList();
+}
+function regionLockLabel(){
+  return [regionLock.region1, regionLock.region2].filter(Boolean).join(' ');
+}
+function isOutsideRegionLock(r){
+  if(!regionLock.region1 && !regionLock.region2) return false;
+  if(!r || !r.lat) return false;
+  if(regionLock.region1 && r.region1 && r.region1!==regionLock.region1) return true;
+  if(regionLock.region2 && r.region2 && r.region2!==regionLock.region2) return true;
+  return false;
+}
+
+function openAdminRegionPanel(){
+  const pw=prompt('관리자 비밀번호를 입력하세요.');
+  if(pw===null) return;
+  if(pw!==ADMIN_PASSWORD){ alert('비밀번호가 올바르지 않습니다.'); return; }
+  // 현재 화면에 데이터가 있으면 그 지역 목록을, 없으면 지역선택 목록이 비어있을 수 있다 —
+  // 그래도 저장 자체는 텍스트 값 기준이라 문제 없다(예: 미리 알고 있는 지역명을 그대로 써도 됨).
+  const region1s=[...new Set(batchResults.filter(r=>r.ok && r.region1).map(r=>r.region1))].sort();
+  const sel1=document.getElementById('adminRegion1Select');
+  sel1.innerHTML='<option value="">시/도 전체(제한 없음)</option>'+region1s.map(v=>`<option value="${v}" ${v===regionLock.region1?'selected':''}>${v}</option>`).join('');
+  onAdminRegion1Change();
+  if(regionLock.region2){
+    setTimeout(()=>{ const s2=document.getElementById('adminRegion2Select'); if([...s2.options].some(o=>o.value===regionLock.region2)) s2.value=regionLock.region2; }, 0);
+  }
+  document.getElementById('adminRegionStatus').textContent = (regionLock.region1||regionLock.region2)
+    ? `현재 적용 중: ${regionLockLabel()}`
+    : '현재 제한 없음(전체 지역 표시)';
+  document.getElementById('adminRegionModal').classList.add('show');
+}
+function onAdminRegion1Change(){
+  const v=document.getElementById('adminRegion1Select').value;
+  const region2s=[...new Set(batchResults.filter(r=>r.ok && r.region1===v && r.region2).map(r=>r.region2))].sort();
+  const sel2=document.getElementById('adminRegion2Select');
+  sel2.innerHTML='<option value="">시/군/구 전체</option>'+region2s.map(r=>`<option value="${r}">${r}</option>`).join('');
+}
+function closeAdminRegionPanel(){
+  document.getElementById('adminRegionModal').classList.remove('show');
+}
+async function saveAdminRegionLock(){
+  const region1=document.getElementById('adminRegion1Select').value;
+  const region2=document.getElementById('adminRegion2Select').value;
+  try{
+    const {error}=await sbClient.from('map_check_config').update({allowed_region1:region1, allowed_region2:region2, updated_at:new Date().toISOString()}).eq('id','singleton');
+    if(error) throw error;
+    regionLock={region1, region2};
+    updateRegionLockBanner();
+    closeAdminRegionPanel();
+    alert('저장했습니다. 이 링크를 여는 모든 사용자에게 적용됩니다.');
+  }catch(e){
+    alert('저장 실패: '+e.message);
+  }
 }
 
 // 컬럼+연산자(포함/일치/제외/크거나같음/작거나같음)+값 조합 필터 — 모든 조건을 동시에
@@ -1701,6 +1900,7 @@ loadTags();
 loadCustomMarkers();
 checkDraftOnLoad();
 setBizControlsLocked(true);
+loadRegionLock();
 </script>
 </body>
 </html>
