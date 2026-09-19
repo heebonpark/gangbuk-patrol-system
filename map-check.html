@@ -895,11 +895,14 @@ async function toggleReverseGeocode(){
           const road=result[0].road_address?.address_name||'';
           const jibun=result[0].address?.address_name||'';
           const addr=road||jibun;
+          const jibunLine = jibun && jibun!==addr ? jibun : '';
+          const addrEsc=addr.replace(/'/g,"\\'"), roadEsc=road.replace(/'/g,"\\'"), jibunEsc=jibun.replace(/'/g,"\\'");
           card.innerHTML=`
-            <div class="sc-addr">🖱 ${addr} <button class="copy-btn" onclick="copyText('${addr.replace(/'/g,"\\'")}')">복사</button></div>
+            <div class="sc-addr">🖱 ${addr} <button class="copy-btn" onclick="copyText('${addrEsc}')">복사</button></div>
+            ${jibunLine ? `<div class="sc-coord">지번(구주소): ${jibunLine}</div>` : ''}
             <div class="sc-coord">위도 ${lat.toFixed(6)} · 경도 ${lng.toFixed(6)}</div>
             <div class="sc-actions">
-              <button class="btn sm ghost" onclick="openDetailByAddr('${addr.replace(/'/g,"\\'")}'); (window.__lastSingle={addr:'${addr.replace(/'/g,"\\'")}',lat:${lat},lng:${lng},row:null})">상세/태그</button>
+              <button class="btn sm ghost" onclick="window.__lastSingle={addr:'${addrEsc}',lat:${lat},lng:${lng},row:null,roadAddr:'${roadEsc}',jibunAddr:'${jibunEsc}'}; openDetailByAddr('${addrEsc}')">상세/태그</button>
               <button class="btn sm ghost" onclick="openRoadviewAt(${lat},${lng})">📷 로드뷰</button>
             </div>`;
         }else{
@@ -1198,7 +1201,7 @@ async function runSingleSearch(){
       map.setLevel(3);
       const addrKey=r.placeName || r.roadAddr || r.jibunAddr || raw;
       dropMarker(r.lat,r.lng,addrKey);
-      window.__lastSingle={addr:addrKey, lat:r.lat, lng:r.lng, row:null};
+      window.__lastSingle={addr:addrKey, lat:r.lat, lng:r.lng, row:null, roadAddr:r.roadAddr||'', jibunAddr:r.jibunAddr||''};
       renderSingleCard(r, addrKey);
     }else{
       card.className='single-card show';
@@ -2767,7 +2770,7 @@ function addTag(){
   renderDetailTags();
   renderTagFilterChips();
   renderSideList();
-  if(window.__lastSingle && window.__lastSingle.addr===currentDetailAddr) renderSingleCard({lat:window.__lastSingle.lat,lng:window.__lastSingle.lng,roadAddr:currentDetailAddr}, currentDetailAddr);
+  if(window.__lastSingle && window.__lastSingle.addr===currentDetailAddr) renderSingleCard({lat:window.__lastSingle.lat,lng:window.__lastSingle.lng,roadAddr:window.__lastSingle.roadAddr||currentDetailAddr,jibunAddr:window.__lastSingle.jibunAddr||''}, currentDetailAddr);
 }
 function removeTag(t){
   if(!currentDetailAddr) return;
