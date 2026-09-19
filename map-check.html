@@ -335,6 +335,13 @@ input[type=number]{width:70px;cursor:text}
         </div>
       </div>
       <div class="modal-section" id="adminRegionStatus" style="font-size:11.5px;color:var(--text2)"></div>
+      <div class="modal-section">
+        <h4>관리자 비밀번호 변경</h4>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="adminNewPwInput" placeholder="새 비밀번호" style="flex:1;padding:7px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+          <button class="btn ghost sm" onclick="changeAdminPassword()">변경</button>
+        </div>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="saveAdminRegionLock()">저장 (모두에게 적용)</button>
@@ -354,9 +361,10 @@ const DRAFT_KEY='mapcheck_draft_v1', TAGS_KEY='mapcheck_tags_v1';
 // 실제 쓰기 권한은 아래 ADMIN_PASSWORD로 한 번 더 막는다.
 const SUPABASE_URL='https://ddcsgqfxficuuimpyjyt.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_yKOVQMtmqzN9HY16tQxlIg_YUmMzoAs';
-const ADMIN_PASSWORD='mapcheck2026!';
+const ADMIN_PASSWORD_DEFAULT='admin1234+!'; // Supabase에서 못 불러왔을 때만 쓰는 대비값
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let regionLock={region1:'', region2:''}; // 관리자가 설정하면 모든 방문자에게 적용되는 표시 지역 제한
+let adminPassword=ADMIN_PASSWORD_DEFAULT; // Supabase에 저장된 실제 값으로 로드 시 교체됨(관리자가 바꿀 수 있음)
 let map, geocoder, places, sdkLoaded=false, clusterer=null, roadview=null, roadviewClient=null;
 let markers=[];
 let poiMarkers=[];
@@ -1301,9 +1309,10 @@ function onRegion3Change(val){
 // ═══════════════════════════════════════════════
 async function loadRegionLock(){
   try{
-    const {data,error}=await sbClient.from('map_check_config').select('allowed_region1,allowed_region2').eq('id','singleton').single();
+    const {data,error}=await sbClient.from('map_check_config').select('allowed_region1,allowed_region2,admin_password').eq('id','singleton').single();
     if(!error && data){
       regionLock={region1:data.allowed_region1||'', region2:data.allowed_region2||''};
+      if(data.admin_password) adminPassword=data.admin_password;
     }
   }catch(e){ console.warn('지역 잠금 설정을 불러오지 못했습니다(오프라인이거나 최초 설정 전일 수 있음):', e.message); }
   updateRegionLockBanner();
@@ -1330,7 +1339,7 @@ function isOutsideRegionLock(r){
 function openAdminRegionPanel(){
   const pw=prompt('관리자 비밀번호를 입력하세요.');
   if(pw===null) return;
-  if(pw!==ADMIN_PASSWORD){ alert('비밀번호가 올바르지 않습니다.'); return; }
+  if(pw!==adminPassword){ alert('비밀번호가 올바르지 않습니다.'); return; }
   // 현재 화면에 데이터가 있으면 그 지역 목록을, 없으면 지역선택 목록이 비어있을 수 있다 —
   // 그래도 저장 자체는 텍스트 값 기준이라 문제 없다(예: 미리 알고 있는 지역명을 그대로 써도 됨).
   const region1s=[...new Set(batchResults.filter(r=>r.ok && r.region1).map(r=>r.region1))].sort();
@@ -1366,6 +1375,21 @@ async function saveAdminRegionLock(){
     alert('저장했습니다. 이 링크를 여는 모든 사용자에게 적용됩니다.');
   }catch(e){
     alert('저장 실패: '+e.message);
+  }
+}
+
+async function changeAdminPassword(){
+  const newPw=(document.getElementById('adminNewPwInput').value||'').trim();
+  if(!newPw){ alert('새 비밀번호를 입력해주세요.'); return; }
+  if(newPw.length<4){ alert('비밀번호는 4자 이상으로 해주세요.'); return; }
+  try{
+    const {error}=await sbClient.from('map_check_config').update({admin_password:newPw, updated_at:new Date().toISOString()}).eq('id','singleton');
+    if(error) throw error;
+    adminPassword=newPw;
+    document.getElementById('adminNewPwInput').value='';
+    alert('관리자 비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 써주세요.');
+  }catch(e){
+    alert('변경 실패: '+e.message);
   }
 }
 
