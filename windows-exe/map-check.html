@@ -130,6 +130,53 @@ input[type=number]{width:70px;cursor:text}
 .roadview-box .rv-close{position:absolute;top:10px;right:10px;z-index:10;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px}
 #roadviewMap{width:100%;height:100%}
 .rv-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:13px}
+
+/* ── 모바일 반응형 ── */
+/* 핵심 전략: 지도가 화면 대부분을 차지해야 하는 도구라, 좁은 화면에서는
+   (1) 지도와 결과 목록을 좌우가 아니라 위아래로 쌓고, (2) 상단 툴바는 줄바꿈 대신
+   가로로 스크롤되게 해서 지도 높이를 갉아먹지 않게 한다. */
+@media (max-width: 860px){
+  .main{flex-direction:column}
+  .map-wrap{flex:1 1 auto;min-height:0}
+  .side{width:100%;height:36vh;min-height:180px;border-left:none;border-top:1px solid var(--border)}
+
+  .topbar{height:auto;min-height:50px;flex-wrap:wrap;padding:8px 10px;row-gap:6px}
+  .mode-tabs{margin-left:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;padding-bottom:2px;scrollbar-width:none}
+  .mode-tabs::-webkit-scrollbar{display:none}
+  .mode-tab{flex-shrink:0}
+
+  .searchbar,.upload-row{margin-left:0;width:100%;flex-wrap:wrap;row-gap:6px}
+  .searchbar input[type=text]{width:100%;flex:1 1 160px;min-width:0}
+  .maptype-toggle{flex-shrink:0}
+
+  .filter-bar{padding:8px 10px}
+  #quickSearchInput{width:100%;flex:1 1 140px}
+  #radiusCenterAddr{width:100%;flex:1 1 120px}
+  #regionFilterWrap{flex-wrap:wrap;row-gap:6px}
+  #region1Select,#region2Select,#region3Select{flex:1 1 30%;min-width:0}
+
+  .single-card{max-width:calc(100vw - 24px)}
+  #singleCard,#reverseGeoCard,#rulerCard,#markerRegCard{top:96px}
+
+  /* 버튼 4개를 세로로 쌓으면 지도 높이를 너무 많이 잡아먹어서, 좁은 화면에서는
+     가로로 배치하고 넘치면 다음 줄로 감싸는 식으로 바꾼다(최대 2줄 정도). */
+  .map-btns{top:8px;left:8px;right:8px;flex-direction:row;flex-wrap:wrap;max-width:calc(100vw - 16px)}
+  .btn-mapaction{font-size:10.5px;padding:6px 9px}
+  #adminBtn{padding:5px 9px;font-size:11px}
+
+  .modal{width:94vw;max-width:94vw}
+  .roadview-box{width:94vw;height:70vh}
+
+  .cat-chips,#districtChipsBar,#bizChips{padding:8px 10px}
+  .prog-wrap{padding:8px 10px}
+}
+
+@media (max-width: 480px){
+  body{font-size:12px}
+  .logo{font-size:12.5px}
+  .mode-tab{padding:5px 10px;font-size:11px}
+  .side{height:32vh}
+}
 </style>
 </head>
 <body>
@@ -143,6 +190,8 @@ input[type=number]{width:70px;cursor:text}
     <button class="mode-tab" id="tabBiz" onclick="switchMode('biz')">영업분석</button>
     <button class="mode-tab" id="tabDistrict" onclick="switchMode('district')">행정구역</button>
   </div>
+
+  <button class="btn ghost sm" id="adminBtn" style="margin-left:8px;flex-shrink:0" onclick="openAdminRegionPanel()" title="관리자: 표시 지역 제한 설정">🔒 관리자</button>
 
   <div class="searchbar" id="singleBar">
     <input type="text" id="singleAddr" placeholder="설치주소 또는 상호 입력 (예: 경기 고양시 일산서구 덕이동 1551 / 스타벅스 강남점)" onkeydown="if(event.key==='Enter')runSingleSearch()">
@@ -180,7 +229,6 @@ input[type=number]{width:70px;cursor:text}
     <button class="btn ghost" id="districtFilterBtn" onclick="applyDistrictFilterToBatch()" disabled title="파일 업로드에서 조회한 데이터가 있어야 씁니다">🧭 이 지역들로 배치 데이터 필터링</button>
   </div>
 
-  <button class="btn ghost sm" style="margin-left:8px" onclick="openAdminRegionPanel()" title="관리자: 표시 지역 제한 설정">🔒 관리자</button>
 </div>
 
 <div class="cat-chips" id="districtChipsBar" style="display:none">
