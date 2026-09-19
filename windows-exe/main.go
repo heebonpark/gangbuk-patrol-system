@@ -78,6 +78,9 @@ var subscriptionDashboardHTML []byte
 //go:embed map-check.html
 var mapCheckHTML []byte
 
+//go:embed dong-boundaries.json
+var dongBoundariesJSON []byte
+
 // 카카오 개발자센터 JavaScript SDK 도메인 목록에 http://localhost:47291 을
 // 등록해둬야 카카오맵(고객지도/지도위치확인)이 동작한다. 이 포트를 바꾸면
 // 그쪽 등록값도 같이 바꿔야 한다.
@@ -123,6 +126,7 @@ func main() {
 		"kakao-map-admin.html":        kakaoMapAdminHTML,
 		"subscription-dashboard.html": subscriptionDashboardHTML,
 		"map-check.html":              mapCheckHTML,
+		"dong-boundaries.json":        dongBoundariesJSON,
 	}
 	for name, data := range files {
 		if err := os.WriteFile(filepath.Join(tmpDir, name), data, 0644); err != nil {

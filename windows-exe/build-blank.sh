@@ -17,6 +17,7 @@ cp ../kakao-map.html ./kakao-map.html
 cp ../kakao-map-admin.html ./kakao-map-admin.html
 cp ../subscription-dashboard.html ./subscription-dashboard.html
 cp ../map-check.html ./map-check.html
+cp ../dong-boundaries.json ./dong-boundaries.json
 # vehicle-management.html은 시드 데이터 자체가 항상 마스킹되어 있어(2026-09-15 이후)
 # 배포용 exe에 그대로 담아도 안전하다. 완전히 빈 상태는 아니므로, 새 고객 배포판에서는
 # 앱 안의 "관리자 > 데이터 초기화"로 직접 비울 수 있다. voc-management.html,
