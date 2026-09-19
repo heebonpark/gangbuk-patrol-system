@@ -61,6 +61,17 @@ input[type=number]{width:70px;cursor:text}
 .marker-cat-chip{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:10.5px;color:var(--text2);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55}
 .marker-cat-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--chip-color)}
 .marker-cat-chip.on{color:var(--text);opacity:1;border-color:var(--chip-color)}
+.marker-list-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--accent);border:none;border-radius:14px;font-size:10.5px;color:#fff;cursor:pointer;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+#markerListSearch{width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;margin-bottom:10px}
+.marker-list-item{display:flex;gap:10px;padding:8px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.marker-list-item:hover{background:var(--surface2);border-color:var(--border)}
+.marker-list-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface2)}
+.marker-list-thumb-empty{display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+.marker-list-info{min-width:0;flex:1}
+.marker-list-name{font-size:12.5px;font-weight:600}
+.marker-list-cat{font-size:10.5px;font-weight:600;margin-left:4px}
+.marker-list-sub{font-size:10.5px;color:var(--text2);margin-top:1px}
+.marker-list-memo{font-size:11px;color:var(--text2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mgmt-zone-chip{display:flex;align-items:center;gap:6px;padding:4px 9px 4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);opacity:.55}
 .mgmt-zone-chip.on{color:var(--text);opacity:1}
 .mgmt-zone-chip input[type=color]{width:16px;height:16px;padding:0;border:none;border-radius:50%;overflow:hidden;cursor:pointer;background:none}
@@ -491,6 +502,20 @@ input[type=number]{width:70px;cursor:text}
   </div>
 </div>
 
+<!-- 등록된 마커 목록 모달(빠른 조회 + 사진 포함 엑셀 다운로드) -->
+<div class="modal-overlay" id="markerListModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-head"><h3>📋 등록된 마커 목록</h3><button class="modal-close" onclick="closeMarkerListModal()">✕</button></div>
+    <div class="modal-body">
+      <input type="text" id="markerListSearch" placeholder="이름 · 카테고리 · 작성자 · 메모로 검색" oninput="renderMarkerListModalBody()">
+      <div id="markerListModalBody"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="markerExcelBtn" onclick="exportMarkersExcel()">📊 엑셀 다운로드(사진 포함)</button>
+    </div>
+  </div>
+</div>
+
 <!-- 로드뷰 모달 -->
 <div class="roadview-overlay" id="roadviewOverlay">
   <div class="roadview-box">
@@ -534,6 +559,7 @@ input[type=number]{width:70px;cursor:text}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script>
@@ -1209,7 +1235,8 @@ function clearRuler(){
 const MARKER_CATEGORIES={'일반':'#4f8ef7','중요':'#ef4444','후보지':'#22c55e','경쟁사':'#f97316','기타':'#a855f7'};
 const MARKER_AUTHOR_KEY='mapcheck_marker_author_v1';
 let customMarkers=[];
-let customMarkerObjs=[];
+let customMarkerObjs=[]; // [{id, marker}]
+let customMarkerInfoWindows={}; // id -> kakao.maps.InfoWindow
 let markerRegArmed=false;
 let pendingMarkerPos=null;
 let pendingMarkerPhoto=null; // confirmMarkerReg 직전까지 들고 있는 압축된 사진(base64 data URL)
@@ -1221,7 +1248,7 @@ async function loadCustomMarkers(){
   try{
     const {data,error}=await sbClient.from('map_check_markers').select('*').order('created_at');
     if(!error && data){
-      customMarkers=data.map(row=>({id:row.id, lat:row.lat, lng:row.lng, name:row.name, category:row.category, author:row.author||'', memo:row.memo||'', photo:row.photo_data||''}));
+      customMarkers=data.map(row=>({id:row.id, lat:row.lat, lng:row.lng, name:row.name, category:row.category, author:row.author||'', memo:row.memo||'', photo:row.photo_data||'', createdAt:row.created_at||''}));
       renderCustomMarkers();
       renderMarkerCatFilter();
     }
@@ -1314,7 +1341,7 @@ async function confirmMarkerReg(){
     const {data,error}=await sbClient.from('map_check_markers')
       .insert({lat:pos.lat, lng:pos.lng, name, category, author, memo, photo_data:photo}).select().single();
     if(error) throw error;
-    customMarkers.push({id:data.id, lat:data.lat, lng:data.lng, name:data.name, category:data.category, author:data.author||'', memo:data.memo||'', photo:data.photo_data||''});
+    customMarkers.push({id:data.id, lat:data.lat, lng:data.lng, name:data.name, category:data.category, author:data.author||'', memo:data.memo||'', photo:data.photo_data||'', createdAt:data.created_at||''});
     renderCustomMarkers();
     renderMarkerCatFilter();
   }catch(e){ alert('마커 저장에 실패했습니다: '+e.message); }
@@ -1325,19 +1352,9 @@ function cancelMarkerReg(){
   document.getElementById('markerRegCard').classList.remove('show');
 }
 
-function renderCustomMarkers(){
-  customMarkerObjs.forEach(m=>m.setMap(null));
-  customMarkerObjs=[];
-  if(!map) return;
-  customMarkers.filter(cm=>!hiddenMarkerCats.has(cm.category)).forEach(cm=>{
-    const color=MARKER_CATEGORIES[cm.category]||'#4f8ef7';
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.7 13 19 13 19s13-9.3 13-19C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="13" cy="13" r="4.5" fill="#fff"/></svg>`;
-    const marker=new kakao.maps.Marker({
-      position:new kakao.maps.LatLng(cm.lat,cm.lng), map, zIndex:20,
-      image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,32), {offset:new kakao.maps.Point(13,32)})
-    });
-    const safeName=String(cm.name).replace(/'/g,"\\'");
-    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:8px 10px;font-size:11px;min-width:150px;max-width:220px">
+function buildMarkerInfoContent(cm){
+  const safeName=String(cm.name).replace(/'/g,"\\'");
+  return `<div style="padding:8px 10px;font-size:11px;min-width:150px;max-width:220px">
       <div style="font-weight:700;margin-bottom:3px">📌 ${escHtml(cm.name)}</div>
       <div style="color:#7880a0;margin-bottom:6px">${escHtml(cm.category)}${cm.author?' · '+escHtml(cm.author):''}</div>
       ${cm.memo?`<div style="margin-bottom:6px;white-space:pre-wrap;word-break:break-all">${escHtml(cm.memo)}</div>`:''}
@@ -1346,15 +1363,32 @@ function renderCustomMarkers(){
         <button onclick="deleteCustomMarker('${cm.id}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #ef4444;background:none;color:#ef4444;cursor:pointer">삭제</button>
         <button onclick="openDirectionsAt(${cm.lat},${cm.lng},'${safeName}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4f8ef7;background:none;color:#4f8ef7;cursor:pointer">길찾기</button>
       </div>
-    </div>`});
+    </div>`;
+}
+
+function renderCustomMarkers(){
+  customMarkerObjs.forEach(o=>o.marker.setMap(null));
+  customMarkerObjs=[];
+  customMarkerInfoWindows={};
+  if(!map) return;
+  customMarkers.filter(cm=>!hiddenMarkerCats.has(cm.category)).forEach(cm=>{
+    const color=MARKER_CATEGORIES[cm.category]||'#4f8ef7';
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.7 13 19 13 19s13-9.3 13-19C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="13" cy="13" r="4.5" fill="#fff"/></svg>`;
+    const marker=new kakao.maps.Marker({
+      position:new kakao.maps.LatLng(cm.lat,cm.lng), map, zIndex:20,
+      image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,32), {offset:new kakao.maps.Point(13,32)})
+    });
+    const iw=new kakao.maps.InfoWindow({content:buildMarkerInfoContent(cm)});
     kakao.maps.event.addListener(marker,'click',()=>iw.open(map,marker));
-    customMarkerObjs.push(marker);
+    customMarkerObjs.push({id:cm.id, marker});
+    customMarkerInfoWindows[cm.id]=iw;
   });
 }
 async function deleteCustomMarker(id){
   customMarkers=customMarkers.filter(m=>m.id!==id);
   renderCustomMarkers();
   renderMarkerCatFilter();
+  if(document.getElementById('markerListModal').classList.contains('show')) renderMarkerListModalBody();
   try{
     const {error}=await sbClient.from('map_check_markers').delete().eq('id', id);
     if(error) throw error;
@@ -1371,7 +1405,7 @@ function renderMarkerCatFilter(){
   customMarkers.forEach(cm=>{ counts[cm.category]=(counts[cm.category]||0)+1; });
   const cats=Object.keys(counts);
   bar.style.display='flex';
-  bar.innerHTML=cats.map(cat=>{
+  bar.innerHTML=`<button class="marker-list-btn" onclick="openMarkerListModal()">📋 목록(${customMarkers.length})</button>`+cats.map(cat=>{
     const color=MARKER_CATEGORIES[cat]||'#4f8ef7';
     const on=!hiddenMarkerCats.has(cat);
     return `<button class="marker-cat-chip${on?' on':''}" style="--chip-color:${color}" onclick="toggleMarkerCatFilter('${cat.replace(/'/g,"\\'")}')">
@@ -1383,6 +1417,121 @@ function toggleMarkerCatFilter(cat){
   if(hiddenMarkerCats.has(cat)) hiddenMarkerCats.delete(cat); else hiddenMarkerCats.add(cat);
   renderMarkerCatFilter();
   renderCustomMarkers();
+}
+
+// ── 등록된 마커 빠른 조회(검색) + 목록/사진 엑셀 다운로드 ──
+function openMarkerListModal(){
+  document.getElementById('markerListSearch').value='';
+  renderMarkerListModalBody();
+  document.getElementById('markerListModal').classList.add('show');
+  document.getElementById('markerListSearch').focus();
+}
+function closeMarkerListModal(){ document.getElementById('markerListModal').classList.remove('show'); }
+
+function renderMarkerListModalBody(){
+  const q=(document.getElementById('markerListSearch').value||'').trim().toLowerCase();
+  const filtered=!q ? customMarkers : customMarkers.filter(cm=>
+    [cm.name,cm.category,cm.author,cm.memo].some(v=>String(v||'').toLowerCase().includes(q))
+  );
+  const body=document.getElementById('markerListModalBody');
+  document.getElementById('markerExcelBtn').textContent = `📊 엑셀 다운로드(사진 포함) · ${filtered.length}건`;
+  if(!filtered.length){
+    body.innerHTML='<div class="res-empty">조건에 맞는 마커가 없습니다.</div>';
+    return;
+  }
+  body.innerHTML=[...filtered].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).map(cm=>{
+    const color=MARKER_CATEGORIES[cm.category]||'#4f8ef7';
+    const dateStr=cm.createdAt ? new Date(cm.createdAt).toLocaleDateString('ko-KR') : '';
+    const thumb=cm.photo
+      ? `<img src="${cm.photo}" class="marker-list-thumb">`
+      : `<div class="marker-list-thumb marker-list-thumb-empty" style="background:${color}33;color:${color}">📌</div>`;
+    return `<div class="marker-list-item" onclick="focusCustomMarkerFromList('${cm.id}')">
+      ${thumb}
+      <div class="marker-list-info">
+        <div class="marker-list-name">${escHtml(cm.name)}<span class="marker-list-cat" style="color:${color}">${escHtml(cm.category)}</span></div>
+        <div class="marker-list-sub">${cm.author?escHtml(cm.author)+' · ':''}${dateStr}</div>
+        ${cm.memo?`<div class="marker-list-memo">${escHtml(cm.memo)}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function focusCustomMarkerFromList(id){
+  const cm=customMarkers.find(m=>m.id===id);
+  if(!cm) return;
+  await ensureMap();
+  closeMarkerListModal();
+  if(hiddenMarkerCats.has(cm.category)){
+    hiddenMarkerCats.delete(cm.category);
+    renderMarkerCatFilter();
+    renderCustomMarkers();
+  }
+  map.setCenter(new kakao.maps.LatLng(cm.lat,cm.lng));
+  map.setLevel(3);
+  const found=customMarkerObjs.find(o=>o.id===id);
+  const iw=customMarkerInfoWindows[id];
+  if(found && iw) iw.open(map, found.marker);
+}
+
+// 사진을 실제로 셀에 삽입해야 해서(단순 xlsx.js는 이미지 삽입을 지원하지 않음)
+// 여기서만 ExcelJS를 쓴다 — 다른 내보내기 기능들은 그대로 xlsx.js를 쓴다.
+async function exportMarkersExcel(){
+  const q=(document.getElementById('markerListSearch').value||'').trim().toLowerCase();
+  const rows=!q ? customMarkers : customMarkers.filter(cm=>
+    [cm.name,cm.category,cm.author,cm.memo].some(v=>String(v||'').toLowerCase().includes(q))
+  );
+  if(!rows.length){ alert('내보낼 마커가 없습니다.'); return; }
+  const btn=document.getElementById('markerExcelBtn');
+  const origText=btn.textContent;
+  btn.disabled=true; btn.textContent='만드는 중...';
+  try{
+    const workbook=new ExcelJS.Workbook();
+    const sheet=workbook.addWorksheet('마커목록');
+    sheet.columns=[
+      {header:'이름', key:'name', width:20},
+      {header:'카테고리', key:'category', width:12},
+      {header:'작성자', key:'author', width:14},
+      {header:'메모', key:'memo', width:34},
+      {header:'등록일', key:'createdAt', width:18},
+      {header:'위도', key:'lat', width:12},
+      {header:'경도', key:'lng', width:12},
+      {header:'사진', key:'photo', width:16},
+    ];
+    sheet.getRow(1).font={bold:true};
+    const sorted=[...rows].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    sorted.forEach(cm=>{
+      const row=sheet.addRow({
+        name:cm.name, category:cm.category, author:cm.author, memo:cm.memo,
+        createdAt: cm.createdAt ? new Date(cm.createdAt).toLocaleString('ko-KR') : '',
+        lat:cm.lat, lng:cm.lng, photo:''
+      });
+      if(cm.photo){
+        row.height=80;
+        const m=/^data:image\/(\w+);base64,(.+)$/.exec(cm.photo);
+        if(m){
+          const ext=m[1]==='jpg' ? 'jpeg' : m[1];
+          try{
+            const imageId=workbook.addImage({base64:cm.photo, extension:ext});
+            sheet.addImage(imageId, {
+              tl:{col:7, row:row.number-1},
+              ext:{width:76, height:76}
+            });
+          }catch(e){ console.warn('사진 삽입 실패('+cm.name+'):', e.message); }
+        }
+      }
+    });
+    const buffer=await workbook.xlsx.writeBuffer();
+    const blob=new Blob([buffer], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const dateStr=new Date().toISOString().slice(0,10);
+    a.href=url; a.download=`마커목록_${dateStr}.xlsx`; a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('엑셀 파일을 만드는 데 실패했습니다: '+e.message);
+  }finally{
+    btn.disabled=false; btn.textContent=origText;
+  }
 }
 
 // ═══════════════════════════════════════════════
