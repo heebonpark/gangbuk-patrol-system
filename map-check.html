@@ -57,6 +57,10 @@ input[type=number]{width:70px;cursor:text}
 .cat-chip:hover{border-color:var(--orange);color:var(--orange)}
 
 .map-btns{position:absolute;top:10px;left:10px;z-index:100;display:flex;flex-direction:column;gap:6px}
+.marker-cat-filter{position:absolute;left:10px;bottom:10px;z-index:100;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+.marker-cat-chip{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:10.5px;color:var(--text2);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55}
+.marker-cat-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--chip-color)}
+.marker-cat-chip.on{color:var(--text);opacity:1;border-color:var(--chip-color)}
 .btn-mapaction{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:all .15s}
 .btn-mapaction:hover{border-color:var(--accent);color:var(--accent)}
 .btn-mapaction.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.1)}
@@ -343,9 +347,10 @@ input[type=number]{width:70px;cursor:text}
       <div class="sc-actions"><button class="btn sm ghost" onclick="clearRuler()">지우기</button></div>
     </div>
     <div class="single-card" id="markerRegCard" style="left:auto;right:12px"></div>
+    <div class="marker-cat-filter" id="markerCatFilterBar" style="display:none"></div>
   </div>
   <div class="side" id="sideBatch" style="display:none">
-    <div class="side-head"><span id="sideTitle">결과</span><button class="btn ghost" id="exportBtn" style="padding:3px 9px;font-size:10.5px;display:none" onclick="exportResults()">엑셀 내보내기</button></div>
+    <div class="side-head"><span id="sideTitle">결과</span><button class="btn ghost" id="exportBtn" style="padding:3px 9px;font-size:10.5px;display:none" onclick="exportResults()">엑셀 내보내기</button><button class="btn ghost" id="pdfExportBtn" style="padding:3px 9px;font-size:10.5px;display:none;margin-left:5px" onclick="exportPdfReport()">📄 PDF 다운로드</button></div>
     <div class="side-list" id="sideList"><div class="res-empty">아직 조회 결과가 없습니다.</div></div>
   </div>
 </div>
@@ -549,6 +554,7 @@ async function ensureMap(){
       ]
     });
     renderCustomMarkers(); // 등록해둔 마커가 있으면 지도가 처음 뜰 때 바로 표시
+    renderMarkerCatFilter();
   }
   document.getElementById('mapEmpty').style.display='none';
 }
@@ -673,6 +679,7 @@ function switchMode(mode){
         ? '<div class="res-empty">이전에 조회한 결과가 남아 있습니다.<br><button class="btn sm" style="margin-top:8px" onclick="restoreDraft()">불러오기</button></div>'
         : '<div class="res-empty">영업분석은 먼저 설치주소 목록이 있어야 합니다.<br>(기존 고객 위치와 비교해서 영업기회를 찾는 기능이라, 비교할 데이터가 필요합니다)<br><button class="btn sm" style="margin-top:8px" onclick="switchMode(\'batch\')">📄 파일 업로드하러 가기</button></div>';
       document.getElementById('exportBtn').style.display='none';
+      document.getElementById('pdfExportBtn').style.display='none';
     }else{
       buildBizColumnOptions();
       renderLeadList();
@@ -859,17 +866,23 @@ function clearRuler(){
 //    공유하는 Supabase(map_check_markers 테이블)에 저장되어, 이 링크를 쓰는 팀
 //    전체가 같은 마커를 보고 관리하는 공유 지도가 된다(개인 브라우저 저장이 아님).) ──
 const MARKER_CATEGORIES={'일반':'#4f8ef7','중요':'#ef4444','후보지':'#22c55e','경쟁사':'#f97316','기타':'#a855f7'};
+const MARKER_AUTHOR_KEY='mapcheck_marker_author_v1';
 let customMarkers=[];
 let customMarkerObjs=[];
 let markerRegArmed=false;
 let pendingMarkerPos=null;
+let pendingMarkerPhoto=null; // confirmMarkerReg 직전까지 들고 있는 압축된 사진(base64 data URL)
+let hiddenMarkerCats=new Set(); // 카테고리 필터에서 꺼둔(안 보이는) 카테고리들
+
+function escHtml(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 async function loadCustomMarkers(){
   try{
     const {data,error}=await sbClient.from('map_check_markers').select('*').order('created_at');
     if(!error && data){
-      customMarkers=data.map(row=>({id:row.id, lat:row.lat, lng:row.lng, name:row.name, category:row.category}));
+      customMarkers=data.map(row=>({id:row.id, lat:row.lat, lng:row.lng, name:row.name, category:row.category, author:row.author||'', memo:row.memo||'', photo:row.photo_data||''}));
       renderCustomMarkers();
+      renderMarkerCatFilter();
     }
   }catch(e){ console.warn('공유 마커를 불러오지 못했습니다:', e.message); }
 }
@@ -896,12 +909,23 @@ async function toggleMarkerReg(){
 function showMarkerRegCard(){
   const card=document.getElementById('markerRegCard');
   const catOpts=Object.keys(MARKER_CATEGORIES).map(c=>`<option value="${c}">${c}</option>`).join('');
+  const savedAuthor=localStorage.getItem(MARKER_AUTHOR_KEY)||'';
+  pendingMarkerPhoto=null;
   card.className='single-card show';
   card.innerHTML=`
     <div class="sc-addr">📌 새 마커 등록</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
       <input type="text" id="markerNameInput" placeholder="마커 이름 (예: 신규 영업 후보지)" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
       <select id="markerCatSelect" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">${catOpts}</select>
+      <input type="text" id="markerAuthorInput" value="${escHtml(savedAuthor)}" placeholder="작성자(선택)" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+      <textarea id="markerMemoInput" placeholder="메모(선택)" rows="2" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;resize:vertical;font-family:inherit"></textarea>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer">
+        📷 사진 첨부(선택)
+        <input type="file" id="markerPhotoInput" accept="image/*" style="font-size:11px;flex:1" onchange="onMarkerPhotoSelected(event)">
+      </label>
+      <div id="markerPhotoPreviewWrap" style="display:none">
+        <img id="markerPhotoPreview" style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--border)">
+      </div>
     </div>
     <div class="sc-actions">
       <button class="btn sm" onclick="confirmMarkerReg()">저장</button>
@@ -910,22 +934,53 @@ function showMarkerRegCard(){
   `;
   document.getElementById('markerNameInput').focus();
 }
+function onMarkerPhotoSelected(evt){
+  const file=evt.target.files && evt.target.files[0];
+  if(!file) return;
+  const img=new Image();
+  const reader=new FileReader();
+  reader.onload=()=>{
+    img.onload=()=>{
+      const maxW=480;
+      const scale=Math.min(1, maxW/img.width);
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.round(img.width*scale);
+      canvas.height=Math.round(img.height*scale);
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      pendingMarkerPhoto=canvas.toDataURL('image/jpeg',0.55);
+      const previewWrap=document.getElementById('markerPhotoPreviewWrap');
+      if(previewWrap){
+        document.getElementById('markerPhotoPreview').src=pendingMarkerPhoto;
+        previewWrap.style.display='block';
+      }
+    };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+}
 async function confirmMarkerReg(){
   if(!pendingMarkerPos) return;
   const name=(document.getElementById('markerNameInput').value||'').trim() || '이름 없는 마커';
   const category=document.getElementById('markerCatSelect').value;
+  const author=(document.getElementById('markerAuthorInput').value||'').trim();
+  const memo=(document.getElementById('markerMemoInput').value||'').trim();
+  const photo=pendingMarkerPhoto;
   const pos=pendingMarkerPos;
+  if(author) localStorage.setItem(MARKER_AUTHOR_KEY, author);
   cancelMarkerReg();
   try{
     const {data,error}=await sbClient.from('map_check_markers')
-      .insert({lat:pos.lat, lng:pos.lng, name, category}).select().single();
+      .insert({lat:pos.lat, lng:pos.lng, name, category, author, memo, photo_data:photo}).select().single();
     if(error) throw error;
-    customMarkers.push({id:data.id, lat:data.lat, lng:data.lng, name:data.name, category:data.category});
+    customMarkers.push({id:data.id, lat:data.lat, lng:data.lng, name:data.name, category:data.category, author:data.author||'', memo:data.memo||'', photo:data.photo_data||''});
     renderCustomMarkers();
+    renderMarkerCatFilter();
   }catch(e){ alert('마커 저장에 실패했습니다: '+e.message); }
 }
 function cancelMarkerReg(){
   pendingMarkerPos=null;
+  pendingMarkerPhoto=null;
   document.getElementById('markerRegCard').classList.remove('show');
 }
 
@@ -933,7 +988,7 @@ function renderCustomMarkers(){
   customMarkerObjs.forEach(m=>m.setMap(null));
   customMarkerObjs=[];
   if(!map) return;
-  customMarkers.forEach(cm=>{
+  customMarkers.filter(cm=>!hiddenMarkerCats.has(cm.category)).forEach(cm=>{
     const color=MARKER_CATEGORIES[cm.category]||'#4f8ef7';
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.7 13 19 13 19s13-9.3 13-19C26 5.8 20.2 0 13 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="13" cy="13" r="4.5" fill="#fff"/></svg>`;
     const marker=new kakao.maps.Marker({
@@ -941,9 +996,11 @@ function renderCustomMarkers(){
       image:new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(26,32), {offset:new kakao.maps.Point(13,32)})
     });
     const safeName=String(cm.name).replace(/'/g,"\\'");
-    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:8px 10px;font-size:11px;min-width:150px">
-      <div style="font-weight:700;margin-bottom:3px">📌 ${cm.name}</div>
-      <div style="color:#7880a0;margin-bottom:6px">${cm.category}</div>
+    const iw=new kakao.maps.InfoWindow({content:`<div style="padding:8px 10px;font-size:11px;min-width:150px;max-width:220px">
+      <div style="font-weight:700;margin-bottom:3px">📌 ${escHtml(cm.name)}</div>
+      <div style="color:#7880a0;margin-bottom:6px">${escHtml(cm.category)}${cm.author?' · '+escHtml(cm.author):''}</div>
+      ${cm.memo?`<div style="margin-bottom:6px;white-space:pre-wrap;word-break:break-all">${escHtml(cm.memo)}</div>`:''}
+      ${cm.photo?`<img src="${cm.photo}" style="max-width:100%;border-radius:6px;margin-bottom:6px;display:block">`:''}
       <div style="display:flex;gap:6px">
         <button onclick="deleteCustomMarker('${cm.id}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #ef4444;background:none;color:#ef4444;cursor:pointer">삭제</button>
         <button onclick="openDirectionsAt(${cm.lat},${cm.lng},'${safeName}')" style="font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid #4f8ef7;background:none;color:#4f8ef7;cursor:pointer">길찾기</button>
@@ -956,10 +1013,35 @@ function renderCustomMarkers(){
 async function deleteCustomMarker(id){
   customMarkers=customMarkers.filter(m=>m.id!==id);
   renderCustomMarkers();
+  renderMarkerCatFilter();
   try{
     const {error}=await sbClient.from('map_check_markers').delete().eq('id', id);
     if(error) throw error;
   }catch(e){ alert('마커 삭제에 실패했습니다(다시 열면 되돌아올 수 있음): '+e.message); }
+}
+
+// 카테고리별 마커 보기/숨기기 토글 — 마커가 늘어나면 지도가 어지러워지므로,
+// "경쟁사만 보기"처럼 필요한 카테고리만 켜서 볼 수 있게 한다.
+function renderMarkerCatFilter(){
+  const bar=document.getElementById('markerCatFilterBar');
+  if(!bar) return;
+  if(!customMarkers.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  const counts={};
+  customMarkers.forEach(cm=>{ counts[cm.category]=(counts[cm.category]||0)+1; });
+  const cats=Object.keys(counts);
+  bar.style.display='flex';
+  bar.innerHTML=cats.map(cat=>{
+    const color=MARKER_CATEGORIES[cat]||'#4f8ef7';
+    const on=!hiddenMarkerCats.has(cat);
+    return `<button class="marker-cat-chip${on?' on':''}" style="--chip-color:${color}" onclick="toggleMarkerCatFilter('${cat.replace(/'/g,"\\'")}')">
+      <span class="dot"></span>${escHtml(cat)} ${counts[cat]}
+    </button>`;
+  }).join('');
+}
+function toggleMarkerCatFilter(cat){
+  if(hiddenMarkerCats.has(cat)) hiddenMarkerCats.delete(cat); else hiddenMarkerCats.add(cat);
+  renderMarkerCatFilter();
+  renderCustomMarkers();
 }
 
 // ═══════════════════════════════════════════════
@@ -1307,6 +1389,7 @@ function planVisitRoute(){
   window.__lastRoute=ordered;
   document.getElementById('sideTitle').textContent=`동선 최적화: ${ordered.length}곳, 총 ${totalKm.toFixed(1)}km`;
   document.getElementById('exportBtn').style.display='block';
+  document.getElementById('pdfExportBtn').style.display='block';
   document.getElementById('sideList').innerHTML = ordered.map((r,i)=>`
     <div class="res-item" onclick="focusResult(${batchResults.indexOf(r)})">
       <div class="ri-addr">${i+1}. ${r.addr}</div>
@@ -1539,6 +1622,7 @@ function renderDistrictList(){
   if(!document.getElementById('tabDistrict').classList.contains('active')) return;
   document.getElementById('sideTitle').textContent = districtConditions.length ? `선택된 조건 ${districtConditions.length}건` : '행정구역 조회';
   document.getElementById('exportBtn').style.display='none';
+  document.getElementById('pdfExportBtn').style.display='none';
   const list=document.getElementById('sideList');
   if(!districtConditions.length){
     list.innerHTML='<div class="res-empty">위 검색창에서 지역명(예: 인천 삼산동, 서울특별시, 목동)이나 주소를 입력해 추가하세요.<br>여러 개를 동시에 추가할 수 있습니다(다중조건).</div>';
@@ -1963,6 +2047,7 @@ function renderLeadList(){
   const leadCount=leadResults.filter(l=>l.isLead).length;
   document.getElementById('sideTitle').textContent = leadResults.length ? `영업기회 ${leadCount}건 / 전체 ${leadResults.length}건` : '영업분석';
   document.getElementById('exportBtn').style.display = leadResults.length ? 'block' : 'none';
+  document.getElementById('pdfExportBtn').style.display = leadResults.length ? 'block' : 'none';
   if(!leadResults.length){
     list.innerHTML='<div class="res-empty">위의 "영업분석" 바에서 색상 구분·밀집도·리포트를 확인하거나,<br>"영업기회 발굴 대상"에서 아파트/상가 등을 찾아보세요.<br>기존 설치주소로부터 일정 거리 이상 떨어진 곳을 🎯로 표시합니다.</div>';
     return;
@@ -2014,6 +2099,7 @@ function renderSideList(){
   const okCount=filtered.filter(r=>r.ok).length;
   document.getElementById('sideTitle').textContent=`결과 ${okCount}/${filtered.length}건 표시 중 (전체 ${batchResults.length}건)`;
   document.getElementById('exportBtn').style.display=batchResults.length?'block':'none';
+  document.getElementById('pdfExportBtn').style.display=batchResults.length?'block':'none';
   const list=document.getElementById('sideList');
   if(!filtered.length){list.innerHTML='<div class="res-empty">조건에 맞는 결과가 없습니다.</div>';return;}
   const nameCol=guessNameCol(headers);
@@ -2050,6 +2136,89 @@ function exportBatchResults(){
   XLSX.utils.book_append_sheet(wb,ws,'지도위치확인');
   const dateStr=new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb,`지도위치확인_${dateStr}.xlsx`);
+}
+
+// ═══════════════════════════════════════════════
+//  현재 적용된 조건으로 필터링된 결과를 인쇄용 HTML로 열어 PDF로 저장할 수 있게 한다
+//  (라이브러리 없이 브라우저 인쇄 대화상자의 "PDF로 저장"을 그대로 활용 — 지도 타일처럼
+//  캡처가 까다로운 요소 없이 표 형태 결과만 다루므로 이 방식이 가장 안전하다)
+// ═══════════════════════════════════════════════
+function buildConditionSummary(){
+  const lines=[];
+  if(regionLock.region1 || regionLock.region2){
+    lines.push(`관리자 지역 잠금: ${[regionLock.region1, regionLock.region2].filter(Boolean).join(' ')}`);
+  }
+  if(regionFilter.region1 || regionFilter.region2 || regionFilter.region3){
+    lines.push(`행정구역 조회: ${[regionFilter.region1, regionFilter.region2, regionFilter.region3].filter(Boolean).join(' ')}`);
+  }
+  if(districtFilterActive && districtConditions.length){
+    lines.push(`선택 지역 조건: ${districtConditions.map(c=>c.label).join(', ')}`);
+  }
+  if(activeTagFilters.size){
+    lines.push(`태그 필터: ${[...activeTagFilters].join(', ')}`);
+  }
+  if(radiusFilter){
+    lines.push(`반경 필터: 중심점에서 ${radiusFilter.km}km 이내`);
+  }
+  if(quickSearchText){
+    lines.push(`빠른 검색어: "${quickSearchText}"`);
+  }
+  for(const col in columnFilters){
+    lines.push(`${col}: ${[...columnFilters[col]].join(', ')}`);
+  }
+  advancedFilters.filter(f=>f.col && f.val!=='').forEach(f=>{
+    lines.push(`${f.col} ${f.op} ${f.val}`);
+  });
+  return lines;
+}
+
+function exportPdfReport(){
+  let title, cols, rows, condLines=[];
+  if(document.getElementById('tabBiz').classList.contains('active') && leadResults.length){
+    title='영업분석 결과';
+    cols=['시설명','주소','영업기회','최근접 고객 거리(m)'];
+    rows=leadResults.map(l=>({'시설명':l.name, '주소':l.addr, '영업기회':l.isLead?'O':'X', '최근접 고객 거리(m)':l.nearestM===Infinity?'':l.nearestM}));
+  }else if(window.__lastRoute && window.__lastRoute.length){
+    title='동선 최적화 결과';
+    cols=['설치주소','이전 지점부터 거리(km)'];
+    rows=window.__lastRoute.map(r=>({'설치주소':r.addr, '이전 지점부터 거리(km)':r.legKm.toFixed(2)}));
+  }else{
+    title='지도위치확인 결과';
+    condLines=buildConditionSummary();
+    const filtered=batchResults.filter(passesFilters);
+    cols=['주소','확인결과','매칭주소','태그'];
+    rows=filtered.map(r=>({'주소':r.addr, '확인결과':r.ok?'확인됨':'위치 찾을 수 없음', '매칭주소':r.matched||'', '태그':getTags(r.addr).join(', ')}));
+  }
+  if(!rows.length){ alert('내보낼 결과가 없습니다.'); return; }
+  openPrintReport(title, condLines, cols, rows);
+}
+
+function openPrintReport(title, condLines, cols, rows){
+  const win=window.open('', '_blank');
+  if(!win){ alert('팝업이 차단되어 인쇄 화면을 열 수 없습니다. 브라우저의 팝업 차단을 해제해주세요.'); return; }
+  const dateStr=new Date().toLocaleString('ko-KR');
+  const theadHtml=cols.map(c=>`<th>${escHtml(c)}</th>`).join('');
+  const tbodyHtml=rows.map((r,i)=>`<tr><td>${i+1}</td>${cols.map(c=>`<td>${escHtml(r[c])}</td>`).join('')}</tr>`).join('');
+  win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${escHtml(title)}</title>
+<style>
+  @page{margin:16mm 12mm}
+  body{font-family:'Malgun Gothic','Noto Sans KR',sans-serif;color:#111;font-size:11px;margin:0;padding:16px}
+  h1{font-size:17px;margin:0 0 4px}
+  .meta{color:#555;font-size:10.5px;margin-bottom:12px}
+  .cond{margin:0 0 14px;padding:9px 11px;background:#f4f6fb;border:1px solid #dbe0ee;border-radius:6px;font-size:10.5px}
+  .cond div{margin:2px 0}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #ccc;padding:4px 6px;text-align:left;font-size:10.5px;word-break:break-all}
+  th{background:#eef1fa}
+  tbody tr:nth-child(even){background:#fafbfd}
+</style></head><body>
+<h1>${escHtml(title)}</h1>
+<div class="meta">생성일시: ${escHtml(dateStr)} · 총 ${rows.length}건</div>
+${condLines.length?`<div class="cond"><b>적용된 조건</b>${condLines.map(l=>`<div>· ${escHtml(l)}</div>`).join('')}</div>`:''}
+<table><thead><tr><th>#</th>${theadHtml}</tr></thead><tbody>${tbodyHtml}</tbody></table>
+</body></html>`);
+  win.document.close();
+  setTimeout(()=>{ try{ win.focus(); win.print(); }catch{} }, 200);
 }
 
 // ═══════════════════════════════════════════════
@@ -2195,6 +2364,7 @@ function renderPoiList(){
   if(!document.getElementById('tabPlaces').classList.contains('active')) return;
   const list=document.getElementById('sideList');
   document.getElementById('exportBtn').style.display='none';
+  document.getElementById('pdfExportBtn').style.display='none';
   if(!poiMarkers.length){ list.innerHTML='<div class="res-empty">키워드로 주변시설을 검색해보세요. 카카오 API는 평점 정보를 제공하지 않아, 가까운 순으로 보여주고 카카오맵 상세페이지로 리뷰 확인 링크를 제공합니다.</div>'; return; }
   document.getElementById('sideTitle').textContent=`주변시설 ${poiMarkers.length}건 (가까운 순)`;
   list.innerHTML=poiMarkers.map((p,i)=>`
