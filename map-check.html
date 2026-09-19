@@ -61,6 +61,14 @@ input[type=number]{width:70px;cursor:text}
 .marker-cat-chip{display:flex;align-items:center;gap:5px;padding:5px 9px;background:var(--surface);border:1px solid var(--border);border-radius:14px;font-size:10.5px;color:var(--text2);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55}
 .marker-cat-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--chip-color)}
 .marker-cat-chip.on{color:var(--text);opacity:1;border-color:var(--chip-color)}
+.mgmt-zone-chip{display:flex;align-items:center;gap:6px;padding:4px 9px 4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);opacity:.55}
+.mgmt-zone-chip.on{color:var(--text);opacity:1}
+.mgmt-zone-chip input[type=color]{width:16px;height:16px;padding:0;border:none;border-radius:50%;overflow:hidden;cursor:pointer;background:none}
+.mgmt-zone-chip input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.mgmt-zone-chip input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+#mgmtDashboardTable th,#mgmtDashboardTable td{border:1px solid var(--border);padding:6px 8px;text-align:left}
+#mgmtDashboardTable th{background:var(--surface2);color:var(--text2);font-weight:600}
+#mgmtDashboardTable td.num{text-align:right;font-variant-numeric:tabular-nums}
 .btn-mapaction{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:all .15s}
 .btn-mapaction:hover{border-color:var(--accent);color:var(--accent)}
 .btn-mapaction.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.1)}
@@ -201,6 +209,7 @@ input[type=number]{width:70px;cursor:text}
     <button class="mode-tab" id="tabPlaces" onclick="switchMode('places')">주변시설 검색</button>
     <button class="mode-tab" id="tabBiz" onclick="switchMode('biz')">영업분석</button>
     <button class="mode-tab" id="tabDistrict" onclick="switchMode('district')">행정구역</button>
+    <button class="mode-tab" id="tabMgmt" onclick="switchMode('mgmt')">관리구역</button>
   </div>
 
   <button class="btn ghost sm" id="adminBtn" style="margin-left:8px;flex-shrink:0" onclick="openAdminRegionPanel()" title="관리자: 표시 지역 제한 설정">🔒 관리자</button>
@@ -241,12 +250,22 @@ input[type=number]{width:70px;cursor:text}
     <button class="btn ghost" id="districtFilterBtn" onclick="applyDistrictFilterToBatch()" disabled title="파일 업로드에서 조회한 데이터가 있어야 씁니다">🧭 이 지역들로 배치 데이터 필터링</button>
   </div>
 
+  <div class="searchbar" id="mgmtBar" style="display:none">
+    <select id="mgmtGroupCol" title="관리본부/관리지사/영업구역/기술구역/출동구역 등 조직·구역 컬럼을 골라주세요"><option value="">그룹 기준 컬럼 선택</option></select>
+    <select id="mgmtRevenueCol" title="선택하면 구역별 합계를 함께 표시합니다(백만원 단위)"><option value="">매출 합계: 사용 안 함</option></select>
+    <button class="btn sm" onclick="applyMgmtZones()">적용</button>
+    <button class="btn ghost sm" onclick="clearMgmtZones()">지우기</button>
+    <button class="btn ghost sm" onclick="openMgmtDashboard()">📊 대시보드</button>
+  </div>
+
 </div>
 
 <div class="cat-chips" id="districtChipsBar" style="display:none">
   <span style="font-size:11px;color:var(--text2);align-self:center">선택된 조건:</span>
   <div id="districtChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
 </div>
+
+<div class="cat-chips" id="mgmtZoneChipsBar" style="display:none"></div>
 
 <div class="cat-chips" id="catChips" style="display:none">
   <span class="cat-chip" onclick="quickPlacesSearch('맛집')">🍽 맛집</span>
@@ -384,6 +403,22 @@ input[type=number]{width:70px;cursor:text}
   </div>
 </div>
 
+<!-- 관리구역 대시보드 모달(여러 구역을 한 화면에서 비교) -->
+<div class="modal-overlay" id="mgmtDashboardModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-head"><h3>📊 관리구역 대시보드</h3><button class="modal-close" onclick="closeMgmtDashboard()">✕</button></div>
+    <div class="modal-body">
+      <div id="mgmtDashboardSummary" style="margin-bottom:10px;font-size:11.5px;color:var(--text2)"></div>
+      <div style="overflow-x:auto">
+        <table id="mgmtDashboardTable" style="width:100%;border-collapse:collapse;font-size:11.5px"></table>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="exportMgmtDashboardPdf()">📄 PDF 다운로드</button>
+    </div>
+  </div>
+</div>
+
 <!-- 로드뷰 모달 -->
 <div class="roadview-overlay" id="roadviewOverlay">
   <div class="roadview-box">
@@ -453,6 +488,9 @@ let quickSearchText=''; // 상호(업체명 등) 빠른 검색어
 let regionFilter={region1:'', region2:'', region3:''}; // 시/군/구/읍면동 단위 조회 필터
 let dongBoundaries=null; // 전국 읍면동 경계 GeoJSON(지연 로딩)
 let districtConditions=[]; // [{id,label,type:'polygon'|'marker',color,features?,lat?,lng?,mapObjs:[]}]
+let mgmtGroupCol=''; // 관리본부/관리지사/영업구역/기술구역/출동구역 등 — 관리구역 색상 구분 기준 컬럼
+let mgmtRevenueCol=''; // 구역별 합계로 표시할 숫자 컬럼(선택, 매출 등)
+let mgmtZones=[]; // [{name,color,sigunguSet:Set('시도|시군구'),rows,count,revenueSum,mapObjs:[],overlay,visible}]
 let districtFilterActive=false;
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
@@ -649,17 +687,20 @@ function switchMode(mode){
   document.getElementById('tabPlaces').classList.toggle('active',mode==='places');
   document.getElementById('tabBiz').classList.toggle('active',mode==='biz');
   document.getElementById('tabDistrict').classList.toggle('active',mode==='district');
+  document.getElementById('tabMgmt').classList.toggle('active',mode==='mgmt');
   document.getElementById('singleBar').style.display=mode==='single'?'flex':'none';
   document.getElementById('batchBar').style.display=mode==='batch'?'flex':'none';
   document.getElementById('placesBar').style.display=mode==='places'?'flex':'none';
   document.getElementById('bizBar').style.display=mode==='biz'?'flex':'none';
   document.getElementById('districtBar').style.display=mode==='district'?'flex':'none';
-  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places'||mode==='biz'||mode==='district')?'flex':'none';
+  document.getElementById('mgmtBar').style.display=mode==='mgmt'?'flex':'none';
+  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places'||mode==='biz'||mode==='district'||mode==='mgmt')?'flex':'none';
   document.getElementById('filterBar').classList.toggle('show', mode==='batch' && batchResults.length>0);
   document.getElementById('catChips').style.display = mode==='places' ? 'flex' : 'none';
   document.getElementById('bizChips').style.display = mode==='biz' ? 'flex' : 'none';
   document.getElementById('bizReportBar').classList.toggle('show', mode==='biz');
   document.getElementById('districtChipsBar').style.display = mode==='district' ? 'flex' : 'none';
+  document.getElementById('mgmtZoneChipsBar').style.display = (mode==='mgmt' && mgmtZones.length) ? 'flex' : 'none';
   document.getElementById('singleCard').classList.remove('show');
   if(mode==='places'){ document.getElementById('sideTitle').textContent='주변시설 검색 결과'; renderPoiList(); }
   else if(mode==='batch'){ renderSideList(); }
@@ -667,6 +708,11 @@ function switchMode(mode){
     ensureMap(); loadDongBoundaries();
     document.getElementById('districtFilterBtn').disabled = !batchResults.some(r=>r.ok);
     renderDistrictList();
+  }
+  else if(mode==='mgmt'){
+    ensureMap(); loadDongBoundaries();
+    buildMgmtColumnOptions();
+    renderMgmtSideList();
   }
   else if(mode==='biz'){
     if(!batchResults.length){
@@ -1232,6 +1278,7 @@ async function runBatchSearch(){
     }
     buildFilterColumnOptions();
     buildRegionFilterOptions();
+    buildMgmtColumnOptions();
     document.getElementById('filterBar').classList.add('show');
     renderSideList();
     scheduleSaveDraft();
@@ -1684,6 +1731,224 @@ function applyDistrictFilterToBatch(){
 }
 
 // ═══════════════════════════════════════════════
+//  관리구역 (관리본부/관리지사/영업구역/기술구역/출동구역 등 조직·구역 컬럼 기준으로
+//  업로드 데이터를 그룹화해, 각 그룹이 걸쳐 있는 시/군/구를 행정구역 경계 데이터로
+//  색칠하고 그 위에 "관리고객 N개소 / 매출 M백만원" 같은 요약을 얹어 보여준다.
+//  목적: 관리본부·지사·영업구역별로 담당 지역이 지도에서 한눈에 들어오게 하는 것)
+// ═══════════════════════════════════════════════
+const MGMT_GROUP_COL_HINTS=['관리본부','관리지사','영업구역','기술구역','출동구역'];
+
+function buildMgmtColumnOptions(){
+  const groupSel=document.getElementById('mgmtGroupCol');
+  const revSel=document.getElementById('mgmtRevenueCol');
+  if(!groupSel || !revSel || !headers.length) return;
+  const prevGroup=groupSel.value, prevRev=revSel.value;
+  groupSel.innerHTML='<option value="">그룹 기준 컬럼 선택</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+  revSel.innerHTML='<option value="">매출 합계: 사용 안 함</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
+  const hintCol=headers.find(h=>MGMT_GROUP_COL_HINTS.includes(String(h).trim()));
+  groupSel.value = prevGroup && headers.includes(prevGroup) ? prevGroup : (hintCol||'');
+  revSel.value = prevRev && headers.includes(prevRev) ? prevRev : '';
+}
+
+// 시/군/구 하나에 속하는 읍/면/동 경계들을 모두 찾는다(여러 개를 같은 색으로 이어
+// 칠하면 시/군/구 하나를 칠한 것처럼 보인다). 시/도를 함께 주면 "중구"처럼 여러
+// 시/도에 같은 이름이 있는 경우(서울/부산/대구/인천 중구 등)를 정확히 구분한다.
+function findSigunguFeatures(sido, sigungu){
+  if(!dongBoundaries || !sigungu) return [];
+  const sidoResolved=resolveSidoName(sido||'');
+  let matches=dongBoundaries.filter(f=>f.properties.sggnm===sigungu && (!sidoResolved || f.properties.sidonm===sidoResolved));
+  if(!matches.length) matches=dongBoundaries.filter(f=>f.properties.sggnm===sigungu || f.properties.sggnm.endsWith(sigungu));
+  return matches;
+}
+
+function parseNumericLoose(v){
+  const n=parseFloat(String(v??'').replace(/[^0-9.-]/g,''));
+  return isNaN(n) ? 0 : n;
+}
+function formatMillionWon(sum){
+  return (sum/1000000).toLocaleString('ko-KR',{maximumFractionDigits:1})+'백만원';
+}
+function mgmtZoneStatsText(z){
+  let t=`관리고객 ${z.count.toLocaleString()}개소`;
+  if(mgmtRevenueCol) t+=` / ${escHtml(mgmtRevenueCol)} ${formatMillionWon(z.revenueSum)}`;
+  return t;
+}
+
+async function applyMgmtZones(){
+  const groupCol=document.getElementById('mgmtGroupCol').value;
+  if(!groupCol){ alert('그룹 기준 컬럼(예: 관리본부, 관리지사, 영업구역, 기술구역, 출동구역)을 선택해주세요.'); return; }
+  if(!batchResults.some(r=>r.ok)){ alert('먼저 "파일 업로드"에서 시/군/구를 알 수 있는 주소로 조회를 마쳐주세요.'); return; }
+  mgmtGroupCol=groupCol;
+  mgmtRevenueCol=document.getElementById('mgmtRevenueCol').value;
+  await ensureMap();
+  await loadDongBoundaries();
+
+  const prevColors={}, prevVisible={};
+  mgmtZones.forEach(z=>{ prevColors[z.name]=z.color; prevVisible[z.name]=z.visible; });
+  clearMgmtZoneMapObjs();
+
+  const groups=new Map();
+  batchResults.filter(r=>r.ok).forEach(r=>{
+    const val=String((r.row||{})[groupCol]??'').trim();
+    if(!val) return;
+    if(!groups.has(val)) groups.set(val, {rows:[], sigunguSet:new Set()});
+    const g=groups.get(val);
+    g.rows.push(r);
+    if(r.region2) g.sigunguSet.add(`${r.region1}|${r.region2}`);
+  });
+
+  const names=[...groups.keys()].sort((a,b)=>groups.get(b).rows.length-groups.get(a).rows.length);
+  if(!names.length){ alert(`"${groupCol}" 컬럼에 값이 있는 행이 없습니다.`); mgmtZones=[]; renderMgmtZoneChips(); renderMgmtSideList(); return; }
+
+  mgmtZones=names.map((name,i)=>{
+    const g=groups.get(name);
+    const revenueSum = mgmtRevenueCol ? g.rows.reduce((s,r)=>s+parseNumericLoose((r.row||{})[mgmtRevenueCol]),0) : 0;
+    return {
+      name, color: prevColors[name] || DISTRICT_COLORS[i % DISTRICT_COLORS.length],
+      visible: prevVisible[name]!==undefined ? prevVisible[name] : true,
+      sigunguSet:g.sigunguSet, rows:g.rows, count:g.rows.length, revenueSum,
+      mapObjs:[], overlay:null
+    };
+  });
+  renderMgmtZones(true);
+  renderMgmtZoneChips();
+  renderMgmtSideList();
+}
+
+function renderMgmtZones(fitBounds){
+  if(!map) return;
+  const allBounds=new kakao.maps.LatLngBounds();
+  let anyDrawnAtAll=false;
+  mgmtZones.forEach(z=>{
+    z.mapObjs.forEach(o=>o.setMap(null)); z.mapObjs=[];
+    if(z.overlay){ z.overlay.setMap(null); z.overlay=null; }
+    if(!z.visible) return;
+    const bounds=new kakao.maps.LatLngBounds();
+    let anyDrawn=false;
+    z.sigunguSet.forEach(key=>{
+      const [sido,sigungu]=key.split('|');
+      findSigunguFeatures(sido,sigungu).forEach(f=>{
+        geoJsonToKakaoPaths(f.geometry).forEach(path=>{
+          const poly=new kakao.maps.Polygon({path, strokeWeight:2, strokeColor:z.color, strokeOpacity:0.9, fillColor:z.color, fillOpacity:0.3});
+          poly.setMap(map);
+          path.forEach(p=>{ bounds.extend(p); allBounds.extend(p); });
+          z.mapObjs.push(poly);
+          anyDrawn=true; anyDrawnAtAll=true;
+        });
+      });
+    });
+    if(anyDrawn){
+      // kakao.maps.LatLngBounds에는 getCenter()가 없어서 남서/북동 꼭짓점의 중점으로 직접 계산한다.
+      const sw=bounds.getSouthWest(), ne=bounds.getNorthEast();
+      const center=new kakao.maps.LatLng((sw.getLat()+ne.getLat())/2, (sw.getLng()+ne.getLng())/2);
+      const content=`<div style="background:${z.color};color:#fff;padding:5px 10px;border-radius:6px;font-size:11.5px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4);text-align:center">${escHtml(z.name)}<br><span style="font-weight:500;font-size:10px">${escHtml(mgmtZoneStatsText(z))}</span></div>`;
+      const overlay=new kakao.maps.CustomOverlay({position:center, content, yAnchor:0.5, zIndex:30});
+      overlay.setMap(map);
+      z.overlay=overlay;
+    }
+  });
+  // 관리본부/지사별로 담당 지역이 지도에서 "한눈에" 보이는 게 목적이므로, 새로 적용했을
+  // 때는 전체 구역이 다 들어오게 화면을 맞춘다(색상만 바꾸거나 켜고 끌 때는 시점을 유지).
+  if(fitBounds && anyDrawnAtAll) map.setBounds(allBounds);
+}
+
+function renderMgmtZoneChips(){
+  const bar=document.getElementById('mgmtZoneChipsBar');
+  if(!bar) return;
+  if(!mgmtZones.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  bar.innerHTML=`<span style="font-size:11px;color:var(--text2);align-self:center">${escHtml(mgmtGroupCol)}별 관리구역(${mgmtZones.length}개):</span>`+
+    mgmtZones.map((z,i)=>`
+      <span class="mgmt-zone-chip${z.visible?' on':''}">
+        <input type="color" value="${z.color}" oninput="setMgmtZoneColor(${i},this.value)" title="색상 변경" onclick="event.stopPropagation()">
+        <span onclick="toggleMgmtZoneVisible(${i})" style="cursor:pointer">${escHtml(z.name)} · ${z.count}개소</span>
+      </span>
+    `).join('');
+}
+function toggleMgmtZoneVisible(i){ mgmtZones[i].visible=!mgmtZones[i].visible; renderMgmtZones(); renderMgmtZoneChips(); renderMgmtSideList(); }
+function setMgmtZoneColor(i,color){ mgmtZones[i].color=color; renderMgmtZones(); renderMgmtZoneChips(); renderMgmtSideList(); }
+function clearMgmtZoneMapObjs(){
+  mgmtZones.forEach(z=>{ z.mapObjs.forEach(o=>o.setMap(null)); if(z.overlay) z.overlay.setMap(null); });
+}
+function clearMgmtZones(){
+  clearMgmtZoneMapObjs();
+  mgmtZones=[];
+  renderMgmtZoneChips();
+  renderMgmtSideList();
+}
+
+function renderMgmtSideList(){
+  if(!document.getElementById('tabMgmt').classList.contains('active')) return;
+  document.getElementById('sideTitle').textContent = mgmtZones.length ? `${mgmtGroupCol} 관리구역 ${mgmtZones.length}개` : '관리구역';
+  document.getElementById('exportBtn').style.display = mgmtZones.length ? 'block' : 'none';
+  document.getElementById('pdfExportBtn').style.display = mgmtZones.length ? 'block' : 'none';
+  const list=document.getElementById('sideList');
+  if(!mgmtZones.length){
+    list.innerHTML = batchResults.some(r=>r.ok)
+      ? '<div class="res-empty">위의 "그룹 기준 컬럼"에서 관리본부·관리지사·영업구역 등을 고른 뒤 "적용"을 눌러주세요.</div>'
+      : '<div class="res-empty">관리구역은 먼저 설치주소 목록이 있어야 합니다.<br><button class="btn sm" style="margin-top:8px" onclick="switchMode(\'batch\')">📄 파일 업로드하러 가기</button></div>';
+    return;
+  }
+  list.innerHTML=[...mgmtZones].sort((a,b)=>b.count-a.count).map(z=>{
+    const i=mgmtZones.indexOf(z);
+    const sigunguLabel=[...z.sigunguSet].map(k=>k.split('|')[1]).join(', ') || '(시/군/구 확인 안 됨)';
+    return `
+    <div class="res-item" onclick="focusMgmtZone(${i})" style="border-left:3px solid ${z.color}">
+      <div class="ri-addr">${escHtml(z.name)}</div>
+      <div class="ri-sub">${escHtml(sigunguLabel)}</div>
+      <div class="ri-sub">${escHtml(mgmtZoneStatsText(z))}</div>
+    </div>`;
+  }).join('');
+}
+function focusMgmtZone(i){
+  const z=mgmtZones[i];
+  if(!z || !z.mapObjs.length) return;
+  const bounds=new kakao.maps.LatLngBounds();
+  z.mapObjs.forEach(poly=>poly.getPath().forEach(p=>bounds.extend(p)));
+  map.setBounds(bounds);
+}
+
+// ── 관리구역 대시보드(구역이 여러 개일 때 지도를 눈으로 훑는 대신 표 하나로 비교) ──
+function openMgmtDashboard(){
+  if(!mgmtZones.length){ alert('먼저 그룹 기준 컬럼을 골라 "적용"을 눌러주세요.'); return; }
+  renderMgmtDashboardTable();
+  document.getElementById('mgmtDashboardModal').classList.add('show');
+}
+function closeMgmtDashboard(){ document.getElementById('mgmtDashboardModal').classList.remove('show'); }
+function renderMgmtDashboardTable(){
+  const totalCount=mgmtZones.reduce((s,z)=>s+z.count,0);
+  const totalRevenue=mgmtZones.reduce((s,z)=>s+z.revenueSum,0);
+  document.getElementById('mgmtDashboardSummary').textContent=
+    `${mgmtGroupCol} 기준 ${mgmtZones.length}개 구역 · 총 ${totalCount.toLocaleString()}개소`+
+    (mgmtRevenueCol ? ` · 총 ${mgmtRevenueCol} ${formatMillionWon(totalRevenue)}` : '');
+  const revTh=mgmtRevenueCol ? `<th>${escHtml(mgmtRevenueCol)}(백만원)</th>` : '';
+  const rowsHtml=[...mgmtZones].sort((a,b)=>b.count-a.count).map(z=>{
+    const sigunguLabel=[...z.sigunguSet].map(k=>k.split('|')[1]).join(', ');
+    const revTd=mgmtRevenueCol ? `<td class="num">${(z.revenueSum/1000000).toLocaleString('ko-KR',{maximumFractionDigits:1})}</td>` : '';
+    return `<tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${z.color};margin-right:5px;vertical-align:middle"></span>${escHtml(z.name)}</td>
+      <td>${escHtml(sigunguLabel)}</td>
+      <td class="num">${z.count.toLocaleString()}</td>
+      ${revTd}
+    </tr>`;
+  }).join('');
+  document.getElementById('mgmtDashboardTable').innerHTML=
+    `<thead><tr><th>${escHtml(mgmtGroupCol)}</th><th>포함 시/군/구</th><th>개소수</th>${revTh}</tr></thead><tbody>${rowsHtml}</tbody>`;
+}
+function exportMgmtDashboardPdf(){
+  const cols=mgmtRevenueCol ? [mgmtGroupCol,'포함 시/군/구','개소수', `${mgmtRevenueCol}(백만원)`] : [mgmtGroupCol,'포함 시/군/구','개소수'];
+  const rows=[...mgmtZones].sort((a,b)=>b.count-a.count).map(z=>{
+    const row={ [mgmtGroupCol]:z.name, '포함 시/군/구':[...z.sigunguSet].map(k=>k.split('|')[1]).join(', '), '개소수':z.count.toLocaleString() };
+    if(mgmtRevenueCol) row[`${mgmtRevenueCol}(백만원)`]=(z.revenueSum/1000000).toLocaleString('ko-KR',{maximumFractionDigits:1});
+    return row;
+  });
+  const totalCount=mgmtZones.reduce((s,z)=>s+z.count,0);
+  const condLines=[`총 ${mgmtZones.length}개 구역 · 총 ${totalCount.toLocaleString()}개소`];
+  if(mgmtRevenueCol) condLines.push(`총 ${mgmtRevenueCol} ${formatMillionWon(mgmtZones.reduce((s,z)=>s+z.revenueSum,0))}`);
+  openPrintReport(`${mgmtGroupCol} 관리구역 대시보드`, condLines, cols, rows);
+}
+
+// ═══════════════════════════════════════════════
 //  관리자: 표시 지역 잠금 (Supabase에 저장 — 이 링크를 여는 모든 사용자에게 적용)
 // ═══════════════════════════════════════════════
 async function loadRegionLock(){
@@ -2070,6 +2335,19 @@ function focusLead(i){
 // 영업분석 모드의 엑셀 내보내기는 리드 목록이 있으면 그걸, 없으면 기존 배치결과 내보내기를 재사용한다.
 // (exportBatchResults는 아래 "결과 목록 렌더링" 섹션에 정의되어 있다.)
 function exportResults(){
+  if(document.getElementById('tabMgmt').classList.contains('active') && mgmtZones.length){
+    const rows=[...mgmtZones].sort((a,b)=>b.count-a.count).map(z=>{
+      const row={ [mgmtGroupCol]:z.name, '포함 시/군/구':[...z.sigunguSet].map(k=>k.split('|')[1]).join(', '), 개소수:z.count };
+      if(mgmtRevenueCol) row[`${mgmtRevenueCol}(백만원)`]=Math.round((z.revenueSum/1000000)*10)/10;
+      return row;
+    });
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'관리구역');
+    const dateStr=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`관리구역_${dateStr}.xlsx`);
+    return;
+  }
   if(document.getElementById('tabBiz').classList.contains('active') && leadResults.length){
     const rows=leadResults.map(l=>({시설명:l.name, 주소:l.addr, 영업기회:l.isLead?'O':'X', 최근접고객거리_m:l.nearestM===Infinity?'':l.nearestM}));
     const ws=XLSX.utils.json_to_sheet(rows);
@@ -2173,6 +2451,10 @@ function buildConditionSummary(){
 }
 
 function exportPdfReport(){
+  if(document.getElementById('tabMgmt').classList.contains('active') && mgmtZones.length){
+    exportMgmtDashboardPdf();
+    return;
+  }
   let title, cols, rows, condLines=[];
   if(document.getElementById('tabBiz').classList.contains('active') && leadResults.length){
     title='영업분석 결과';
