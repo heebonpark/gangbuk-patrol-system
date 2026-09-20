@@ -93,6 +93,19 @@ input[type=number]{width:70px;cursor:text}
 .mgmt-alias-item{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px}
 .mgmt-alias-item .arrow{color:var(--text3)}
 .mgmt-alias-item .x{margin-left:auto;color:var(--red);cursor:pointer;font-size:14px}
+.task-history-item{padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;margin-bottom:6px}
+.task-status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:700;color:#fff}
+.task-history-item img{max-width:100%;border-radius:6px;margin-top:6px;display:block}
+.task-list-item{display:flex;gap:10px;padding:9px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);margin-bottom:6px}
+.task-list-item:hover{border-color:var(--accent)}
+.task-list-thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--surface3)}
+.task-list-thumb-empty{display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.task-list-info{min-width:0;flex:1}
+.task-list-title{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.task-list-sub{font-size:10.5px;color:var(--text2);margin-top:2px}
+.task-list-memo{font-size:11px;color:var(--text2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task-status-chip{padding:4px 10px;border-radius:14px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);opacity:.6}
+.task-status-chip.on{opacity:1;color:var(--text)}
 .btn-mapaction{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:11.5px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.5);transition:all .15s}
 .btn-mapaction:hover{border-color:var(--accent);color:var(--accent)}
 .btn-mapaction.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.1)}
@@ -258,6 +271,7 @@ input[type=number]{width:70px;cursor:text}
     <button class="mode-tab" id="tabMgmt" onclick="switchMode('mgmt')">관리구역</button>
     <button class="mode-tab" id="tabAnalytics" onclick="switchMode('analytics')">분석</button>
     <button class="mode-tab" id="tabPatrol" onclick="switchMode('patrol')">🚓 순찰현황</button>
+    <button class="mode-tab" id="tabTask" onclick="switchMode('task')">✅ 업무현황</button>
   </div>
 
   <button class="btn ghost sm" id="adminBtn" style="margin-left:8px;flex-shrink:0" onclick="openAdminRegionPanel()" title="관리자: 표시 지역 제한 설정">🔒 관리자</button>
@@ -326,6 +340,11 @@ input[type=number]{width:70px;cursor:text}
     <span id="patrolShareStatus" style="font-size:10.5px;color:var(--text2)"></span>
   </div>
 
+  <div class="searchbar" id="taskBar" style="display:none">
+    <input type="text" id="taskSearchInput" placeholder="시설명·주소·담당자·메모 검색" oninput="renderTaskList()" style="flex:1;min-width:160px">
+    <button class="btn ghost sm" onclick="loadAllTaskResults()">🔄 새로고침</button>
+  </div>
+
 </div>
 
 <div class="cat-chips" id="districtChipsBar" style="display:none">
@@ -334,6 +353,8 @@ input[type=number]{width:70px;cursor:text}
 </div>
 
 <div class="cat-chips" id="mgmtZoneChipsBar" style="display:none"></div>
+
+<div class="cat-chips" id="taskStatusChipsBar" style="display:none"></div>
 
 <div class="filter-bar" id="mgmtCondBar" style="display:none">
   <select id="mgmtCondCol1" onchange="onMgmtConditionColChange(1)"></select>
@@ -538,6 +559,23 @@ input[type=number]{width:70px;cursor:text}
           <button class="btn sm" onclick="addTag()">추가</button>
         </div>
         <div id="detailTags" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"></div>
+      </div>
+      <div class="modal-section">
+        <h4>처리 현황</h4>
+        <div id="detailTaskHistory" style="margin-bottom:10px"></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <input type="text" id="taskSubmitterInput" placeholder="담당자 이름">
+          <select id="taskStatusSelect"></select>
+          <textarea id="taskMemoInput" placeholder="처리 내용 메모(선택)" rows="2" style="padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;resize:vertical;font-family:inherit"></textarea>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);cursor:pointer">
+            📷 사진 첨부(선택)
+            <input type="file" id="taskPhotoInput" accept="image/*" style="font-size:11px;flex:1" onchange="onTaskPhotoSelected(event)">
+          </label>
+          <div id="taskPhotoPreviewWrap" style="display:none">
+            <img id="taskPhotoPreview" style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid var(--border)">
+          </div>
+          <button class="btn sm" onclick="submitTaskResult(this)">처리결과 등록</button>
+        </div>
       </div>
     </div>
     <div class="modal-actions">
@@ -892,6 +930,7 @@ function switchMode(mode){
   document.getElementById('tabMgmt').classList.toggle('active',mode==='mgmt');
   document.getElementById('tabAnalytics').classList.toggle('active',mode==='analytics');
   document.getElementById('tabPatrol').classList.toggle('active',mode==='patrol');
+  document.getElementById('tabTask').classList.toggle('active',mode==='task');
   document.getElementById('singleBar').style.display=mode==='single'?'flex':'none';
   document.getElementById('batchBar').style.display=mode==='batch'?'flex':'none';
   document.getElementById('placesBar').style.display=mode==='places'?'flex':'none';
@@ -902,8 +941,9 @@ function switchMode(mode){
   document.getElementById('mgmtContractBar').style.display=mode==='mgmt'?'flex':'none';
   document.getElementById('analyticsBar').style.display=mode==='analytics'?'flex':'none';
   document.getElementById('patrolBar').style.display=mode==='patrol'?'flex':'none';
+  document.getElementById('taskBar').style.display=mode==='task'?'flex':'none';
   document.querySelector('.map-wrap').style.display = mode==='analytics' ? 'none' : '';
-  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places'||mode==='biz'||mode==='district'||mode==='mgmt'||mode==='patrol')?'flex':'none';
+  document.getElementById('sideBatch').style.display=(mode==='batch'||mode==='places'||mode==='biz'||mode==='district'||mode==='mgmt'||mode==='patrol'||mode==='task')?'flex':'none';
   if(mode==='patrol') startPatrolPolling(); else stopPatrolPolling();
   document.getElementById('analyticsPanel').style.display = mode==='analytics' ? 'block' : 'none';
   document.getElementById('filterBar').classList.toggle('show', mode==='batch' && batchResults.length>0);
@@ -912,6 +952,7 @@ function switchMode(mode){
   document.getElementById('bizReportBar').classList.toggle('show', mode==='biz');
   document.getElementById('districtChipsBar').style.display = mode==='district' ? 'flex' : 'none';
   document.getElementById('mgmtZoneChipsBar').style.display = (mode==='mgmt' && mgmtZones.length) ? 'flex' : 'none';
+  document.getElementById('taskStatusChipsBar').style.display = mode==='task' ? 'flex' : 'none';
   document.getElementById('singleCard').classList.remove('show');
   if(mode==='places'){ document.getElementById('sideTitle').textContent='주변시설 검색 결과'; renderPoiList(); }
   else if(mode==='batch'){ renderSideList(); }
@@ -954,6 +995,10 @@ function switchMode(mode){
       loadLivePositions();
       renderPatrolSideList();
     });
+  }
+  else if(mode==='task'){
+    ensureMap();
+    loadAllTaskResults();
   }
   else if(mode==='biz'){
     if(!batchResults.length){
@@ -1472,30 +1517,39 @@ function showMarkerRegCard(){
   `;
   document.getElementById('markerNameInput').focus();
 }
-function onMarkerPhotoSelected(evt){
+// 사진을 그대로 올리면 Supabase 행 하나가 몇 MB씩 커지니, 셀카/현장사진도 캔버스로
+// 줄여서(가로 최대 480px, JPEG 55%) 저장한다 — 마커 등록/업무처리 등록 공통으로 쓴다.
+function compressImageToDataURL(file, maxW, quality){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const reader=new FileReader();
+    reader.onload=()=>{
+      img.onload=()=>{
+        const scale=Math.min(1, (maxW||480)/img.width);
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.round(img.width*scale);
+        canvas.height=Math.round(img.height*scale);
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality||0.55));
+      };
+      img.onerror=reject;
+      img.src=reader.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onMarkerPhotoSelected(evt){
   const file=evt.target.files && evt.target.files[0];
   if(!file) return;
-  const img=new Image();
-  const reader=new FileReader();
-  reader.onload=()=>{
-    img.onload=()=>{
-      const maxW=480;
-      const scale=Math.min(1, maxW/img.width);
-      const canvas=document.createElement('canvas');
-      canvas.width=Math.round(img.width*scale);
-      canvas.height=Math.round(img.height*scale);
-      const ctx=canvas.getContext('2d');
-      ctx.drawImage(img,0,0,canvas.width,canvas.height);
-      pendingMarkerPhoto=canvas.toDataURL('image/jpeg',0.55);
-      const previewWrap=document.getElementById('markerPhotoPreviewWrap');
-      if(previewWrap){
-        document.getElementById('markerPhotoPreview').src=pendingMarkerPhoto;
-        previewWrap.style.display='block';
-      }
-    };
-    img.src=reader.result;
-  };
-  reader.readAsDataURL(file);
+  pendingMarkerPhoto=await compressImageToDataURL(file);
+  const previewWrap=document.getElementById('markerPhotoPreviewWrap');
+  if(previewWrap){
+    document.getElementById('markerPhotoPreview').src=pendingMarkerPhoto;
+    previewWrap.style.display='block';
+  }
 }
 async function confirmMarkerReg(){
   if(!pendingMarkerPos) return;
@@ -3666,6 +3720,18 @@ function focusLead(i){
 // 영업분석 모드의 엑셀 내보내기는 리드 목록이 있으면 그걸, 없으면 기존 배치결과 내보내기를 재사용한다.
 // (exportBatchResults는 아래 "결과 목록 렌더링" 섹션에 정의되어 있다.)
 function exportResults(){
+  if(document.getElementById('tabTask').classList.contains('active') && allTaskResults.length){
+    const rows=getFilteredTaskResults().map(t=>({
+      상태:t.status, 시설명:t.facility_name||'', 주소:t.addr, 담당자:t.submitted_by||'',
+      구역:t.zone_name||'', 메모:t.memo||'', 등록일시: t.submitted_at ? new Date(t.submitted_at).toLocaleString('ko-KR') : ''
+    }));
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'업무현황');
+    const dateStr=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`업무현황_${dateStr}.xlsx`);
+    return;
+  }
   if(document.getElementById('tabDistrict').classList.contains('active') && districtConditions.length){
     const hasBatchData=batchResults.some(r=>r.ok);
     const rows=districtConditions.map(c=>({
@@ -3808,6 +3874,14 @@ function exportPdfReport(){
     exportMgmtDashboardPdf();
     return;
   }
+  if(document.getElementById('tabTask').classList.contains('active') && allTaskResults.length){
+    const rows=getFilteredTaskResults().map(t=>({
+      '상태':t.status, '시설명':t.facility_name||'', '주소':t.addr, '담당자':t.submitted_by||'',
+      '구역':t.zone_name||'', '등록일시': t.submitted_at ? new Date(t.submitted_at).toLocaleString('ko-KR') : ''
+    }));
+    openPrintReport('업무현황 결과', [], ['상태','시설명','주소','담당자','구역','등록일시'], rows);
+    return;
+  }
   if(document.getElementById('tabDistrict').classList.contains('active') && districtConditions.length){
     const hasBatchData=batchResults.some(r=>r.ok);
     const rows=districtConditions.map(c=>({
@@ -3899,9 +3973,193 @@ function openDetailByAddr(addr){
   }
   document.getElementById('detailCoord').textContent = r && r.lat ? `${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}` : '확인 안 됨';
   renderDetailTags();
+  prepareTaskForm();
+  loadTaskHistoryForAddr(addr);
   document.getElementById('detailModal').classList.add('show');
 }
 function closeDetail(){ document.getElementById('detailModal').classList.remove('show'); currentDetailAddr=null; }
+
+// ═══════════════════════════════════════════════
+//  업무처리(현장 결과 등록) — 담당자가 자기 구역/시설 링크로 들어와 시설마다
+//  처리 상태를 등록하면, 관리자는 "업무현황" 탭에서 전체를 한눈에 확인한다.
+//  상세보기 모달에 누구든(뷰어 모드 포함) 붙어 있는 폼이라, 개별 공유 링크로
+//  시설을 확인한 담당자가 바로 결과를 남길 수 있다.
+// ═══════════════════════════════════════════════
+const TASK_STATUS_OPTIONS=['미처리','처리중','완료','보류'];
+const TASK_STATUS_COLORS={'미처리':'#ef4444','처리중':'#f59e0b','완료':'#22c55e','보류':'#a855f7'};
+const TASK_SUBMITTER_KEY='mapcheck_task_submitter_v1';
+let pendingTaskPhoto=null;
+
+function prepareTaskForm(){
+  const statusSel=document.getElementById('taskStatusSelect');
+  if(statusSel && !statusSel.options.length){
+    statusSel.innerHTML=TASK_STATUS_OPTIONS.map(s=>`<option value="${s}">${s}</option>`).join('');
+  }
+  document.getElementById('taskSubmitterInput').value=localStorage.getItem(TASK_SUBMITTER_KEY)||'';
+  document.getElementById('taskMemoInput').value='';
+  pendingTaskPhoto=null;
+  const previewWrap=document.getElementById('taskPhotoPreviewWrap');
+  if(previewWrap) previewWrap.style.display='none';
+  const photoInput=document.getElementById('taskPhotoInput');
+  if(photoInput) photoInput.value='';
+}
+
+async function onTaskPhotoSelected(evt){
+  const file=evt.target.files && evt.target.files[0];
+  if(!file) return;
+  pendingTaskPhoto=await compressImageToDataURL(file);
+  const previewWrap=document.getElementById('taskPhotoPreviewWrap');
+  if(previewWrap){
+    document.getElementById('taskPhotoPreview').src=pendingTaskPhoto;
+    previewWrap.style.display='block';
+  }
+}
+
+function taskZoneNameForAddr(addr){
+  const r=findResultByAddr(addr);
+  if(!r || !r.row || !mgmtGroupCol) return '';
+  const raw=String(r.row[mgmtGroupCol]??'').trim();
+  return raw ? resolveAlias(raw) : '';
+}
+
+async function submitTaskResult(btn){
+  if(!currentDetailAddr) return;
+  const submitter=(document.getElementById('taskSubmitterInput').value||'').trim();
+  if(!submitter){ alert('담당자 이름을 입력해주세요.'); return; }
+  localStorage.setItem(TASK_SUBMITTER_KEY, submitter);
+  const status=document.getElementById('taskStatusSelect').value;
+  const memo=(document.getElementById('taskMemoInput').value||'').trim();
+  const r=findResultByAddr(currentDetailAddr);
+  const nameCol=guessNameCol(headers);
+  const facilityName = r && r.row && nameCol ? String(r.row[nameCol]??'').trim() : '';
+  const zoneName=taskZoneNameForAddr(currentDetailAddr);
+  const addr=currentDetailAddr;
+  if(btn){ btn.disabled=true; btn.textContent='등록 중...'; }
+  try{
+    const {error}=await sbClient.from('map_check_task_results').insert({
+      addr, facility_name:facilityName, status, memo,
+      photo_data:pendingTaskPhoto, submitted_by:submitter, zone_name:zoneName
+    });
+    if(error) throw error;
+    prepareTaskForm();
+    document.getElementById('taskSubmitterInput').value=submitter; // 이름은 유지(연속 등록 편의)
+    await loadTaskHistoryForAddr(addr);
+    if(document.getElementById('tabTask') && document.getElementById('tabTask').classList.contains('active')) renderTaskList();
+    alert('처리 결과를 등록했습니다.');
+  }catch(e){
+    alert('등록에 실패했습니다: '+e.message);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='처리결과 등록'; }
+  }
+}
+
+async function loadTaskHistoryForAddr(addr){
+  const wrap=document.getElementById('detailTaskHistory');
+  if(!wrap) return;
+  wrap.innerHTML='<div style="font-size:11px;color:var(--text3)">불러오는 중...</div>';
+  try{
+    const {data,error}=await sbClient.from('map_check_task_results').select('*').eq('addr',addr).order('submitted_at',{ascending:false}).limit(5);
+    if(error) throw error;
+    if(!data || !data.length){ wrap.innerHTML='<div style="font-size:11px;color:var(--text3)">아직 등록된 처리 결과가 없습니다.</div>'; return; }
+    wrap.innerHTML=data.map(t=>renderTaskHistoryItem(t)).join('');
+  }catch(e){
+    wrap.innerHTML='<div style="font-size:11px;color:var(--text3)">불러오지 못했습니다.</div>';
+  }
+}
+
+function renderTaskHistoryItem(t){
+  const color=TASK_STATUS_COLORS[t.status]||'#4f8ef7';
+  const dateStr=t.submitted_at ? new Date(t.submitted_at).toLocaleString('ko-KR') : '';
+  return `<div class="task-history-item">
+    <span class="task-status-badge" style="background:${color}">${escHtml(t.status)}</span>
+    <b style="margin-left:6px">${escHtml(t.submitted_by||'익명')}</b>
+    <span style="color:var(--text2);margin-left:6px">${dateStr}</span>
+    ${t.memo?`<div style="margin-top:5px;white-space:pre-wrap;word-break:break-all">${escHtml(t.memo)}</div>`:''}
+    ${t.photo_data?`<img src="${t.photo_data}">`:''}
+  </div>`;
+}
+
+// ── 업무현황(관리자용 전체 보기) — 담당자들이 등록한 처리 결과를 전부 모아서
+// 상태별로 걸러보고, 클릭하면 지도에서 그 시설을 바로 확인할 수 있다. ──
+let allTaskResults=[]; // 최근 500건
+let taskStatusFilter=new Set(); // 비어있으면 전체, 값이 있으면 그 상태들만
+
+async function loadAllTaskResults(){
+  if(!document.getElementById('tabTask').classList.contains('active')) return;
+  const list=document.getElementById('sideList');
+  list.innerHTML='<div class="res-empty">불러오는 중...</div>';
+  try{
+    const {data,error}=await sbClient.from('map_check_task_results').select('*').order('submitted_at',{ascending:false}).limit(500);
+    if(error) throw error;
+    allTaskResults=data||[];
+    renderTaskStatusChips();
+    renderTaskList();
+  }catch(e){
+    list.innerHTML='<div class="res-empty">불러오지 못했습니다: '+escHtml(e.message)+'</div>';
+  }
+}
+
+function renderTaskStatusChips(){
+  const bar=document.getElementById('taskStatusChipsBar');
+  if(!bar) return;
+  if(!allTaskResults.length){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='flex';
+  const counts={};
+  allTaskResults.forEach(t=>{ counts[t.status]=(counts[t.status]||0)+1; });
+  bar.innerHTML=`<span style="font-size:11px;color:var(--text2);align-self:center">상태:</span>`+
+    TASK_STATUS_OPTIONS.filter(s=>counts[s]).map(s=>{
+      const on=!taskStatusFilter.size || taskStatusFilter.has(s);
+      return `<span class="task-status-chip${on?' on':''}" style="border-color:${TASK_STATUS_COLORS[s]}" onclick="toggleTaskStatusFilter('${s}')">${escHtml(s)} ${counts[s]}</span>`;
+    }).join('');
+}
+function toggleTaskStatusFilter(status){
+  if(taskStatusFilter.has(status)) taskStatusFilter.delete(status);
+  else taskStatusFilter.add(status);
+  renderTaskStatusChips();
+  renderTaskList();
+}
+
+function getFilteredTaskResults(){
+  const q=(document.getElementById('taskSearchInput')?.value||'').trim().toLowerCase();
+  return allTaskResults.filter(t=>{
+    if(taskStatusFilter.size && !taskStatusFilter.has(t.status)) return false;
+    if(!q) return true;
+    return [t.facility_name,t.addr,t.submitted_by,t.memo,t.zone_name].some(v=>String(v||'').toLowerCase().includes(q));
+  });
+}
+
+function renderTaskList(){
+  if(!document.getElementById('tabTask').classList.contains('active')) return;
+  const filtered=getFilteredTaskResults();
+  document.getElementById('sideTitle').textContent=`업무현황 · ${filtered.length}/${allTaskResults.length}건`;
+  document.getElementById('exportBtn').style.display = allTaskResults.length ? 'block' : 'none';
+  document.getElementById('pdfExportBtn').style.display = allTaskResults.length ? 'block' : 'none';
+  const list=document.getElementById('sideList');
+  if(!filtered.length){
+    list.innerHTML='<div class="res-empty">등록된 업무처리 결과가 없습니다.<br>담당자가 개별 공유 링크에서 시설을 열어 "처리결과 등록"을 누르면 여기에 모입니다.</div>';
+    return;
+  }
+  list.innerHTML=filtered.map(t=>{
+    const color=TASK_STATUS_COLORS[t.status]||'#4f8ef7';
+    const dateStr=t.submitted_at ? new Date(t.submitted_at).toLocaleString('ko-KR') : '';
+    const thumb=t.photo_data ? `<img src="${t.photo_data}" class="task-list-thumb">` : `<div class="task-list-thumb task-list-thumb-empty" style="background:${color}33;color:${color}">✅</div>`;
+    return `<div class="task-list-item" onclick="focusTaskResult('${t.addr.replace(/'/g,"\\'")}')">
+      ${thumb}
+      <div class="task-list-info">
+        <div class="task-list-title"><span class="task-status-badge" style="background:${color}">${escHtml(t.status)}</span>${escHtml(t.facility_name||t.addr)}</div>
+        <div class="task-list-sub">${escHtml(t.submitted_by||'익명')}${t.zone_name?' · '+escHtml(t.zone_name):''} · ${dateStr}</div>
+        ${t.memo?`<div class="task-list-memo">${escHtml(t.memo)}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function focusTaskResult(addr){
+  switchMode('batch');
+  const idx=batchResults.findIndex(r=>r.addr===addr);
+  if(idx>=0){ focusResult(idx); return; }
+  openDetailByAddr(addr);
+}
 
 function renderDetailTags(){
   const wrap=document.getElementById('detailTags');
