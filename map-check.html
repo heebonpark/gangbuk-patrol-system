@@ -141,6 +141,8 @@ input[type=number]{width:70px;cursor:text}
 .outlier-group-title{font-size:11px;color:var(--text2);margin:12px 0 6px;font-weight:600}
 .outlier-group-title:first-child{margin-top:0}
 .outlier-item{padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--yellow);border-radius:6px;font-size:11.5px;margin-bottom:6px;cursor:pointer;line-height:1.5}
+.analytics-contract-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.analytics-contract-controls span,.analytics-contract-controls select,.analytics-contract-controls input{white-space:nowrap;flex-shrink:0}
 .outlier-item:hover{border-color:var(--yellow)}
 .outlier-item b{color:var(--text)}
 .side-head{padding:9px 12px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;justify-content:space-between;align-items:center}
@@ -486,6 +488,17 @@ input[type=number]{width:70px;cursor:text}
         <h4 id="columnChartTitle">컬럼별 분포</h4>
         <canvas id="chartColumn"></canvas>
       </div>
+    </div>
+    <div class="analytics-outlier-section" id="analyticsContractSection" style="display:none">
+      <h4>⏰ 계약 만료 관리</h4>
+      <div class="analytics-contract-controls">
+        <span style="font-size:11px;color:var(--text2)">종료일 컬럼</span>
+        <select id="analyticsContractEndCol" onchange="renderContractExpiry()"></select>
+        <span style="font-size:11px;color:var(--text2)">임박 기준</span>
+        <input type="number" id="analyticsContractDays" value="30" min="1" style="width:60px" onchange="renderContractExpiry()">
+        <span style="font-size:11px;color:var(--text2)">일 이내</span>
+      </div>
+      <div id="analyticsContractList"></div>
     </div>
     <div class="analytics-outlier-section" id="analyticsOutlierSection" style="display:none">
       <h4>⚠ 이상치 감지</h4>
@@ -934,8 +947,13 @@ function switchMode(mode){
     ensureMap();
     document.getElementById('patrolNameInput').value = localStorage.getItem(PATROL_NAME_KEY)||'';
     updatePatrolShareBtn();
-    loadLivePositions();
-    renderPatrolSideList();
+    // 순찰현황↔관리구역 연계: 이 브라우저에 관리구역이 아직 없으면 팀 공유본을
+    // 조용히 가져온다(관리구역 탭 진입 때와 동일한 동작) — 실시간 위치가 어느
+    // 관리구역 안에 있는지 판별하려면 mgmtZones가 있어야 하기 때문.
+    (mgmtZones.length ? Promise.resolve() : loadSharedMgmtZones(true)).then(()=>{
+      loadLivePositions();
+      renderPatrolSideList();
+    });
   }
   else if(mode==='biz'){
     if(!batchResults.length){
@@ -1144,12 +1162,44 @@ function stopPatrolPolling(){
   if(patrolPollTimer){ clearInterval(patrolPollTimer); patrolPollTimer=null; }
 }
 
+// 순찰현황 ↔ 관리구역 연계 — 실시간 위치가 지금 어느 관리구역(관리본부 등) 안에
+// 있는지 역지오코딩한 시/군/구를 mgmtZones의 sigunguSet과 대조해서 찾는다.
+// 위치가 거의 안 바뀌었으면 재조회하지 않고 캐시를 그대로 쓴다(API 절약).
+window.__livePositionZones=window.__livePositionZones||{}; // name -> {region1,region2,zoneName,lat,lng}
+function findZoneForRegion(region2){
+  if(!mgmtZones.length || !region2) return '';
+  const z=mgmtZones.find(z=>[...z.sigunguSet].some(k=>k.split('|')[1]===region2));
+  return z ? z.name : '';
+}
+async function computeLivePositionZone(row){
+  const cached=window.__livePositionZones[row.name];
+  if(cached && Math.abs(cached.lat-row.lat)<0.0005 && Math.abs(cached.lng-row.lng)<0.0005){
+    // 위치가 거의 그대로면 관리구역 배정만 최신 mgmtZones 기준으로 다시 맞춰준다(지오코딩은 생략).
+    cached.zoneName=findZoneForRegion(cached.region2);
+    return;
+  }
+  await new Promise(resolve=>{
+    geocoder.coord2Address(row.lng, row.lat, (result,status)=>{
+      if(status===kakao.maps.services.Status.OK && result.length){
+        const region2=result[0].address?.region_2depth_name || '';
+        const region1=result[0].address?.region_1depth_name || '';
+        window.__livePositionZones[row.name]={lat:row.lat, lng:row.lng, region1, region2, zoneName:findZoneForRegion(region2)};
+      }
+      resolve();
+    });
+  });
+}
+
 async function loadLivePositions(){
   if(!document.getElementById('tabPatrol').classList.contains('active')) return;
   try{
     const {data,error}=await sbClient.from('map_check_live_positions').select('*');
     if(error) throw error;
     window.__livePositions=data||[];
+    const now=Date.now();
+    await Promise.all(window.__livePositions
+      .filter(r=>now-new Date(r.updated_at).getTime()<=PATROL_STALE_MS)
+      .map(r=>computeLivePositionZone(r)));
     renderLivePositionsOnMap();
     renderPatrolSideList();
   }catch(e){ console.warn('실시간 위치를 불러오지 못했습니다:', e.message); }
@@ -1170,6 +1220,8 @@ function renderLivePositionsOnMap(){
     const color=colorForName(row.name);
     let obj=livePositionObjs[row.name];
     const pos=new kakao.maps.LatLng(row.lat,row.lng);
+    const zoneName=(window.__livePositionZones[row.name]||{}).zoneName||'';
+    const overlayContent=`<div style="background:${color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4);text-align:center">${escHtml(row.name)}${zoneName?`<br><span style="font-weight:500;font-size:9.5px">${escHtml(zoneName)}</span>`:''}</div>`;
     if(!obj){
       const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="9" fill="${color}" stroke="#fff" stroke-width="2.5"/></svg>`;
       const marker=new kakao.maps.Marker({
@@ -1178,7 +1230,7 @@ function renderLivePositionsOnMap(){
       });
       const overlay=new kakao.maps.CustomOverlay({
         position:pos, yAnchor:2.1, zIndex:40,
-        content:`<div style="background:${color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4)">${escHtml(row.name)}</div>`
+        content:overlayContent
       });
       overlay.setMap(map);
       kakao.maps.event.addListener(marker,'click',()=>showPatrolTrail(row.name));
@@ -1187,6 +1239,7 @@ function renderLivePositionsOnMap(){
     }else{
       obj.marker.setPosition(pos);
       obj.overlay.setPosition(pos);
+      obj.overlay.setContent(overlayContent);
     }
   });
   Object.keys(livePositionObjs).forEach(name=>{
@@ -1210,10 +1263,13 @@ function renderPatrolSideList(){
     const stale = now - new Date(r.updated_at).getTime() > PATROL_STALE_MS;
     const minsAgo=Math.round((now - new Date(r.updated_at).getTime())/60000);
     const color=colorForName(r.name);
+    const zoneInfo=window.__livePositionZones[r.name]||{};
+    const locLine = zoneInfo.region2 ? `${zoneInfo.region2}${zoneInfo.zoneName?' · 담당구역: '+zoneInfo.zoneName:''}` : '';
     return `
     <div class="res-item" onclick="showPatrolTrail('${r.name.replace(/'/g,"\\'")}')" style="border-left:3px solid ${color};${stale?'opacity:.5':''}">
       <div class="ri-addr">${stale?'⚪':'🟢'} ${escHtml(r.name)}</div>
       <div class="ri-sub">${stale?'오프라인 · ':''}${minsAgo<1?'방금 전':minsAgo+'분 전'} 갱신</div>
+      ${locLine?`<div class="ri-sub">📍 ${escHtml(locLine)}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -3004,9 +3060,13 @@ function renderAnalyticsDashboard(){
     grid.style.display='none'; empty.style.display='block';
     document.getElementById('analyticsStats').innerHTML='';
     document.getElementById('analyticsOutlierSection').style.display='none';
+    document.getElementById('analyticsContractSection').style.display='none';
     return;
   }
   grid.style.display='grid'; empty.style.display='none';
+
+  buildContractExpiryColumnOptions();
+  const contractSummary=computeContractExpirySummary(okResults);
 
   const successRate = batchResults.length ? (okResults.length/batchResults.length*100).toFixed(1) : '0';
   const allTags=new Set(); okResults.forEach(r=>getTags(r.addr).forEach(t=>allTags.add(t)));
@@ -3016,6 +3076,7 @@ function renderAnalyticsDashboard(){
     {num:allTags.size, label:'사용 중인 태그'},
   ];
   if(mgmtZones.length) statCards.push({num:mgmtZones.length, label:`${mgmtGroupCol} 관리구역 수`});
+  if(contractSummary) statCards.push({num:contractSummary.expired.length+contractSummary.upcoming.length, label:`계약 만료 임박/경과`});
   document.getElementById('analyticsStats').innerHTML=statCards.map(s=>
     `<div class="analytics-stat-card"><div class="num">${escHtml(String(s.num))}</div><div class="label">${escHtml(s.label)}</div></div>`
   ).join('');
@@ -3048,7 +3109,74 @@ function renderAnalyticsDashboard(){
     else{ setAnalyticsEmptyMsg('chartColumn', true, '값이 있는 행이 없습니다.'); destroyAnalyticsChart('chartColumn'); }
   }
 
+  renderContractExpiry(contractSummary);
   renderOutliers(okResults);
+}
+
+// ═══════════════════════════════════════════════
+//  계약 만료 관리 — 계약종료일 컬럼을 기준으로 이미 만료됐거나 곧(기본 30일
+//  이내) 만료될 계약을 자동으로 짚어준다. 항목을 클릭하면 지도에서 바로 확인 가능.
+// ═══════════════════════════════════════════════
+function buildContractExpiryColumnOptions(){
+  const sel=document.getElementById('analyticsContractEndCol');
+  if(!sel || !headers.length) return;
+  const prev=sel.value;
+  sel.innerHTML='<option value="">컬럼 선택</option>'+headers.map(h=>`<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
+  sel.value = prev && headers.includes(prev) ? prev : (headers.find(h=>/종료일/.test(String(h))) || '');
+}
+
+function computeContractExpirySummary(okResults){
+  const col=document.getElementById('analyticsContractEndCol')?.value;
+  if(!col) return null;
+  const days=parseInt(document.getElementById('analyticsContractDays')?.value, 10)||30;
+  const today=new Date(); today.setHours(0,0,0,0);
+  const limit=new Date(today.getTime()+days*86400000);
+  const expired=[], upcoming=[];
+  okResults.forEach(r=>{
+    const end=parseKoreanDate((r.row||{})[col]);
+    if(!end) return;
+    const diffDays=Math.round((end-today)/86400000);
+    if(end<today) expired.push({r,end,diffDays});
+    else if(end<=limit) upcoming.push({r,end,diffDays});
+  });
+  expired.sort((a,b)=>b.diffDays-a.diffDays);
+  upcoming.sort((a,b)=>a.diffDays-b.diffDays);
+  return {col, days, expired, upcoming};
+}
+
+function renderContractExpiry(summary){
+  const section=document.getElementById('analyticsContractSection');
+  const list=document.getElementById('analyticsContractList');
+  if(!section || !list) return;
+  if(summary===undefined) summary=computeContractExpirySummary(batchResults.filter(r=>r.ok));
+  if(!summary){ section.style.display='none'; list.innerHTML=''; return; }
+  section.style.display='block';
+  const {days, expired, upcoming}=summary;
+  if(!expired.length && !upcoming.length){
+    list.innerHTML='<div class="res-empty">이미 만료됐거나 임박한 계약이 없습니다.</div>';
+    return;
+  }
+  const nameCol=guessNameCol(headers);
+  const rowLabel=r=>{
+    const name = nameCol ? String((r.row||{})[nameCol]??'').trim() : '';
+    return (name?name+' · ':'')+r.addr;
+  };
+  let html='';
+  if(expired.length){
+    html+=`<div class="outlier-group-title">🔴 이미 만료됨 (${expired.length}건)</div>`;
+    html+=expired.map(o=>{
+      const idx=batchResults.indexOf(o.r);
+      return `<div class="outlier-item" style="border-left-color:var(--red)" onclick="switchMode('batch'); focusResult(${idx})"><b>${escHtml(rowLabel(o.r))}</b><br>${Math.abs(o.diffDays)}일 전 만료 (${o.end.toLocaleDateString('ko-KR')})</div>`;
+    }).join('');
+  }
+  if(upcoming.length){
+    html+=`<div class="outlier-group-title">🟡 ${days}일 이내 만료 예정 (${upcoming.length}건)</div>`;
+    html+=upcoming.map(o=>{
+      const idx=batchResults.indexOf(o.r);
+      return `<div class="outlier-item" onclick="switchMode('batch'); focusResult(${idx})"><b>${escHtml(rowLabel(o.r))}</b><br>${o.diffDays===0?'오늘 만료':o.diffDays+'일 후 만료'} (${o.end.toLocaleDateString('ko-KR')})</div>`;
+    }).join('');
+  }
+  list.innerHTML=html;
 }
 
 // ═══════════════════════════════════════════════
