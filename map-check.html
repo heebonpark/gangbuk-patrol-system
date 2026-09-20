@@ -78,6 +78,9 @@ input[type=number]{width:70px;cursor:text}
 .marker-list-cat{font-size:10.5px;font-weight:600;margin-left:4px}
 .marker-list-sub{font-size:10.5px;color:var(--text2);margin-top:1px}
 .marker-list-memo{font-size:11px;color:var(--text2);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.district-suggest{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:240px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.district-suggest-item{padding:8px 12px;font-size:12px;cursor:pointer;color:var(--text)}
+.district-suggest-item:hover{background:var(--surface3)}
 .mgmt-zone-chip{display:flex;align-items:center;gap:6px;padding:4px 9px 4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:11px;color:var(--text2);opacity:.55}
 .mgmt-zone-chip.on{color:var(--text);opacity:1}
 .mgmt-zone-chip input[type=color]{width:16px;height:16px;padding:0;border:none;border-radius:50%;overflow:hidden;cursor:pointer;background:none}
@@ -287,7 +290,13 @@ input[type=number]{width:70px;cursor:text}
   </div>
 
   <div class="searchbar" id="districtBar" style="display:none">
-    <input type="text" id="districtInput" placeholder="지역명 또는 주소 (예: 인천 삼산동, 서울특별시, 목동)" onkeydown="if(event.key==='Enter')addDistrictCondition()">
+    <div style="position:relative;flex:1;min-width:160px">
+      <input type="text" id="districtInput" placeholder="지역명 또는 주소 (예: 인천 삼산동, 서울특별시, 목동)" style="width:100%"
+        oninput="onDistrictInputChange(this.value)"
+        onkeydown="if(event.key==='Enter')addDistrictCondition(); if(event.key==='Escape')hideDistrictSuggest();"
+        onblur="setTimeout(hideDistrictSuggest,150)" autocomplete="off">
+      <div id="districtSuggest" class="district-suggest" style="display:none"></div>
+    </div>
     <button class="btn" onclick="addDistrictCondition()">+ 추가</button>
     <button class="btn ghost" onclick="clearDistrictConditions()">전체 지우기</button>
     <button class="btn ghost" id="districtFilterBtn" onclick="applyDistrictFilterToBatch()" disabled title="파일 업로드에서 조회한 데이터가 있어야 씁니다">🧭 이 지역들로 배치 데이터 필터링</button>
@@ -2125,6 +2134,56 @@ function resolveSidoName(token){
   return SIDO_ALIASES[token] || token;
 }
 
+// 행정구역 이름 자동완성 — 정확한 행정동 명칭을 몰라도 입력하는 대로 후보를
+// 보여준다. 시/도·시/군/구·읍/면/동 세 단계 이름을 한 번만 모아두고 재사용한다.
+let districtSuggestCache=null;
+function buildDistrictSuggestCache(){
+  if(districtSuggestCache || !dongBoundaries) return;
+  const sidoSet=new Set(), sggSet=new Set(), dongSet=new Set();
+  dongBoundaries.forEach(f=>{
+    const p=f.properties;
+    sidoSet.add(p.sidonm);
+    sggSet.add(`${p.sidonm} ${p.sggnm}`);
+    dongSet.add(p.adm_nm);
+  });
+  districtSuggestCache=[...sidoSet, ...sggSet, ...dongSet];
+}
+function suggestDistrictNames(q){
+  buildDistrictSuggestCache();
+  if(!districtSuggestCache) return [];
+  const noSpaceQ=q.replace(/\s+/g,'');
+  const starts=new Set(), contains=new Set();
+  districtSuggestCache.forEach(name=>{
+    const noSpaceName=name.replace(/\s+/g,'');
+    if(noSpaceName.startsWith(noSpaceQ)) starts.add(name);
+    else if(noSpaceName.includes(noSpaceQ)) contains.add(name);
+  });
+  return [...[...starts].sort(), ...[...contains].sort()].slice(0,15);
+}
+let districtSuggestTimer=null;
+function onDistrictInputChange(val){
+  clearTimeout(districtSuggestTimer);
+  districtSuggestTimer=setTimeout(()=>renderDistrictSuggest(val), 120);
+}
+function renderDistrictSuggest(val){
+  const box=document.getElementById('districtSuggest');
+  const q=val.trim();
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  const results=suggestDistrictNames(q);
+  if(!results.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML=results.map(r=>`<div class="district-suggest-item" onmousedown="selectDistrictSuggest('${r.replace(/'/g,"\\'")}')">${escHtml(r)}</div>`).join('');
+  box.style.display='block';
+}
+function selectDistrictSuggest(name){
+  document.getElementById('districtInput').value=name;
+  hideDistrictSuggest();
+  addDistrictCondition();
+}
+function hideDistrictSuggest(){
+  const box=document.getElementById('districtSuggest');
+  if(box){ box.style.display='none'; }
+}
+
 function findDongMatches(queryRaw){
   const trimmed=queryRaw.trim();
   if(!trimmed || !dongBoundaries) return [];
@@ -2136,9 +2195,20 @@ function findDongMatches(queryRaw){
   const sidoResolved=resolveSidoName(trimmed);
   matches=dongBoundaries.filter(f=>f.properties.sidonm===sidoResolved);
   if(matches.length) return matches;
-  // 3) 시/군/구 전체("부평구", "안양시동안구" 등 — 마지막 단어만 입력해도 찾게)
-  matches=dongBoundaries.filter(f=>f.properties.sggnm===trimmed || f.properties.sggnm.endsWith(trimmed));
-  if(matches.length) return matches;
+  // 3) 시/군/구 전체("부평구", "안양시동안구", "서울특별시 강북구"처럼 시/도를
+  // 앞에 붙인 경우까지 — 자동완성이 "시/도 시/군/구" 형태로 제안해주기 때문에 꼭 필요)
+  {
+    const parts3=trimmed.split(/\s+/);
+    const sidoPrefix3 = parts3.length>1 ? resolveSidoName(parts3[0]) : '';
+    const sggQuery = sidoPrefix3 ? parts3.slice(1).join(' ') : trimmed;
+    matches=dongBoundaries.filter(f=>{
+      const sggMatch = f.properties.sggnm===sggQuery || f.properties.sggnm.endsWith(sggQuery);
+      if(!sggMatch) return false;
+      if(sidoPrefix3) return f.properties.sidonm===sidoPrefix3;
+      return true;
+    });
+    if(matches.length) return matches;
+  }
   // 4) 동/읍/면 이름(끝 숫자 무시) — "삼산동"→삼산1동+삼산2동, "목동"→목1동~목5동.
   // "인천 삼산동"처럼 시/도(줄임말 포함)를 앞에 붙였으면 그 지역으로 좁혀서, 동명이인을 피한다.
   const parts=trimmed.split(/\s+/);
@@ -2225,22 +2295,40 @@ function renderDistrictChips(){
   document.getElementById('districtFilterBtn').disabled = !batchResults.some(r=>r.ok) || districtConditions.length===0;
   renderDistrictList();
 }
+// 조건 하나(동 경계 다각형들, 또는 주소 반경 500m)에 지금 업로드된 주소 중
+// 몇 건이 들어오는지 센다 — "이 동 안에 실제로 몇 곳이 있나"를 바로 보여준다.
+function countMatchesForDistrictCondition(c){
+  const okResults=batchResults.filter(r=>r.ok);
+  if(c.type==='polygon'){
+    return okResults.filter(r=>{
+      const pt=turf.point([r.lng, r.lat]);
+      return c.features.some(f=>{ try{ return turf.booleanPointInPolygon(pt, f.geometry); }catch{ return false; } });
+    }).length;
+  }
+  return okResults.filter(r=>haversineKm(c.lat,c.lng,r.lat,r.lng)<=0.5).length;
+}
+
 function renderDistrictList(){
   if(!document.getElementById('tabDistrict').classList.contains('active')) return;
   document.getElementById('sideTitle').textContent = districtConditions.length ? `선택된 조건 ${districtConditions.length}건` : '행정구역 조회';
-  document.getElementById('exportBtn').style.display='none';
-  document.getElementById('pdfExportBtn').style.display='none';
+  document.getElementById('exportBtn').style.display = districtConditions.length ? 'block' : 'none';
+  document.getElementById('pdfExportBtn').style.display = districtConditions.length ? 'block' : 'none';
   const list=document.getElementById('sideList');
   if(!districtConditions.length){
     list.innerHTML='<div class="res-empty">위 검색창에서 지역명(예: 인천 삼산동, 서울특별시, 목동)이나 주소를 입력해 추가하세요.<br>여러 개를 동시에 추가할 수 있습니다(다중조건).</div>';
     return;
   }
-  list.innerHTML=districtConditions.map(c=>`
+  const hasBatchData=batchResults.some(r=>r.ok);
+  list.innerHTML=districtConditions.map(c=>{
+    const matchCount=hasBatchData ? countMatchesForDistrictCondition(c) : null;
+    const baseInfo=c.type==='polygon' ? c.features.length+'개 동 경계 표시 중' : '좌표: '+c.lat.toFixed(5)+', '+c.lng.toFixed(5);
+    return `
     <div class="res-item" onclick="focusDistrictCondition('${c.id}')">
       <div class="ri-addr" style="color:${c.color}">${c.type==='polygon'?'🗺️':'📍'} ${c.label}</div>
-      <div class="ri-sub">${c.type==='polygon' ? c.features.length+'개 동 경계 표시 중' : '좌표: '+c.lat.toFixed(5)+', '+c.lng.toFixed(5)}</div>
-    </div>
-  `).join('');
+      <div class="ri-sub">${baseInfo}</div>
+      ${matchCount!==null ? `<div class="ri-sub">📍 업로드한 주소 중 ${matchCount}건 포함</div>` : ''}
+    </div>`;
+  }).join('');
 }
 function focusDistrictCondition(id){
   const c=districtConditions.find(x=>x.id===id);
@@ -3450,6 +3538,20 @@ function focusLead(i){
 // 영업분석 모드의 엑셀 내보내기는 리드 목록이 있으면 그걸, 없으면 기존 배치결과 내보내기를 재사용한다.
 // (exportBatchResults는 아래 "결과 목록 렌더링" 섹션에 정의되어 있다.)
 function exportResults(){
+  if(document.getElementById('tabDistrict').classList.contains('active') && districtConditions.length){
+    const hasBatchData=batchResults.some(r=>r.ok);
+    const rows=districtConditions.map(c=>({
+      조건:c.label, 유형:c.type==='polygon'?'행정구역 경계':'주소(반경 500m)',
+      포함동수:c.type==='polygon'?c.features.length:'',
+      매칭주소건수: hasBatchData ? countMatchesForDistrictCondition(c) : ''
+    }));
+    const ws=XLSX.utils.json_to_sheet(rows);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'행정구역조회');
+    const dateStr=new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb,`행정구역조회_${dateStr}.xlsx`);
+    return;
+  }
   if(document.getElementById('tabMgmt').classList.contains('active') && mgmtZones.length){
     const rows=[...mgmtZones].sort((a,b)=>b.count-a.count).map(z=>{
       const row={ [mgmtGroupCol]:z.name, '포함 시/군/구':[...z.sigunguSet].map(k=>k.split('|')[1]).join(', '), 개소수:z.count };
@@ -3576,6 +3678,16 @@ function buildConditionSummary(){
 function exportPdfReport(){
   if(document.getElementById('tabMgmt').classList.contains('active') && mgmtZones.length){
     exportMgmtDashboardPdf();
+    return;
+  }
+  if(document.getElementById('tabDistrict').classList.contains('active') && districtConditions.length){
+    const hasBatchData=batchResults.some(r=>r.ok);
+    const rows=districtConditions.map(c=>({
+      '조건':c.label, '유형':c.type==='polygon'?'행정구역 경계':'주소(반경 500m)',
+      '포함 동 수':c.type==='polygon'?c.features.length:'',
+      '매칭 주소 건수': hasBatchData ? countMatchesForDistrictCondition(c) : '(업로드된 주소 없음)'
+    }));
+    openPrintReport('행정구역 조회 결과', [], ['조건','유형','포함 동 수','매칭 주소 건수'], rows);
     return;
   }
   let title, cols, rows, condLines=[];
