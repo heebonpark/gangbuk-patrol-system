@@ -835,17 +835,50 @@ function cleanAddr(a){
   return a.trim();
 }
 
+// 같은 주소를 다시 업로드하면(고객 리스트를 주기적으로 재업로드하는 경우가 흔함)
+// 네트워크 호출 없이 즉시 좌표를 돌려주기 위한 캐시 — 브라우저에 영구 저장된다.
+// 실패(null)는 캐시하지 않는다 — 일시적 API 오류로 실패한 주소가 영영 실패로
+// 굳어버리는 걸 막기 위함(성공한 것만 캐시해도 재업로드 속도 이점은 그대로 얻는다).
+const GEOCODE_CACHE_KEY='mapcheck_geocode_cache_v1';
+const GEOCODE_CACHE_MAX=8000;
+let geocodeCache=null;
+function loadGeocodeCache(){
+  if(geocodeCache) return geocodeCache;
+  try{
+    const raw=localStorage.getItem(GEOCODE_CACHE_KEY);
+    geocodeCache=raw ? new Map(JSON.parse(raw)) : new Map();
+  }catch{ geocodeCache=new Map(); }
+  return geocodeCache;
+}
+function flushGeocodeCache(){
+  try{
+    const cache=loadGeocodeCache();
+    while(cache.size>GEOCODE_CACHE_MAX){ cache.delete(cache.keys().next().value); } // Map은 삽입 순서를 기억 — 오래된 것부터 정리
+    localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify([...cache.entries()]));
+  }catch(e){ /* 저장공간 초과 등은 조용히 무시 — 캐시는 있으면 좋고 없어도 되는 속도 최적화일 뿐 */ }
+}
+let geocodeCacheSaveTimer=null;
+function saveGeocodeCacheDebounced(){
+  clearTimeout(geocodeCacheSaveTimer);
+  geocodeCacheSaveTimer=setTimeout(flushGeocodeCache, 800);
+}
+
 function geocodeOne(addr){
+  const cache=loadGeocodeCache();
+  if(cache.has(addr)) return Promise.resolve(cache.get(addr));
   return new Promise(resolve=>{
     geocoder.addressSearch(addr,(result,status)=>{
       if(status===kakao.maps.services.Status.OK&&result.length){
         const item=result[0];
         const a=item.address||{};
-        resolve({
+        const out={
           lat:parseFloat(item.y), lng:parseFloat(item.x),
           roadAddr:item.road_address?.address_name||'', jibunAddr:a.address_name||'',
           region1:a.region_1depth_name||'', region2:a.region_2depth_name||'', region3:a.region_3depth_name||'',
-        });
+        };
+        cache.set(addr, out);
+        saveGeocodeCacheDebounced();
+        resolve(out);
       } else resolve(null);
     });
   });
@@ -1924,24 +1957,40 @@ async function runBatchSearch(){
     });
 
     const total=targets.length;
-    for(let i=0;i<total;i++){
-      const t=targets[i];
-      document.getElementById('progLabel').textContent='주소 확인 중: '+t.raw;
-      document.getElementById('progCount').textContent=`${i+1}/${total}`;
-      document.getElementById('progFill').style.width=((i+1)/total*100)+'%';
-      const r=await geocodeOne(t.clean) || await geocodeOne(t.raw);
-      if(r){
-        const matched=r.roadAddr||r.jibunAddr||t.raw;
-        dropMarkerClustered(r.lat,r.lng,addrPairLabel(r.roadAddr,r.jibunAddr)||matched,t.raw);
-        batchResults.push({addr:t.raw, lat:r.lat, lng:r.lng, matched, ok:true, row:t.row,
-          roadAddr:r.roadAddr||'', jibunAddr:r.jibunAddr||'',
-          region1:r.region1||'', region2:r.region2||'', region3:r.region3||''});
-      }else{
-        batchResults.push({addr:t.raw, lat:'', lng:'', matched:'', ok:false, row:t.row,
-          roadAddr:'', jibunAddr:'',
-          region1:'', region2:'', region3:''});
+    const results=new Array(total);
+    let completed=0;
+    // 순차 처리 대신 여러 건을 동시에 조회한다 — 카카오 API가 초당 요청 제한이
+    // 있을 수 있어 동시 6개로 제한(그래도 순차 대비 체감상 몇 배 빠름). 결과는
+    // 완료 순서가 아니라 원래 업로드 순서를 유지하도록 인덱스에 바로 채워 넣는다.
+    const BATCH_CONCURRENCY=6;
+    let nextIdx=0;
+    async function geocodeWorker(){
+      while(true){
+        const i=nextIdx++;
+        if(i>=total) return;
+        const t=targets[i];
+        const r=await geocodeOne(t.clean) || await geocodeOne(t.raw);
+        if(r){
+          const matched=r.roadAddr||r.jibunAddr||t.raw;
+          dropMarkerClustered(r.lat,r.lng,addrPairLabel(r.roadAddr,r.jibunAddr)||matched,t.raw);
+          results[i]={addr:t.raw, lat:r.lat, lng:r.lng, matched, ok:true, row:t.row,
+            roadAddr:r.roadAddr||'', jibunAddr:r.jibunAddr||'',
+            region1:r.region1||'', region2:r.region2||'', region3:r.region3||''};
+        }else{
+          results[i]={addr:t.raw, lat:'', lng:'', matched:'', ok:false, row:t.row,
+            roadAddr:'', jibunAddr:'',
+            region1:'', region2:'', region3:''};
+        }
+        completed++;
+        document.getElementById('progLabel').textContent='주소 확인 중: '+t.raw;
+        document.getElementById('progCount').textContent=`${completed}/${total}`;
+        document.getElementById('progFill').style.width=(completed/total*100)+'%';
       }
     }
+    await Promise.all(Array.from({length:Math.min(BATCH_CONCURRENCY,total)}, geocodeWorker));
+    batchResults=results;
+    clearTimeout(geocodeCacheSaveTimer);
+    flushGeocodeCache(); // 배치가 끝나자마자 즉시 저장 — 디바운스 타이머가 뜨기 전에 페이지를 벗어나도 캐시가 남게 한다
 
     if(markers.length){
       const bounds=new kakao.maps.LatLngBounds();
