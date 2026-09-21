@@ -683,6 +683,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <span class="hub-btn-title">지도위치확인</span>
             <span class="hub-btn-desc">설치주소 검색 · 업로드로 위치 확인</span>
           </button>
+          <button type="button" class="hub-btn" id="btnHubKakaoMapAdmin" data-hub-key="kakaoMapAdmin">
+            <span class="hub-btn-icon">📊</span>
+            <span class="hub-btn-title">고객지도 관리자 대시보드</span>
+            <span class="hub-btn-desc">고객지도에서 기록한 현장 상태 모니터링</span>
+          </button>
         </div>
       </div>
     </div>
@@ -5856,6 +5861,12 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 카카오 개발자센터 등록 없이 바로 동작한다).
     window.open('https://gangbuk-map-check.vercel.app/kakao-map.html', '_blank');
   });
+  document.getElementById('btnHubKakaoMapAdmin').addEventListener('click', ()=>{
+    // 고객지도(kakao-map.html)가 기록한 현장 상태는 브라우저 localStorage에 저장되므로,
+    // 이 대시보드도 반드시 같은 도메인(gangbuk-map-check.vercel.app)에서 열어야 그 데이터가
+    // 보인다 — 고객지도 버튼과 다른 도메인으로 열면 빈 화면으로 보인다.
+    window.open('https://gangbuk-map-check.vercel.app/kakao-map-admin.html', '_blank');
+  });
   document.getElementById('btnHubMapCheck').addEventListener('click', ()=>{
     // 지도위치확인도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
     // 상대경로('map-check.html')로 열면 카카오맵 SDK가 "지금 이 페이지가 떠 있는 도메인"
@@ -6051,7 +6062,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     { key:'incidentManagement',label:'사건사고관리',           defaultCategory:'customer' },
     { key:'vocManagement',     label:'VOC관리',               defaultCategory:'customer' },
     { key:'kakaoMap',          label:'고객지도',              defaultCategory:'customer' },
-    { key:'mapCheck',          label:'지도위치확인',           defaultCategory:'customer' }
+    { key:'mapCheck',          label:'지도위치확인',           defaultCategory:'customer' },
+    { key:'kakaoMapAdmin',     label:'고객지도 관리자 대시보드', defaultCategory:'customer' }
   ];
   // 기본 3분류는 항상 존재(삭제 불가). "협력사"처럼 관리자가 더 추가한 분류는
   // hubCustomCategories(localStorage)에 저장되고, 필요하면 다시 삭제할 수도 있다.
