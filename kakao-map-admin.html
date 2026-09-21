@@ -36,7 +36,13 @@
     .field{margin-bottom:12px}
     .field label{display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;font-weight:600}
     .field input,.field select,.field textarea{width:100%;padding:8px 10px;background:#0f172a;border:1px solid var(--border);border-radius:7px;color:white;font-size:13px;font-family:inherit;box-sizing:border-box}
+    .pw-change-link{font-size:11px;color:#94a3b8;text-decoration:underline;cursor:pointer;display:block;margin-top:12px;}
+    .pw-change-link:hover{color:#e2e8f0;}
   </style>
+  <!-- 비밀번호를 Supabase(kakao_map_admin_config 테이블, 싱글턴 행)에 저장해 관리자가
+       바꿀 수 있게 한다 — map-check.html의 관리자 비밀번호 변경과 같은 방식(다른 화면들과
+       같은 프로젝트/키 재사용, casual-tier RLS). -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -47,6 +53,21 @@
       <input type="password" id="pw" placeholder="비밀번호 입력">
       <button onclick="checkLogin()">로그인</button>
       <p id="err" style="color:#f87171;font-size:11px;margin-top:10px;display:none">비밀번호가 틀렸습니다.</p>
+    </div>
+  </div>
+
+  <!-- 비밀번호 변경 모달: 로그인 성공 후 대시보드 상단의 "🔑 비밀번호 변경" 링크로 연다. -->
+  <div id="pwChangeOverlay" class="overlay hidden">
+    <div class="modal" style="width:340px;">
+      <h2 style="margin-top:0">관리자 비밀번호 변경</h2>
+      <div class="field">
+        <label>새 비밀번호 (4자 이상)</label>
+        <input type="password" id="newPwInput" placeholder="새 비밀번호">
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+        <button onclick="document.getElementById('pwChangeOverlay').classList.add('hidden')" style="width:auto;padding:8px 15px;background:var(--border)">취소</button>
+        <button onclick="changeAdminPassword()" style="width:auto;padding:8px 15px">변경</button>
+      </div>
     </div>
   </div>
 
@@ -66,6 +87,7 @@
         <button onclick="fetchData()" style="width:auto;padding:6px 12px;font-size:12px">🔄 새로고침</button>
         <button onclick="copyForEmail()" style="width:auto;padding:6px 12px;font-size:12px;background:#8b5cf6">📋 메일 복사</button>
         <button onclick="downloadCSV()" style="width:auto;padding:6px 12px;font-size:12px;background:#10b981">📥 엑셀 다운로드</button>
+        <button onclick="openPwChangeModal()" style="width:auto;padding:6px 12px;font-size:12px;background:var(--border)">🔑 비밀번호 변경</button>
       </div>
     </div>
     <div class="stats" id="statsArea"></div>
@@ -88,15 +110,52 @@
   </div>
 
   <script>
-    function checkLogin() {
-      // 심플 관리자 패스워드 로직 (개발 데모용)
-      if(document.getElementById('pw').value === 'admin123') {
+    // 비밀번호를 Supabase에 저장해 관리자가 바꿀 수 있게 한다(map-check.html과 같은
+    // 프로젝트/키, 같은 방식). 아직 한 번도 안 바꿨으면 기존 기본값 'admin123'을 쓴다.
+    const SUPABASE_URL='https://ddcsgqfxficuuimpyjyt.supabase.co';
+    const SUPABASE_ANON_KEY='sb_publishable_yKOVQMtmqzN9HY16tQxlIg_YUmMzoAs';
+    const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let adminPassword = 'admin123'; // Supabase에서 불러오면 교체됨
+    let adminPasswordLoaded = false;
+    async function loadAdminPassword(){
+      try{
+        const {data,error} = await sbClient.from('kakao_map_admin_config').select('admin_password').eq('id','singleton').single();
+        if(!error && data && data.admin_password) adminPassword = data.admin_password;
+      }catch(e){ console.warn('비밀번호 설정을 불러오지 못했습니다(오프라인이거나 최초 설정 전일 수 있음):', e.message); }
+      adminPasswordLoaded = true;
+    }
+    loadAdminPassword();
+
+    async function checkLogin() {
+      // 아직 Supabase에서 비밀번호를 불러오는 중이면 잠깐 기다렸다가 비교한다(느린 네트워크
+      // 에서 로딩 전에 눌러도 예전 기본값으로 잘못 판정되는 걸 막는다).
+      if(!adminPasswordLoaded) await loadAdminPassword();
+      if(document.getElementById('pw').value === adminPassword) {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('dashboard').style.display = 'block';
         fetchData();
         setInterval(fetchData, 2000); // 2초마다 자동갱신
       } else {
         document.getElementById('err').style.display = 'block';
+      }
+    }
+
+    function openPwChangeModal(){
+      document.getElementById('newPwInput').value = '';
+      document.getElementById('pwChangeOverlay').classList.remove('hidden');
+    }
+    async function changeAdminPassword(){
+      const newPw = (document.getElementById('newPwInput').value || '').trim();
+      if(!newPw){ alert('새 비밀번호를 입력해주세요.'); return; }
+      if(newPw.length < 4){ alert('비밀번호는 4자 이상으로 해주세요.'); return; }
+      try{
+        const {error} = await sbClient.from('kakao_map_admin_config').update({admin_password:newPw, updated_at:new Date().toISOString()}).eq('id','singleton');
+        if(error) throw error;
+        adminPassword = newPw;
+        document.getElementById('pwChangeOverlay').classList.add('hidden');
+        alert('비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 써주세요.');
+      }catch(e){
+        alert('변경 실패: ' + e.message);
       }
     }
 
