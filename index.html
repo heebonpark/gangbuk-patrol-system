@@ -591,7 +591,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="hub-btn" id="btnHubLineManagement" data-hub-key="lineManagement">
             <span class="hub-btn-icon">📶</span>
             <span class="hub-btn-title">회선관리</span>
-            <span class="hub-btn-desc">MVNO · WCDMA</span>
+            <span class="hub-btn-desc">MVNO · WCDMA · NB-IoT</span>
           </button>
           <button type="button" class="hub-btn" id="btnHubAssetManagement" data-hub-key="assetManagement" title="전사 자산관리">
             <span class="hub-btn-icon">🗃️</span>
@@ -621,7 +621,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="hub-btn" id="btnHubManagement" data-hub-key="management">
             <span class="hub-btn-icon">🏢</span>
             <span class="hub-btn-title">경영</span>
-            <span class="hub-btn-desc">관리자가 연결할 링크 설정</span>
+            <span class="hub-btn-desc">ep · 님스</span>
           </button>
           <button type="button" class="hub-btn" id="btnHubCisSms" data-hub-key="cisSms" title="CIS 단체/개별 선택 문자보내기">
             <span class="hub-btn-icon">💬</span>
@@ -641,7 +641,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="hub-btn" id="btnHubBidConstruction" data-hub-key="bidConstruction">
             <span class="hub-btn-icon">🏗️</span>
             <span class="hub-btn-title">입찰/공사팀신청</span>
-            <span class="hub-btn-desc">입찰일정등록 · 공사팀신청</span>
+            <span class="hub-btn-desc">입찰일정등록 · 공사팀신청 · 심스_입찰 · 입찰_일정</span>
           </button>
           <button type="button" class="hub-btn" id="btnHubSubscriptionDashboard" data-hub-key="subscriptionDashboard">
             <span class="hub-btn-icon">📊</span>
@@ -697,6 +697,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
          매번 새로 그린다(renderGroupGrid). -->
     <div class="hub-btn-grid login-hidden" id="hubLineGrid"></div>
     <div class="hub-btn-grid login-hidden" id="hubBidGrid"></div>
+    <div class="hub-btn-grid login-hidden" id="hubMgmtGrid"></div>
     <div id="hubSubActions" class="login-hidden" style="margin-top:14px;">
       <a href="#" id="btnHubSubBack" class="sub" style="display:inline-block;margin-right:16px;text-decoration:underline;cursor:pointer;">← 뒤로가기</a>
       <a href="#" id="btnHubGroupManage" class="sub login-hidden" style="display:inline-block;text-decoration:underline;cursor:pointer;">⚙️ 항목 관리(관리자)</a>
@@ -5834,11 +5835,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   document.getElementById('btnHubSecurityNewsLLM').addEventListener('click', ()=>{
     window.open('https://bough38-web.github.io/security-report/', '_blank');
   });
-  document.getElementById('btnHubManagement').addEventListener('click', ()=>{
-    // 아직 정해진 목적지가 없는 메뉴 — 회선관리 하위 항목과 같은 방식으로, 관리자가
-    // 처음 누르면 연결할 URL을 물어보고(기기별 localStorage에 저장) 그 다음부터는 바로 연다.
-    openHubLink('management', '경영');
-  });
+  // 경영도 회선관리/입찰·공사팀신청과 같은 하위메뉴 그룹(ep · 님스)으로 연다.
+  document.getElementById('btnHubManagement').addEventListener('click', ()=> showSubmenu('mgmt'));
   document.getElementById('btnHubCisSms').addEventListener('click', ()=>{
     // CIS 문자보내기는 실제 CIS 프로그램 화면을 pyautogui로 제어하는 데스크톱 매크로라
     // 브라우저에서 바로 쓸 수 없다 — 소개/다운로드 페이지를 새 탭으로 연다.
@@ -5885,16 +5883,33 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
      추가·이름변경·삭제·링크설정할 수 있다. 목록은 hubGroupItems(localStorage)에 저장되고,
      비어있으면 아래 기본값(default)으로 시작한다. 실제 버튼은 매번 그 목록으로 새로
      그린다(renderGroupGrid) — 그래야 관리자가 추가한 항목도 진짜 버튼으로 나온다. */
-  const HUB_SUBMENUS = { line: { grid:'hubLineGrid' }, bid: { grid:'hubBidGrid' } };
+  const HUB_SUBMENUS = { line: { grid:'hubLineGrid' }, bid: { grid:'hubBidGrid' }, mgmt: { grid:'hubMgmtGrid' } };
   const HUB_GROUP_DEFAULT_ITEMS = {
     line: [
       { id:'mvno',  label:'MVNO',  icon:'📡' },
-      { id:'wcdma', label:'WCDMA', icon:'📱' }
+      { id:'wcdma', label:'WCDMA', icon:'📱' },
+      { id:'nbiot', label:'NB-IoT', icon:'📟' }
     ],
     bid: [
       { id:'bidSchedule',      label:'입찰일정등록', icon:'🗂️' },
-      { id:'constructionTeam', label:'공사팀신청',   icon:'👷' }
+      { id:'constructionTeam', label:'공사팀신청',   icon:'👷' },
+      { id:'simsBid',          label:'심스_입찰',    icon:'📝' },
+      { id:'bidCalendar',      label:'입찰_일정(구글)', icon:'📅' }
+    ],
+    mgmt: [
+      { id:'ep',   label:'ep',  icon:'🏢' },
+      { id:'nims', label:'님스', icon:'🖥️' }
     ]
+  };
+  // 회선관리/입찰/경영 하위 항목 중 링크가 미리 정해진 것들의 기본값 — 관리자가 한 번도
+  // 안 눌러봐도(=hubExternalLinks에 아직 없어도) 바로 연결되도록 한다. 그래도 여전히
+  // "⚙️ 항목 관리"에서 새로 입력해 덮어쓸 수 있다(hubExternalLinks가 우선).
+  const HUB_DEFAULT_LINKS = {
+    ep:   'https://ep.kttelecop.co.kr/myoffice/ezportal/index_portal.aspx#',
+    nims: 'http://10.200.2.100/nims/install/x_installChrome.html',
+    simsBid:     'https://sims.kttelecop.co.kr/login',
+    bidCalendar: 'https://calendar.google.com/calendar/u/0/r?pli=1',
+    nbiot: 'https://iotsupport.kt.com/nbcontractstatus'
   };
   const mainGrid = document.getElementById('hubMainGrid');
   const subActions = document.getElementById('hubSubActions');
@@ -5927,7 +5942,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     localStorage.setItem('hubGroupItems', JSON.stringify(all));
   }
   function openHubLink(key, label){
-    const url = (getHubLinks()[key] || '').trim();
+    const url = (getHubLinks()[key] || HUB_DEFAULT_LINKS[key] || '').trim();
     if(url){ window.open(url, '_blank'); return; }
     const auth = currentAuth();
     if(auth && auth.isAdmin){
@@ -5951,8 +5966,8 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       const item = items.find(i=>i.id===id);
       btn.addEventListener('click', ()=> openHubLink(id, item.label));
     });
-    // 상위 그룹 버튼(회선관리/입찰·공사팀신청 등)의 부제목도 현재 항목 이름으로 갱신
-    const groupBtnKey = groupKey === 'line' ? 'lineManagement' : 'bidConstruction';
+    // 상위 그룹 버튼(회선관리/입찰·공사팀신청/경영 등)의 부제목도 현재 항목 이름으로 갱신
+    const groupBtnKey = { line:'lineManagement', bid:'bidConstruction', mgmt:'management' }[groupKey];
     const groupBtn = document.querySelector(`#hubMainGrid [data-hub-key="${groupBtnKey}"] .hub-btn-desc`);
     if(groupBtn) groupBtn.textContent = items.map(i=>i.label).join(' · ') || '항목 없음';
   }
@@ -5988,7 +6003,7 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     groupManageList.innerHTML = items.map(item => `
       <div class="hub-visibility-row">
         <input type="text" data-item-rename="${esc(item.id)}" value="${esc(item.label)}" style="flex:1;">
-        <input type="text" data-item-link="${esc(item.id)}" value="${esc(links[item.id] || '')}" placeholder="https://..." style="flex:2;">
+        <input type="text" data-item-link="${esc(item.id)}" value="${esc(links[item.id] || HUB_DEFAULT_LINKS[item.id] || '')}" placeholder="https://..." style="flex:2;">
         <a href="#" data-item-remove="${esc(item.id)}" class="sub" style="text-decoration:underline;cursor:pointer;white-space:nowrap;">삭제</a>
       </div>
     `).join('') || '<p class="sub" style="margin:0;">항목이 없습니다. 아래에서 추가하세요.</p>';
