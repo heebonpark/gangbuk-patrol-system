@@ -448,12 +448,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .hub-btn-info.has-note{background:var(--accent);border-color:var(--accent);color:#fff;}
 .hub-btn-info:hover{border-color:var(--accent);color:var(--accent);}
 .hub-btn-info.has-note:hover{color:#fff;}
-.hub-note-bubble{position:fixed;z-index:3000;max-width:260px;background:var(--navy);color:#fff;padding:12px 14px;border-radius:10px;box-shadow:var(--shadow-lg);font-size:12.5px;line-height:1.6;white-space:pre-wrap;}
+.hub-note-bubble{position:fixed;z-index:10100;max-width:260px;background:var(--navy);color:#fff;padding:12px 14px;border-radius:10px;box-shadow:var(--shadow-lg);font-size:12.5px;line-height:1.6;white-space:pre-wrap;}
 .hub-note-bubble::after{content:"";position:absolute;top:-6px;right:14px;border-width:0 6px 6px 6px;border-style:solid;border-color:transparent transparent var(--navy) transparent;}
 .hub-note-bubble .hub-note-title{font-weight:700;margin-bottom:4px;color:#fff;}
 .hub-note-bubble .hub-note-empty{color:#B7C0D6;font-style:italic;}
 .hub-note-bubble .hub-note-edit{display:inline-block;margin-top:8px;color:#9FC1FF;text-decoration:underline;cursor:pointer;font-size:11.5px;}
-.hub-note-edit-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:3100;display:flex;align-items:center;justify-content:center;padding:16px;}
+/* z-index 10000+ : #systemHub(허브 화면)가 .login-gate 클래스를 공유해 z-index:9999인
+   전체화면 고정 레이어라서, 허브 안에서 뜨는 모달들은 전부 그보다 높아야 클릭이 먹는다
+   (전엔 3000대라 실제로는 허브 뒤에 깔려 눌리지 않는 채로 방치돼 있었다). */
+.hub-note-edit-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:10200;display:flex;align-items:center;justify-content:center;padding:16px;}
 .hub-note-edit-card{width:100%;max-width:420px;background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow-lg);}
 .hub-note-edit-card h3{margin:0 0 12px;font-size:15px;font-weight:700;color:var(--text);}
 .hub-note-edit-textarea{width:100%;min-height:110px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-family:var(--sans);font-size:13px;color:var(--text);resize:vertical;box-sizing:border-box;}
@@ -470,7 +473,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .hub-announcement-icon{flex:none;font-size:16px;}
 .hub-announcement-text{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .hub-announcement-more{flex:none;font-size:12px;color:var(--accent-warm);text-decoration:underline;cursor:pointer;white-space:nowrap;}
-.hub-pw-confirm-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:3200;display:flex;align-items:center;justify-content:center;padding:16px;}
+.hub-pw-confirm-overlay{position:fixed;inset:0;background:rgba(20,23,31,.45);z-index:10300;display:flex;align-items:center;justify-content:center;padding:16px;}
 .hub-pw-confirm-card{width:100%;max-width:320px;background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow-lg);}
 .hub-pw-confirm-card h3{margin:0 0 10px;font-size:14.5px;font-weight:700;color:var(--text);}
 .hub-pw-confirm-card input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--mono);letter-spacing:2px;text-align:center;}
@@ -503,6 +506,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   .sig-modal-actions .btn{flex:1;}
 
 </style>
+<!-- 허브 화면 구성(등록한 메뉴·링크 등)을 여러 기기/팀원이 함께 쓸 수 있도록 Supabase를
+     이용한 클라우드 동기화에 쓴다 (map-check.html·kakao-map.html과 같은 프로젝트/키 재사용,
+     RLS는 그쪽과 동일하게 casual-tier: 실제 로그인 인증 없이 프로젝트 전체가 공유). -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 
@@ -763,6 +770,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="btn" id="btnHubSettingsExport">📤 내보내기</button>
           <button type="button" class="btn" id="btnHubSettingsImport">📥 가져오기</button>
           <input type="file" id="hubSettingsImportFile" accept="application/json" style="display:none;">
+        </div>
+      </div>
+      <!-- 클라우드 동기화: 위 파일 내보내기/가져오기와 같은 항목(HUB_SETTINGS_EXPORT_KEYS)을
+           수동 파일 전달 대신 Supabase에 올려/받아 자동으로 맞춘다. "저장"은 관리자가 직접
+           눌러야 반영되고(다른 관리자의 작업 중인 변경을 실수로 덮어쓰지 않도록), 팀원들의
+           화면에는 허브 접속 시 자동으로 최신 내용이 반영된다. -->
+      <div style="margin:14px 0 0;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p class="sub" style="margin:0 0 6px;font-weight:700;color:var(--text);">☁️ 팀과 동기화</p>
+        <p class="sub" style="margin:0 0 8px;">"클라우드에 저장"을 누르면 위 설정이 전체 팀원 화면에 자동으로 반영됩니다(팀원이 허브에 접속/새로고침할 때 자동으로 받아옵니다). 다른 관리자가 방금 올린 내용을 지금 바로 받아보려면 "지금 불러오기"를 누르세요.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button type="button" class="btn btn-primary" id="btnHubCloudPush">☁️ 클라우드에 저장(전체 팀 반영)</button>
+          <button type="button" class="btn" id="btnHubCloudPull">🔄 지금 불러오기</button>
+          <span class="sub" id="hubCloudSyncStatus" style="margin-left:4px;"></span>
         </div>
       </div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
@@ -5761,6 +5781,9 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     if(typeof hideSubmenu === 'function') hideSubmenu(); // 회선관리/입찰·공사팀신청 하위메뉴는 항상 처음엔 접힌 상태로
     if(typeof applyHubVisibility === 'function') applyHubVisibility(); // 로그인 주체(관리자/지사)에 맞춰 메뉴 노출 갱신
     if(typeof updateAnnouncementBanner === 'function') updateAnnouncementBanner(); // 공지사항 배너도 로그인 시점에 갱신
+    // 허브가 보일 때마다 클라우드의 최신 화면 구성(관리자가 추가한 메뉴/링크 등)을 조용히
+    // 받아온다 — 관리자가 다른 기기에서 "클라우드에 저장"을 눌렀다면 여기서 자동 반영된다.
+    if(typeof pullHubSettingsFromCloud === 'function') pullHubSettingsFromCloud(true);
   }
   document.getElementById('btnHubAttendance').addEventListener('click', ()=>{
     hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
@@ -6770,6 +6793,59 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     'hubButtonNotes','hubButtonTitleOverrides','hubButtonVisibility','hubCustomCategories',
     'hubCustomItems','hubExternalLinks','hubGroupItems'
   ];
+  /* ---- 허브 화면 구성 클라우드 동기화 ----
+     map-check.html과 같은 Supabase 프로젝트(hub_config 테이블, 싱글턴 행 하나)를 그대로
+     쓴다. 실제 로그인 인증은 없고(다른 화면들과 같은 casual-tier RLS), 관리자가 "클라우드에
+     저장"을 눌러야만 올라가고(자동 업로드 없음 — 다른 관리자의 작업 중인 변경을 실수로
+     덮어쓰지 않도록), 팀원 화면에는 허브 접속 시 자동으로 받아온다. */
+  const HUB_CLOUD_URL = 'https://ddcsgqfxficuuimpyjyt.supabase.co';
+  const HUB_CLOUD_ANON_KEY = 'sb_publishable_yKOVQMtmqzN9HY16tQxlIg_YUmMzoAs';
+  let hubCloudClient = null;
+  function getHubCloudClient(){
+    if(hubCloudClient) return hubCloudClient;
+    if(!window.supabase) return null;
+    hubCloudClient = window.supabase.createClient(HUB_CLOUD_URL, HUB_CLOUD_ANON_KEY);
+    return hubCloudClient;
+  }
+  function setHubCloudSyncStatus(text){
+    const el = document.getElementById('hubCloudSyncStatus');
+    if(el) el.textContent = text;
+  }
+  async function pushHubSettingsToCloud(){
+    const client = getHubCloudClient();
+    if(!client){ alert('클라우드 연결을 초기화하지 못했습니다. 인터넷 연결을 확인해주세요.'); return; }
+    const data = {};
+    HUB_SETTINGS_EXPORT_KEYS.forEach(k=>{
+      const raw = localStorage.getItem(k);
+      if(raw !== null){ try{ data[k] = JSON.parse(raw); }catch(e){} }
+    });
+    const auth = currentAuth();
+    setHubCloudSyncStatus('저장 중…');
+    const { error } = await client.from('hub_config').upsert({
+      id:'singleton', data, updated_by:(auth && auth.branch) || '', updated_at:new Date().toISOString()
+    });
+    if(error){ setHubCloudSyncStatus(''); alert('클라우드 저장에 실패했습니다: ' + error.message); return; }
+    setHubCloudSyncStatus('✓ ' + new Date().toLocaleString('ko-KR') + ' 저장됨(전체 팀 반영)');
+  }
+  // silent=true면 팀원 화면에서 허브 열 때 조용히 반영(오류 알림·성공 alert 없음).
+  async function pullHubSettingsFromCloud(silent){
+    const client = getHubCloudClient();
+    if(!client) return;
+    const { data: row, error } = await client.from('hub_config').select('data,updated_at').eq('id','singleton').maybeSingle();
+    if(error || !row || !row.data){
+      if(!silent && error) alert('클라우드에서 불러오지 못했습니다: ' + error.message);
+      return;
+    }
+    Object.keys(row.data).forEach(k=>{
+      if(HUB_SETTINGS_EXPORT_KEYS.includes(k)) localStorage.setItem(k, JSON.stringify(row.data[k]));
+    });
+    applyHubVisibility();
+    if(document.getElementById('hubVisibilityList')) renderHubVisibilityPanel();
+    if(!silent){
+      setHubCloudSyncStatus('✓ ' + new Date().toLocaleString('ko-KR') + ' 불러옴');
+      alert('클라우드의 최신 설정을 불러왔습니다.');
+    }
+  }
   function showConfirmModal(message, onConfirm){
     const existing = document.getElementById('hubPwConfirmOverlay');
     if(existing) existing.remove();
@@ -6842,6 +6918,12 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       });
     };
     reader.readAsText(file);
+  });
+  document.getElementById('btnHubCloudPush').addEventListener('click', ()=>{
+    showConfirmModal('지금 이 기기의 허브 설정(메뉴/링크/분류/지사별 권한 등)을 클라우드에 저장해 전체 팀원 화면에 반영할까요?', pushHubSettingsToCloud);
+  });
+  document.getElementById('btnHubCloudPull').addEventListener('click', ()=>{
+    showConfirmModal('클라우드에 저장된 최신 설정을 지금 이 기기로 받아올까요? 이 기기에서 아직 클라우드에 저장하지 않은 변경 내용이 있다면 사라집니다.', ()=>pullHubSettingsFromCloud(false));
   });
   visibilityList.addEventListener('change', (e)=>{
     if(!e.target.matches('input[data-vis-key], input[data-title-key], select[data-cat-key], textarea[data-note-key]')) return;
