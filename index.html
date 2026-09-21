@@ -5855,7 +5855,11 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   });
   document.getElementById('btnHubMapCheck').addEventListener('click', ()=>{
     // 지도위치확인도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
-    window.open('map-check.html', '_blank');
+    // 상대경로('map-check.html')로 열면 카카오맵 SDK가 "지금 이 페이지가 떠 있는 도메인"
+    // 기준으로 열려서, 카카오 개발자센터에 등록 안 된 도메인(예: GitHub Pages)에서 이 허브를
+    // 보고 있으면 "SDK 로드 실패"가 난다. 그래서 항상 등록된 배포 주소로 고정해서 연다
+    // (exe에서 열어도 어차피 인터넷이 필요한 화면이라 문제없다).
+    window.open('https://gangbuk-map-check.vercel.app/', '_blank');
   });
   document.getElementById('btnHubSubscriptionDashboard').addEventListener('click', ()=>{
     // 청약현황대시보드도 CSV를 그 자리에서 업로드해 쓰는 자체 완결형 앱이라 새 탭으로 연다.
