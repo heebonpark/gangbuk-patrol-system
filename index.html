@@ -5851,7 +5851,10 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
   });
   document.getElementById('btnHubKakaoMap').addEventListener('click', ()=>{
     // 고객지도(카카오맵)도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
-    window.open('kakao-map.html', '_blank');
+    // 지도위치확인과 같은 이유로 상대경로 대신 등록된 배포 주소로 고정(카카오맵 SDK가
+    // 같은 앱키를 쓰므로 gangbuk-map-check.vercel.app 도메인에 같이 올려두면 별도
+    // 카카오 개발자센터 등록 없이 바로 동작한다).
+    window.open('https://gangbuk-map-check.vercel.app/kakao-map.html', '_blank');
   });
   document.getElementById('btnHubMapCheck').addEventListener('click', ()=>{
     // 지도위치확인도 자체 완결형 앱이라(공유 세션 아님) 새 탭으로 연다.
