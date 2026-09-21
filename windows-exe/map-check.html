@@ -28,8 +28,14 @@ button{font-family:inherit}
 .topbar{background:linear-gradient(90deg,#0d1220,#141a2e);border-bottom:1px solid var(--border);padding:0 14px;height:50px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:10}
 .logo{font-size:14px;font-weight:800;color:var(--accent);white-space:nowrap}
 
-.mode-tabs{display:flex;gap:6px;margin-left:8px}
-.mode-tab{padding:6px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;color:var(--text2);transition:all .15s}
+/* 탭이 늘어나면서(지금 9개) 오른쪽의 탭별 조작 바(관리구역 바 등)와 한 줄 안에서
+   공간을 다투다가, 예전엔 .mode-tabs가 찌부러지면서 탭 글자가 두 줄로 줄바꿈돼
+   버튼 키가 커지고 그 아래 다른 요소들을 가려 클릭이 막히는 실제 버그가 있었다.
+   그래서 좁아지면 줄바꿈 대신 가로 스크롤되게 하고, 탭 버튼 자체는 항상 한 줄
+   높이를 유지하도록 고정한다(모바일 전용이 아니라 항상 적용). */
+.mode-tabs{display:flex;gap:6px;margin-left:8px;flex-shrink:1;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mode-tabs::-webkit-scrollbar{display:none}
+.mode-tab{padding:6px 13px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;color:var(--text2);transition:all .15s;flex-shrink:0;white-space:nowrap}
 .mode-tab.active{background:rgba(79,142,247,.18);border-color:var(--accent);color:var(--accent);font-weight:700}
 
 .searchbar{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -90,6 +96,12 @@ input[type=number]{width:70px;cursor:text}
 #mgmtDashboardTable th{background:var(--surface2);color:var(--text2);font-weight:600}
 #mgmtDashboardTable td.num{text-align:right;font-variant-numeric:tabular-nums}
 .mgmt-cond-arrow{color:var(--text3);font-size:14px;align-self:center}
+.mgmt-cond-block{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mgmt-cond-colsel{flex-shrink:0}
+.mgmt-value-btns{display:flex;gap:5px;flex-wrap:wrap}
+.mgmt-value-btn{padding:5px 11px;border-radius:14px;font-size:11.5px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);white-space:nowrap}
+.mgmt-value-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.mgmt-value-btn:disabled{cursor:default;opacity:.7}
 .mgmt-alias-item{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;margin-bottom:6px}
 .mgmt-alias-item .arrow{color:var(--text3)}
 .mgmt-alias-item .x{margin-left:auto;color:var(--red);cursor:pointer;font-size:14px}
@@ -357,14 +369,20 @@ input[type=number]{width:70px;cursor:text}
 <div class="cat-chips" id="taskStatusChipsBar" style="display:none"></div>
 
 <div class="filter-bar" id="mgmtCondBar" style="display:none">
-  <select id="mgmtCondCol1" onchange="onMgmtConditionColChange(1)"></select>
-  <select id="mgmtCondVal1" onchange="applyMgmtCondition()"><option value="">전체</option></select>
-  <span class="mgmt-cond-arrow">›</span>
-  <select id="mgmtCondCol2" onchange="onMgmtConditionColChange(2)"></select>
-  <select id="mgmtCondVal2" onchange="applyMgmtCondition()"><option value="">전체</option></select>
-  <span class="mgmt-cond-arrow">›</span>
-  <select id="mgmtCondCol3" onchange="onMgmtConditionColChange(3)"></select>
-  <select id="mgmtCondVal3" onchange="applyMgmtCondition()"><option value="">전체</option></select>
+  <div class="mgmt-cond-block" id="mgmtCondBlock1">
+    <select id="mgmtCondCol1" onchange="onMgmtConditionColChange(1)" class="mgmt-cond-colsel"></select>
+    <div class="mgmt-value-btns" id="mgmtCondVal1Group"></div>
+  </div>
+  <div class="mgmt-cond-block" id="mgmtCondBlock2" style="display:none">
+    <span class="mgmt-cond-arrow">›</span>
+    <select id="mgmtCondCol2" onchange="onMgmtConditionColChange(2)" class="mgmt-cond-colsel"></select>
+    <div class="mgmt-value-btns" id="mgmtCondVal2Group"></div>
+  </div>
+  <div class="mgmt-cond-block" id="mgmtCondBlock3" style="display:none">
+    <span class="mgmt-cond-arrow">›</span>
+    <select id="mgmtCondCol3" onchange="onMgmtConditionColChange(3)" class="mgmt-cond-colsel"></select>
+    <div class="mgmt-value-btns" id="mgmtCondVal3Group"></div>
+  </div>
   <button class="btn ghost sm" onclick="clearMgmtCondition()">조건 초기화</button>
   <button class="btn ghost sm" onclick="openMgmtAliasModal()">🔤 명칭 치환</button>
 </div>
@@ -713,6 +731,7 @@ let mgmtViewerMode=false; // URL에 ?mode=viewer가 있으면 true — 업로드
 let mgmtViewerLocked=false; // ?lock=1 — 조건 선택 자체를 못 바꾸게(그 담당구역만 보이게) 고정
 let contractDateFilter=null; // {startCol, endCol, asOf} — 계약 유효기간 조건(관리구역 다중조건 조회)
 let mgmtCondActiveCols=[]; // applyMgmtCondition()이 columnFilters에 심어둔 컬럼들(다음 적용 때 지워야 함)
+let mgmtCondSelected={1:'',2:'',3:''}; // 각 단계에서 버튼으로 고른 값('' = 전체)
 let districtFilterActive=false;
 let currentDetailAddr=null;
 let addrTags={}; // { addr: [tag,...] } — persisted
@@ -2543,7 +2562,30 @@ function applyDistrictFilterToBatch(){
 //  색칠하고 그 위에 "관리고객 N개소 / 매출 M백만원" 같은 요약을 얹어 보여준다.
 //  목적: 관리본부·지사·영업구역별로 담당 지역이 지도에서 한눈에 들어오게 하는 것)
 // ═══════════════════════════════════════════════
-const MGMT_GROUP_COL_HINTS=['관리본부','관리지사','영업구역','기술구역','출동구역'];
+const MGMT_GROUP_COL_HINTS=['관리본부','관리지사','영업구역','기술구역','출동구역','담당자'];
+
+// 업로드 파일의 컬럼명이 힌트와 정확히 똑같지 않아도(공백 차이, "관리본부명"처럼
+// 앞뒤에 글자가 더 붙은 경우, 반대로 "본부"처럼 줄어든 경우) 알아서 찾아준다.
+function fuzzyFindColumn(headers, hint){
+  const normHint=String(hint).replace(/\s+/g,'');
+  let found=headers.find(h=>String(h).trim().replace(/\s+/g,'')===normHint);
+  if(found) return found;
+  found=headers.find(h=>String(h).trim().replace(/\s+/g,'').includes(normHint));
+  if(found) return found;
+  found=headers.find(h=>{
+    const nh=String(h).trim().replace(/\s+/g,'');
+    return nh.length>=2 && normHint.includes(nh);
+  });
+  return found||'';
+}
+// 헤더 목록에서 힌트 여러 개를 순서대로 시도해 가장 먼저 매칭되는 컬럼을 찾는다.
+function fuzzyFindColumnByHints(headers, hints){
+  for(const hint of hints){
+    const found=fuzzyFindColumn(headers, hint);
+    if(found) return found;
+  }
+  return '';
+}
 
 function buildMgmtColumnOptions(){
   const groupSel=document.getElementById('mgmtGroupCol');
@@ -2552,7 +2594,7 @@ function buildMgmtColumnOptions(){
   const prevGroup=groupSel.value, prevRev=revSel.value;
   groupSel.innerHTML='<option value="">그룹 기준 컬럼 선택</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
   revSel.innerHTML='<option value="">매출 합계: 사용 안 함</option>'+headers.map(h=>`<option value="${h}">${h}</option>`).join('');
-  const hintCol=headers.find(h=>MGMT_GROUP_COL_HINTS.includes(String(h).trim()));
+  const hintCol=fuzzyFindColumnByHints(headers, MGMT_GROUP_COL_HINTS);
   groupSel.value = prevGroup && headers.includes(prevGroup) ? prevGroup : (hintCol||'');
   revSel.value = prevRev && headers.includes(prevRev) ? prevRev : '';
 }
@@ -2856,9 +2898,9 @@ function buildMgmtConditionOptions(){
   const sel1=document.getElementById('mgmtCondCol1'), sel2=document.getElementById('mgmtCondCol2'), sel3=document.getElementById('mgmtCondCol3');
   const opts='<option value="">사용 안 함</option>'+headers.map(h=>`<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
   [sel1,sel2,sel3].forEach(s=>{ const prev=s.value; s.innerHTML=opts; if(prev && headers.includes(prev)) s.value=prev; });
-  if(!sel1.value) sel1.value = headers.find(h=>String(h).trim()==='관리본부') || '';
-  if(!sel2.value) sel2.value = headers.find(h=>String(h).trim()==='관리지사') || '';
-  if(!sel3.value) sel3.value = headers.find(h=>String(h).trim()==='영업구역') || '';
+  if(!sel1.value) sel1.value = fuzzyFindColumnByHints(headers, ['관리본부','본부']);
+  if(!sel2.value) sel2.value = fuzzyFindColumnByHints(headers, ['관리지사','지사']);
+  if(!sel3.value) sel3.value = fuzzyFindColumnByHints(headers, ['영업구역','기술구역','출동구역','담당자']);
 
   const startSel=document.getElementById('mgmtContractStartCol'), endSel=document.getElementById('mgmtContractEndCol');
   const dateOpts='<option value="">컬럼 선택</option>'+headers.map(h=>`<option value="${escHtml(h)}">${escHtml(h)}</option>`).join('');
@@ -2871,32 +2913,60 @@ function buildMgmtConditionOptions(){
   refreshMgmtConditionValueOptions();
 }
 
+// 단계 하나(레벨)의 값 버튼들을 그린다 — "전체" 버튼이 항상 맨 앞에 있고, 그 뒤로
+// 실제 값들이 버튼으로 나온다. 2·3단계는 이전 단계에서 "전체"가 아닌 값을 골라야만
+// (동적으로) 나타난다 — 예: 관리본부에서 강북본부를 고르면 그제서야 관리지사
+// 버튼들이 나타나는 식.
+function renderMgmtValueButtons(level, col, filterFn){
+  const groupEl=document.getElementById('mgmtCondVal'+level+'Group');
+  const blockEl=document.getElementById('mgmtCondBlock'+level);
+  if(!col){
+    groupEl.innerHTML='';
+    if(level>1 && blockEl) blockEl.style.display='none';
+    return [];
+  }
+  const okResults=batchResults.filter(r=>r.ok);
+  const rows=filterFn ? okResults.filter(filterFn) : okResults;
+  const set=new Set();
+  rows.forEach(r=>{ const raw=String((r.row||{})[col]??'').trim(); if(raw) set.add(resolveAlias(raw)); });
+  const values=[...set].sort();
+  if(!values.includes(mgmtCondSelected[level])) mgmtCondSelected[level]='';
+  const locked=!!(mgmtViewerMode && mgmtViewerLocked);
+  const sel=mgmtCondSelected[level];
+  const btn=(label,val)=>`<button type="button" class="mgmt-value-btn${sel===val?' on':''}" ${locked?'disabled':''} onclick="selectMgmtConditionValue(${level},'${val.replace(/'/g,"\\'")}')">${escHtml(label)}</button>`;
+  groupEl.innerHTML = btn('전체','') + values.map(v=>btn(v,v)).join('');
+  if(level>1 && blockEl) blockEl.style.display = values.length ? 'flex' : 'none';
+  return values;
+}
+
 function refreshMgmtConditionValueOptions(){
   const col1=document.getElementById('mgmtCondCol1').value, col2=document.getElementById('mgmtCondCol2').value, col3=document.getElementById('mgmtCondCol3').value;
-  const val1Sel=document.getElementById('mgmtCondVal1'), val2Sel=document.getElementById('mgmtCondVal2'), val3Sel=document.getElementById('mgmtCondVal3');
-  const okResults=batchResults.filter(r=>r.ok);
 
-  function populate(sel, col, filterFn){
-    if(!col){ sel.innerHTML='<option value="">-</option>'; sel.disabled=true; return; }
-    sel.disabled = !!(mgmtViewerMode && mgmtViewerLocked);
-    const prev=sel.value;
-    const rows=filterFn ? okResults.filter(filterFn) : okResults;
-    const set=new Set();
-    rows.forEach(r=>{ const raw=String((r.row||{})[col]??'').trim(); if(raw) set.add(resolveAlias(raw)); });
-    const values=[...set].sort();
-    sel.innerHTML='<option value="">전체</option>'+values.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
-    sel.value = values.includes(prev) ? prev : '';
-  }
+  renderMgmtValueButtons(1, col1, null);
+  const val1=mgmtCondSelected[1];
+  const block2=document.getElementById('mgmtCondBlock2');
+  if(!val1){ block2.style.display='none'; document.getElementById('mgmtCondVal2Group').innerHTML=''; mgmtCondSelected[2]=''; }
+  else renderMgmtValueButtons(2, col2, col2 ? (r=>resolveAlias(String((r.row||{})[col1]??'').trim())===val1) : null);
 
-  populate(val1Sel, col1, null);
-  const val1=val1Sel.value;
-  populate(val2Sel, col2, col2 ? (r=>!val1 || resolveAlias(String((r.row||{})[col1]??'').trim())===val1) : null);
-  const val2=val2Sel.value;
-  populate(val3Sel, col3, col3 ? (r=>(!val1||resolveAlias(String((r.row||{})[col1]??'').trim())===val1) && (!val2||resolveAlias(String((r.row||{})[col2]??'').trim())===val2)) : null);
+  const val2=mgmtCondSelected[2];
+  const block3=document.getElementById('mgmtCondBlock3');
+  if(!val1 || !val2){ block3.style.display='none'; document.getElementById('mgmtCondVal3Group').innerHTML=''; mgmtCondSelected[3]=''; }
+  else renderMgmtValueButtons(3, col3, col3 ? (r=>resolveAlias(String((r.row||{})[col1]??'').trim())===val1 && resolveAlias(String((r.row||{})[col2]??'').trim())===val2) : null);
+}
+
+function selectMgmtConditionValue(level, val){
+  if(mgmtViewerMode && mgmtViewerLocked) return;
+  mgmtCondSelected[level]=val;
+  if(level===1) mgmtCondSelected[2]='';
+  if(level<=2) mgmtCondSelected[3]='';
+  refreshMgmtConditionValueOptions();
+  applyMgmtCondition();
 }
 
 function onMgmtConditionColChange(level){
-  document.getElementById('mgmtCondVal'+level).value='';
+  mgmtCondSelected[level]='';
+  if(level===1) mgmtCondSelected[2]='';
+  if(level<=2) mgmtCondSelected[3]='';
   refreshMgmtConditionValueOptions();
   applyMgmtCondition();
 }
@@ -2906,9 +2976,9 @@ function applyMgmtCondition(){
   mgmtCondActiveCols=[];
 
   const levels=[
-    [document.getElementById('mgmtCondCol1').value, document.getElementById('mgmtCondVal1').value],
-    [document.getElementById('mgmtCondCol2').value, document.getElementById('mgmtCondVal2').value],
-    [document.getElementById('mgmtCondCol3').value, document.getElementById('mgmtCondVal3').value],
+    [document.getElementById('mgmtCondCol1').value, mgmtCondSelected[1]],
+    [document.getElementById('mgmtCondCol2').value, mgmtCondSelected[2]],
+    [document.getElementById('mgmtCondCol3').value, mgmtCondSelected[3]],
   ];
   levels.forEach(([col,val])=>{
     if(col && val){
@@ -2936,7 +3006,7 @@ function applyMgmtCondition(){
 }
 
 function clearMgmtCondition(){
-  ['mgmtCondVal1','mgmtCondVal2','mgmtCondVal3'].forEach(id=>{ document.getElementById(id).value=''; });
+  mgmtCondSelected={1:'',2:'',3:''};
   document.getElementById('mgmtContractToggle').checked=false;
   refreshMgmtConditionValueOptions();
   applyMgmtCondition();
@@ -2948,9 +3018,9 @@ function clearMgmtCondition(){
 // 걸리고, &lock=1까지 붙이면 그 조건을 바꾸지 못하게 고정한다 — 담당자별로
 // "이 사람에게는 이 구역만" 보이는 개별 링크를 만들 수 있다.
 function copyMgmtConditionLink(){
-  const col1=document.getElementById('mgmtCondCol1').value, val1=document.getElementById('mgmtCondVal1').value;
-  const col2=document.getElementById('mgmtCondCol2').value, val2=document.getElementById('mgmtCondVal2').value;
-  const col3=document.getElementById('mgmtCondCol3').value, val3=document.getElementById('mgmtCondVal3').value;
+  const col1=document.getElementById('mgmtCondCol1').value, val1=mgmtCondSelected[1];
+  const col2=document.getElementById('mgmtCondCol2').value, val2=mgmtCondSelected[2];
+  const col3=document.getElementById('mgmtCondCol3').value, val3=mgmtCondSelected[3];
   const locked=document.getElementById('mgmtShareLockChk').checked;
   const params=new URLSearchParams();
   params.set('mode','viewer');
@@ -2976,11 +3046,12 @@ function applyPendingViewerCondition(){
   if(p.c1){ document.getElementById('mgmtCondCol1').value=p.c1; }
   if(p.c2){ document.getElementById('mgmtCondCol2').value=p.c2; }
   if(p.c3){ document.getElementById('mgmtCondCol3').value=p.c3; }
+  mgmtCondSelected[1]=p.v1||'';
+  refreshMgmtConditionValueOptions(); // 1단계 값을 먼저 반영해야 2단계 후보가 계산됨
+  mgmtCondSelected[2]=p.v2||'';
+  refreshMgmtConditionValueOptions(); // 2단계까지 반영해야 3단계 후보가 계산됨
+  mgmtCondSelected[3]=p.v3||'';
   refreshMgmtConditionValueOptions();
-  if(p.v1) document.getElementById('mgmtCondVal1').value=p.v1;
-  if(p.v2) document.getElementById('mgmtCondVal2').value=p.v2;
-  if(p.v3) document.getElementById('mgmtCondVal3').value=p.v3;
-  refreshMgmtConditionValueOptions(); // 값을 채운 뒤 하위 단계 옵션을 다시 계산
   applyMgmtCondition();
 }
 
@@ -3006,6 +3077,9 @@ function applyViewerModeFromUrl(){
   const clearCondBtn=document.querySelector('#mgmtCondBar button[onclick="clearMgmtCondition()"]'); if(clearCondBtn && mgmtViewerLocked) clearCondBtn.style.display='none';
   const linkBtn=document.querySelector('#mgmtContractBar button[onclick="copyMgmtConditionLink()"]'); if(linkBtn) linkBtn.style.display='none';
   document.getElementById('mgmtShareLockChk').closest('label').style.display='none';
+  if(mgmtViewerLocked){
+    ['mgmtCondCol1','mgmtCondCol2','mgmtCondCol3'].forEach(id=>{ document.getElementById(id).disabled=true; });
+  }
   switchMode('mgmt');
 }
 
@@ -3096,7 +3170,7 @@ function buildAnalyticsColumnOptions(){
   const prev=sel.value;
   sel.innerHTML=headers.map(h=>`<option value="${h}">${h}</option>`).join('');
   const fallback = (mgmtGroupCol && headers.includes(mgmtGroupCol)) ? mgmtGroupCol
-    : (headers.find(h=>MGMT_GROUP_COL_HINTS.includes(String(h).trim())) || headers[0]);
+    : (fuzzyFindColumnByHints(headers, MGMT_GROUP_COL_HINTS) || headers[0]);
   sel.value = prev && headers.includes(prev) ? prev : (fallback||'');
 }
 
