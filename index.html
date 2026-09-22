@@ -469,6 +469,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 .special-note-text{flex:1;white-space:pre-wrap;color:var(--text);}
 .special-note-del{flex:none;background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:0;}
 .special-note-empty{color:var(--text-mute);font-size:13px;padding:8px 0;}
+.hub-messages-toggle-btn{display:inline-flex;align-items:center;gap:6px;margin:4px 0 10px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;}
+.hub-messages-toggle-btn:hover{border-color:var(--accent);color:var(--accent);}
+.hub-messages-badge{background:var(--red,#ef4444);color:#fff;font-size:11px;font-weight:700;border-radius:10px;padding:1px 7px;min-width:16px;}
+.hub-msg-item{border:1px solid var(--border);border-radius:9px;padding:9px 11px;margin-bottom:8px;background:var(--card);}
+.hub-msg-item.urgent{border-color:var(--danger,#ef4444);background:var(--danger-bg,rgba(239,68,68,.08));}
+.hub-msg-item.pinned{border-color:var(--accent-warm);}
+.hub-msg-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);margin-bottom:4px;}
+.hub-msg-from{font-weight:700;color:var(--text);}
+.hub-msg-to-chip{background:var(--surface2);border-radius:8px;padding:1px 7px;}
+.hub-msg-urgent-chip{background:var(--danger,#ef4444);color:#fff;border-radius:8px;padding:1px 7px;font-weight:700;}
+.hub-msg-actions{margin-left:auto;display:flex;gap:8px;}
+.hub-msg-actions a{color:var(--text-mute);text-decoration:underline;cursor:pointer;}
+.hub-msg-body{font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+.hub-msg-body img{max-width:100%;border-radius:8px;margin-top:6px;display:block;}
 .hub-announcement-banner{display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:10px 14px;background:var(--accent-warm-soft);border:1px solid var(--accent-warm);border-radius:10px;text-align:left;}
 .hub-announcement-icon{flex:none;font-size:16px;}
 .hub-announcement-text{flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -557,6 +571,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div class="login-box" style="max-width:1040px;text-align:center;">
     <h1>어떤 업무를 여시겠어요?</h1>
     <p class="sub" id="hubLoginLabel"></p>
+    <!-- 팀 쪽지: 공지사항(관리자→전체, 한방향)과 달리 누구나 쓰고 읽을 수 있는 양방향
+         소통 게시판. 전체지사에게 보낼지 특정 지사만 지정할지 고를 수 있고, 긴급 표시·
+         고정·사진첨부·검색·안읽음 배지를 지원한다(하단 hub_messages 관련 JS 참고). -->
+    <button type="button" id="btnHubMessages" class="hub-messages-toggle-btn">
+      💬 팀 쪽지 <span id="hubMessagesUnreadBadge" class="hub-messages-badge" hidden>0</span>
+    </button>
+    <div id="hubMessagesPanel" class="login-hidden" style="margin:12px 0 16px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sub" style="margin:0;font-weight:700;color:var(--text);">💬 팀 쪽지</p>
+        <a href="#" id="btnHubMessagesClose" class="sub" style="text-decoration:underline;cursor:pointer;">닫기</a>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <select id="hubMsgToBranch" style="padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--card);color:var(--text);">
+          <option value="">📢 전체 지사</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text2);cursor:pointer;">
+          <input type="checkbox" id="hubMsgUrgent"> 🔴 긴급
+        </label>
+        <label class="btn" style="font-size:12px;padding:6px 10px;cursor:pointer;">
+          📷 사진<input type="file" id="hubMsgPhotoInput" accept="image/*" style="display:none;">
+        </label>
+        <span id="hubMsgPhotoStatus" class="sub" style="align-self:center;"></span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <textarea id="hubMsgBodyInput" rows="2" placeholder="쪽지 내용을 입력하세요" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--sans);resize:vertical;box-sizing:border-box;"></textarea>
+        <button type="button" class="btn btn-primary" id="btnHubMsgSend" style="flex:none;align-self:flex-start;">보내기</button>
+      </div>
+      <input type="text" id="hubMsgSearchInput" placeholder="검색 (내용 · 보낸사람)" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;box-sizing:border-box;margin-bottom:10px;">
+      <div id="hubMessagesList" style="max-height:380px;overflow-y:auto;"></div>
+    </div>
     <!-- 공지사항: 관리자만 쓰고 전체(지사 포함)가 볼 수 있는 배너. 등록된 공지가
          없으면 통째로 숨긴다. -->
     <div id="hubAnnouncementBanner" class="hub-announcement-banner login-hidden">
@@ -5790,6 +5834,9 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
     // 허브가 보일 때마다 클라우드의 최신 화면 구성(관리자가 추가한 메뉴/링크 등)을 조용히
     // 받아온다 — 관리자가 다른 기기에서 "클라우드에 저장"을 눌렀다면 여기서 자동 반영된다.
     if(typeof pullHubSettingsFromCloud === 'function') pullHubSettingsFromCloud(true);
+    // 팀 쪽지 안읽음 배지도 로그인 시점에 갱신하고, 20초 간격 폴링을 시작한다(패널이
+    // 닫혀 있어도 배지는 계속 최신으로 유지되도록).
+    if(typeof loadHubMessages === 'function'){ loadHubMessages(); startHubMessagesPolling(); }
   }
   document.getElementById('btnHubAttendance').addEventListener('click', ()=>{
     hub.classList.add('login-hidden'); // 이 화면만 닫힘 — 뒤에 있던 근태관리 화면은 그대로
@@ -6501,6 +6548,158 @@ document.getElementById('btnFactoryReset').addEventListener('click', ()=>{
       renderSpecialNotes();
     });
   });
+  /* ---- 팀 쪽지 (hub_messages, Supabase 공유 — 누구나 쓰고 읽는 양방향 게시판) ----
+     공지사항(관리자→전체, 한방향)과 달리 지사 누구나 쓸 수 있고, 전체/특정 지사 지정·
+     긴급 표시·고정·사진첨부·검색을 지원한다. "읽음" 상태는 서버에 저장하지 않고(누가
+     읽었는지까지 추적할 이유는 없음) 이 기기의 마지막 확인 시각(localStorage)만 기준으로
+     안읽음 배지를 계산한다 — 다른 기기에서 이미 읽은 쪽지도 이 기기에선 새로 안읽음으로
+     보일 수 있는데, 이 정도 오차는 배지 용도로는 문제 없다. */
+  const HUB_MSG_READ_KEY = 'hubMessagesLastReadAt';
+  let hubMessagesCache = [];
+  let hubMessagesPollStarted = false;
+  let hubMsgPhotoDataUrl = null;
+  function getHubMsgLastRead(){ return localStorage.getItem(HUB_MSG_READ_KEY) || ''; }
+  function setHubMsgLastRead(iso){ localStorage.setItem(HUB_MSG_READ_KEY, iso); }
+  function myBranchForMessages(){ const auth = currentAuth(); return (auth && auth.branch) || ''; }
+  // 나에게 온 쪽지(전체발송 or 내 지사 지정) 또는 내가 보낸 쪽지(다른 지사 전용으로 보냈어도
+  // 보낸 사람 본인은 자기 쪽지를 계속 볼 수 있어야 함) — 관리자는 이 필터 자체를 건너뛰고 전체를 본다.
+  function isMessageForMe(m){
+    const auth = currentAuth();
+    if(auth && auth.isAdmin) return true;
+    if(!m.to_branch) return true;
+    if(m.to_branch === myBranchForMessages()) return true;
+    return m.from_name === (typeof loginLabel==='function' ? loginLabel() : '');
+  }
+  function updateHubMessagesBadge(){
+    const badge = document.getElementById('hubMessagesUnreadBadge');
+    if(!badge) return;
+    const lastRead = getHubMsgLastRead();
+    const unread = hubMessagesCache.filter(m=> isMessageForMe(m) && (!lastRead || m.created_at > lastRead)).length;
+    badge.hidden = unread === 0;
+    badge.textContent = unread > 99 ? '99+' : String(unread);
+  }
+  async function loadHubMessages(){
+    const client = getHubCloudClient();
+    if(!client) return;
+    const { data, error } = await client.from('hub_messages').select('*')
+      .order('pinned', { ascending:false }).order('created_at', { ascending:false }).limit(200);
+    if(error){ console.warn('팀 쪽지를 불러오지 못했습니다:', error.message); return; }
+    hubMessagesCache = data || [];
+    updateHubMessagesBadge();
+    const panel = document.getElementById('hubMessagesPanel');
+    if(panel && !panel.classList.contains('login-hidden')) renderHubMessagesList();
+  }
+  function renderHubMsgToBranchOptions(){
+    const sel = document.getElementById('hubMsgToBranch');
+    if(!sel) return;
+    const cur = sel.value;
+    const list = (typeof branches !== 'undefined' && branches) ? branches : [];
+    sel.innerHTML = '<option value="">📢 전체 지사</option>' + list.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+  }
+  function renderHubMessagesList(){
+    const list = document.getElementById('hubMessagesList');
+    const q = (document.getElementById('hubMsgSearchInput').value || '').trim().toLowerCase();
+    const auth = currentAuth();
+    const isAdmin = !!(auth && auth.isAdmin);
+    const filtered = hubMessagesCache.filter(m=>{
+      if(!isMessageForMe(m)) return false;
+      if(!q) return true;
+      return (m.body||'').toLowerCase().includes(q) || (m.from_name||'').toLowerCase().includes(q);
+    });
+    if(!filtered.length){ list.innerHTML = '<p class="sub" style="padding:10px 0;">쪽지가 없습니다.</p>'; return; }
+    list.innerHTML = filtered.map(m=>{
+      const dateStr = m.created_at ? new Date(m.created_at).toLocaleString('ko-KR') : '';
+      const mine = m.from_name === (typeof loginLabel==='function' ? loginLabel() : '');
+      const canDelete = isAdmin || mine;
+      const actions = (isAdmin || canDelete) ? `<span class="hub-msg-actions">
+          ${isAdmin ? `<a href="#" data-msg-pin="${m.id}">${m.pinned?'고정 해제':'📌 고정'}</a>` : ''}
+          ${canDelete ? `<a href="#" data-msg-del="${m.id}">삭제</a>` : ''}
+        </span>` : '';
+      return `<div class="hub-msg-item${m.priority==='urgent'?' urgent':''}${m.pinned?' pinned':''}">
+        <div class="hub-msg-head">
+          <span class="hub-msg-from">${esc(m.from_name||'익명')}</span>
+          <span class="hub-msg-to-chip">${m.to_branch ? esc(m.to_branch) : '전체'}</span>
+          ${m.priority==='urgent' ? '<span class="hub-msg-urgent-chip">🔴 긴급</span>' : ''}
+          ${m.pinned ? '<span>📌</span>' : ''}
+          <span>${dateStr}</span>
+          ${actions}
+        </div>
+        <div class="hub-msg-body">${esc(m.body||'').replace(/\n/g,'<br>')}${m.photo_data?`<img src="${esc(m.photo_data)}">`:''}</div>
+      </div>`;
+    }).join('');
+  }
+  function startHubMessagesPolling(){
+    if(hubMessagesPollStarted) return;
+    hubMessagesPollStarted = true;
+    setInterval(loadHubMessages, 20000);
+  }
+  document.getElementById('hubMsgPhotoInput').addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    const status = document.getElementById('hubMsgPhotoStatus');
+    if(!file){ hubMsgPhotoDataUrl=null; status.textContent=''; return; }
+    const reader = new FileReader();
+    reader.onload = ()=>{ hubMsgPhotoDataUrl = reader.result; status.textContent = '✓ ' + file.name; };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('btnHubMsgSend').addEventListener('click', async ()=>{
+    const bodyInput = document.getElementById('hubMsgBodyInput');
+    const body = bodyInput.value.trim();
+    if(!body && !hubMsgPhotoDataUrl){ alert('내용을 입력하거나 사진을 첨부해주세요.'); return; }
+    const client = getHubCloudClient();
+    if(!client){ alert('클라우드 연결을 초기화하지 못했습니다. 인터넷 연결을 확인해주세요.'); return; }
+    const toBranch = document.getElementById('hubMsgToBranch').value || null;
+    const urgent = document.getElementById('hubMsgUrgent').checked;
+    const fromName = (typeof loginLabel==='function' && loginLabel()) || '익명';
+    const { error } = await client.from('hub_messages').insert({
+      from_name: fromName, to_branch: toBranch, priority: urgent?'urgent':'normal',
+      body, photo_data: hubMsgPhotoDataUrl
+    });
+    if(error){ alert('전송 실패: ' + error.message); return; }
+    bodyInput.value = '';
+    document.getElementById('hubMsgUrgent').checked = false;
+    document.getElementById('hubMsgPhotoInput').value = '';
+    hubMsgPhotoDataUrl = null;
+    document.getElementById('hubMsgPhotoStatus').textContent = '';
+    await loadHubMessages();
+    setHubMsgLastRead(new Date().toISOString());
+    updateHubMessagesBadge();
+  });
+  document.getElementById('hubMsgSearchInput').addEventListener('input', renderHubMessagesList);
+  document.getElementById('hubMessagesList').addEventListener('click', async (e)=>{
+    const pinLink = e.target.closest('[data-msg-pin]');
+    const delLink = e.target.closest('[data-msg-del]');
+    const client = getHubCloudClient();
+    if(pinLink && client){
+      e.preventDefault();
+      const id = pinLink.getAttribute('data-msg-pin');
+      const msg = hubMessagesCache.find(m=>m.id===id);
+      if(!msg) return;
+      const { error } = await client.from('hub_messages').update({ pinned: !msg.pinned }).eq('id', id);
+      if(error) alert('실패: ' + error.message); else await loadHubMessages();
+      return;
+    }
+    if(delLink && client){
+      e.preventDefault();
+      if(!confirm('이 쪽지를 삭제할까요?')) return;
+      const id = delLink.getAttribute('data-msg-del');
+      const { error } = await client.from('hub_messages').delete().eq('id', id);
+      if(error) alert('실패: ' + error.message); else await loadHubMessages();
+    }
+  });
+  document.getElementById('btnHubMessages').addEventListener('click', async ()=>{
+    document.getElementById('hubMessagesPanel').classList.remove('login-hidden');
+    renderHubMsgToBranchOptions();
+    await loadHubMessages();
+    renderHubMessagesList();
+    setHubMsgLastRead(new Date().toISOString());
+    updateHubMessagesBadge();
+  });
+  document.getElementById('btnHubMessagesClose').addEventListener('click', (e)=>{
+    e.preventDefault();
+    document.getElementById('hubMessagesPanel').classList.add('login-hidden');
+  });
+
   /* ---- 공지사항 (관리자만 등록/삭제, 전체 로그인이 읽을 수 있음) ----
      특이사항 관리와 반대로 "누구나 볼 수 있어야" 하는 기능이라, 배너와 패널 자체는
      화면 구성 설정/지사별 접근 권한과 무관하게 항상(로그인만 하면) 노출된다. 등록·삭제
