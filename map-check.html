@@ -2375,12 +2375,15 @@ function findDongMatches(queryRaw){
   if(matches.length) return matches;
   // 3) 시/군/구 전체("부평구", "안양시동안구", "서울특별시 강북구"처럼 시/도를
   // 앞에 붙인 경우까지 — 자동완성이 "시/도 시/군/구" 형태로 제안해주기 때문에 꼭 필요)
+  // 실제 데이터의 sggnm은 "수원시영통구"처럼 시/군/구 이름 사이에 띄어쓰기가 없어서,
+  // 사용자가 "수원시 영통구"처럼 띄어 입력해도 맞게 비교하려면 양쪽 다 공백을 지우고 비교해야 한다.
   {
     const parts3=trimmed.split(/\s+/);
     const sidoPrefix3 = parts3.length>1 ? resolveSidoName(parts3[0]) : '';
-    const sggQuery = sidoPrefix3 ? parts3.slice(1).join(' ') : trimmed;
+    const sggQueryNoSpace = (sidoPrefix3 ? parts3.slice(1) : parts3).join('');
     matches=dongBoundaries.filter(f=>{
-      const sggMatch = f.properties.sggnm===sggQuery || f.properties.sggnm.endsWith(sggQuery);
+      const sggNoSpace=f.properties.sggnm.replace(/\s+/g,'');
+      const sggMatch = sggNoSpace===sggQueryNoSpace || sggNoSpace.endsWith(sggQueryNoSpace);
       if(!sggMatch) return false;
       if(sidoPrefix3) return f.properties.sidonm===sidoPrefix3;
       return true;
@@ -2388,18 +2391,26 @@ function findDongMatches(queryRaw){
     if(matches.length) return matches;
   }
   // 4) 동/읍/면 이름(끝 숫자 무시) — "삼산동"→삼산1동+삼산2동, "목동"→목1동~목5동.
-  // "인천 삼산동"처럼 시/도(줄임말 포함)를 앞에 붙였으면 그 지역으로 좁혀서, 동명이인을 피한다.
+  // 앞에 지역명을 붙였으면(시/도든, "수원시 영통구"처럼 시/도 없이 시/군/구만이든) 그 지역으로
+  // 좁혀서 동명이인을 피한다. 앞부분이 시/도가 아니라 시/군/구일 수도 있으므로("수원시"는
+  // SIDO_ALIASES에 없어 resolveSidoName이 그대로 돌려주고, 그러면 sidonm과 절대 같을 수
+  // 없어 전부 걸러지던 버그가 있었다) — sidonm 정확히 일치하는 경우 외에, sidonm+sggnm을
+  // 공백 없이 합친 문자열에 입력 앞부분이 포함되는지도 함께 확인한다.
   const parts=trimmed.split(/\s+/);
   const dongQuery=parts[parts.length-1];
   const dongQueryBase=normalizeDongBase(dongQuery);
-  const prefixSido = parts.length>1 ? resolveSidoName(parts[0]) : '';
+  const prefixTokens=parts.slice(0,-1);
+  const prefixNoSpace=prefixTokens.join('');
+  const prefixSidoResolved=prefixTokens.length ? resolveSidoName(prefixTokens[0]) : '';
   matches=dongBoundaries.filter(f=>{
     const fParts=String(f.properties.adm_nm).split(' ');
     const fDong=fParts[fParts.length-1];
     const dongMatch = normalizeDongBase(fDong)===dongQueryBase || fDong===dongQuery;
     if(!dongMatch) return false;
-    if(prefixSido) return f.properties.sidonm===prefixSido;
-    return true;
+    if(!prefixTokens.length) return true;
+    if(f.properties.sidonm===prefixSidoResolved) return true;
+    const fullRegionNoSpace=(f.properties.sidonm+f.properties.sggnm).replace(/\s+/g,'');
+    return fullRegionNoSpace.includes(prefixNoSpace);
   });
   return matches;
 }
