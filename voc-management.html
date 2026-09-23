@@ -220,9 +220,20 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
 .action-box h5{font-size:12px;font-weight:700;margin-bottom:5px}
 .action-box p{font-size:11px;color:var(--t2);line-height:1.5}
 
+/* 영업구역 실적 리뷰 전용 — .chrow와 같은 반응형 규칙이지만, 이 카드는 폭에 따라
+   트리맵·히트맵의 내부 레이아웃(글자 크기 등)도 함께 조정해야 해서 별도 클래스로 둔다. */
+.zr-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.zr-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.zr-controls label{font-size:11px;color:var(--t3);font-weight:600}
+.zr-controls select{border:1px solid var(--bd2);border-radius:var(--rs);padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg2);color:var(--tx)}
+/* 전역 table{min-width:1220px}(메인 VOC 목록용) 규칙이 이 작은 히트맵 표에도 그대로
+   적용되어 카드 폭을 넘어 잘려 보이던 문제 — 이 표만 그 강제 최소폭을 없앤다. */
+#zoneHeatmap table{table-layout:auto;min-width:0}
+#zoneHeatmap th,#zoneHeatmap td{white-space:nowrap}
 @media(max-width:768px){
   .krow{grid-template-columns:repeat(3,1fr);gap:7px}
   .chrow{grid-template-columns:1fr}
+  .zr-grid2{grid-template-columns:1fr}
   .fg-grid{grid-template-columns:1fr 1fr}
   .hdr-s{display:none}
   .dg3,.mdg{grid-template-columns:1fr 1fr}
@@ -772,14 +783,25 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
 
   <!-- ▼ 영업구역 실적 리뷰 (전체 조망 — 지사 선택 없이 항상 노출, 상단 필터와 연동) ▼ -->
   <div class="fp">
-    <div class="ft">🗺️ 영업구역 실적 리뷰 <span style="font-weight:400;color:var(--t3)">— "담당상세" 컬럼 기준, 미접수·접수·처리완료로 누가 잘하고 못하는지 한눈에 (상단 필터 범위 연동)</span></div>
+    <div class="ft">🗺️ 영업구역 실적 리뷰 <span style="font-weight:400;color:var(--t3)">— "담당상세" 컬럼 기준, 누가 잘하고 못하는지 한눈에 (상단 필터 범위 연동)</span></div>
+    <div class="zr-controls">
+      <label>기준 지표</label>
+      <select id="zoneReviewMetric" onchange="renderZoneReview(bsFiltered())">
+        <option value="처리완료">처리완료율</option>
+        <option value="미접수">미접수율</option>
+        <option value="접수">접수율</option>
+        <option value="처리중">처리중율</option>
+        <option value="결재요청">결재요청율</option>
+      </select>
+      <span style="font-size:10.5px;color:var(--t3)">※ 처리완료율은 높을수록 양호, 나머지(미접수·접수·처리중·결재요청)는 낮을수록 양호(적체가 적음)</span>
+    </div>
     <div id="zoneReviewCallout" style="font-size:12px;margin-bottom:10px;line-height:1.8"></div>
     <div class="chrow" style="grid-template-columns:1fr">
       <div class="cc"><h4>구역별 처리현황 (막대)</h4><div class="cw" id="zoneChartBarWrap" style="height:240px"><canvas id="zoneChartBar"></canvas></div></div>
     </div>
-    <div class="chrow" style="grid-template-columns:1fr 1fr">
-      <div class="cc"><h4>구역별 규모·완료율 (트리맵) <span style="font-weight:400;font-size:9px;color:var(--t3)">(크기=건수 · 색=완료율, 빨강↔초록)</span></h4><div class="cw" style="height:280px"><canvas id="zoneChartTreemap"></canvas></div></div>
-      <div class="cc"><h4>구역 × 상태 히트맵</h4><div id="zoneHeatmap" style="overflow-x:auto;max-height:280px;overflow-y:auto"></div></div>
+    <div class="zr-grid2">
+      <div class="cc"><h4 id="zoneTreemapTitle">구역별 규모·완료율 (트리맵)</h4><div class="cw" style="height:280px"><canvas id="zoneChartTreemap"></canvas></div></div>
+      <div class="cc"><h4>구역 × 상태 히트맵 <span style="font-weight:400;font-size:9px;color:var(--t3)">(기준 지표 열은 강조 표시)</span></h4><div id="zoneHeatmap" style="overflow-x:auto"></div></div>
     </div>
   </div>
   <!-- ▲ 영업구역 실적 리뷰 끝 ▲ -->
@@ -2889,8 +2911,17 @@ function hexToRgba(hex, alpha){
   const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
   return `rgba(${r},${g},${b},${alpha})`;
 }
+// 기준 지표가 "처리완료"면 값이 높을수록 좋고(양호), 나머지 4개(미접수·접수·처리중·
+// 결재요청)는 전부 "아직 그 단계에 머물러 있다"는 뜻이라 값이 높을수록 나쁘다(적체).
+// 이 방향을 매번 헷갈리지 않도록 "최고/최저" 대신 "양호/시급" 같은 방향 중립적 표현을 쓴다.
+function zrIsGoodMetric(metric){ return metric==='처리완료'; }
 function renderZoneReview(d){
   const barWrap = document.getElementById('zoneChartBarWrap');
+  const metricSel = document.getElementById('zoneReviewMetric');
+  const metric = metricSel ? metricSel.value : '처리완료';
+  const isGood = zrIsGoodMetric(metric);
+  const allStates = ['미접수','접수','처리중','처리완료','결재요청'];
+
   const rows = d.filter(r=>(r['담당상세']||'').trim());
   const unmatched = d.length - rows.length;
   // 지사-구역 복합키로 묶는다 — 같은 "담당상세" 값이 서로 다른 지사에 우연히 겹치는 경우를
@@ -2904,11 +2935,14 @@ function renderZoneReview(d){
     const cnt = {'미접수':0,'접수':0,'처리중':0,'처리완료':0,'결재요청':0,'미분류':0};
     zr.forEach(r=>cnt[bsState(r)]++);
     const total = zr.length;
-    const rate = total ? Math.round(cnt['처리완료']/total*100) : 0;
+    const rate = total ? Math.round(cnt[metric]/total*100) : 0;
     return {branch, zone, label:`${branch} · ${zone}`, total, rate, ...cnt};
   }).sort((a,b)=> a.branch.localeCompare(b.branch,'ko') || b.total-a.total);
 
   const callout = document.getElementById('zoneReviewCallout');
+  const treemapTitle = document.getElementById('zoneTreemapTitle');
+  if(treemapTitle) treemapTitle.innerHTML = `구역별 규모·${metric}율 (트리맵) <span style="font-weight:400;font-size:9px;color:var(--t3)">(크기=건수 · 색=${metric}율, ${isGood?'초록=양호':'빨강=시급'})</span>`;
+
   if(!stats.length){
     callout.innerHTML = '<span style="color:var(--t3)">"담당상세" 값이 채워진 VOC가 없습니다 — 원본 파일에 그 컬럼이 있는지 확인해주세요.</span>';
     if(charts.zoneBar){charts.zoneBar.destroy();charts.zoneBar=null;}
@@ -2917,12 +2951,14 @@ function renderZoneReview(d){
     return;
   }
 
+  // 표본 3건 미만은 랭킹에서만 제외(우연히 1건 처리완료라 100%로 잡히는 왜곡 방지)
   const ranked = stats.filter(s=>s.total>=3);
-  const best = ranked.length ? [...ranked].sort((a,b)=>b.rate-a.rate)[0] : null;
-  const worst = ranked.length ? [...ranked].sort((a,b)=>a.rate-b.rate)[0] : null;
+  const byRateDesc = [...ranked].sort((a,b)=>b.rate-a.rate);
+  const good = ranked.length ? (isGood ? byRateDesc[0] : byRateDesc[byRateDesc.length-1]) : null;
+  const bad  = ranked.length ? (isGood ? byRateDesc[byRateDesc.length-1] : byRateDesc[0]) : null;
   callout.innerHTML = [
-    best ? `<span style="color:var(--grn);font-weight:700">🏆 완료율 최고: ${esc(best.label)} (${best.rate}%, ${best.total}건)</span>` : '',
-    worst && worst.label!==best?.label ? `<span style="color:var(--red);font-weight:700;margin-left:14px">⚠️ 완료율 최저: ${esc(worst.label)} (${worst.rate}%, ${worst.total}건)</span>` : '',
+    good ? `<span style="color:var(--grn);font-weight:700">🏆 ${metric}율 가장 양호: ${esc(good.label)} (${good.rate}%, ${good.total}건)</span>` : '',
+    bad && bad.label!==good?.label ? `<span style="color:var(--red);font-weight:700;margin-left:14px">⚠️ ${metric}율 가장 시급: ${esc(bad.label)} (${bad.rate}%, ${bad.total}건)</span>` : '',
     unmatched ? `<span style="color:var(--t3);margin-left:14px">담당상세 미기재 ${unmatched}건은 제외</span>` : ''
   ].filter(Boolean).join('');
 
@@ -2933,7 +2969,7 @@ function renderZoneReview(d){
     type:'bar',
     data:{
       labels: stats.map(s=>s.label),
-      datasets: BS_STATES.map(st=>({label:st, data: stats.map(s=>s[st]), backgroundColor: BS_STATE_COLORS[st]}))
+      datasets: BS_STATES.map(st=>({label:st, data: stats.map(s=>s[st]), backgroundColor: BS_STATE_COLORS[st], borderWidth: st===metric?1.5:0, borderColor:'#0008'}))
     },
     options:{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
@@ -2942,7 +2978,7 @@ function renderZoneReview(d){
     }
   });
 
-  // 트리맵 — 박스 크기=총 건수, 색=완료율(빨강→초록)
+  // 트리맵 — 박스 크기=총 건수, 색=선택된 지표의 비율(양호 방향=초록, 시급 방향=빨강)
   if(charts.zoneTreemap) charts.zoneTreemap.destroy();
   charts.zoneTreemap = new Chart(document.getElementById('zoneChartTreemap'), {
     type:'treemap',
@@ -2953,7 +2989,8 @@ function renderZoneReview(d){
         formatter(ctx){ const it=ctx.raw&&ctx.raw._data; return it ? [it.label, `${it.total}건 · ${it.rate}%`] : ''; }},
       backgroundColor(ctx){
         const it = ctx.raw && ctx.raw._data; if(!it) return '#94a3b8';
-        const t = Math.max(0, Math.min(100, it.rate))/100;
+        const raw = Math.max(0, Math.min(100, it.rate))/100;
+        const t = isGood ? raw : 1-raw; // t=1일수록 초록(양호), t=0일수록 빨강(시급)
         return `rgb(${Math.round(214-134*t)},${Math.round(72+104*t)},${Math.round(82-18*t)})`;
       },
       borderWidth:1, borderColor:'rgba(0,0,0,.15)', spacing:1
@@ -2964,28 +3001,29 @@ function renderZoneReview(d){
         legend:{display:false},
         tooltip:{callbacks:{
           title(items){ const it=items[0]&&items[0].raw&&items[0].raw._data; return it?it.label:''; },
-          label(item){ const it=item.raw._data; return [`총 ${it.total}건 · 완료율 ${it.rate}%`, `미접수 ${it['미접수']} · 접수 ${it['접수']} · 처리중 ${it['처리중']} · 완료 ${it['처리완료']}`]; }
+          label(item){ const it=item.raw._data; return [`총 ${it.total}건 · ${metric}율 ${it.rate}%`, `미접수 ${it['미접수']} · 접수 ${it['접수']} · 처리중 ${it['처리중']} · 완료 ${it['처리완료']} · 결재요청 ${it['결재요청']}`]; }
         }}
       }
     }
   });
 
-  // 히트맵 — 수동 CSS 표(별도 차트 라이브러리 없이 상태색을 그대로 재사용)
-  const heatStates = ['미접수','접수','처리중','처리완료'];
-  const maxCnt = Math.max(1, ...stats.flatMap(s=>heatStates.map(st=>s[st])));
+  // 히트맵 — 수동 CSS 표(별도 차트 라이브러리 없이 상태색을 그대로 재사용).
+  // 5개 상태를 전부 보여주되, 상단에서 고른 기준 지표 열만 테두리로 강조한다.
+  const maxCnt = Math.max(1, ...stats.flatMap(s=>allStates.map(st=>s[st])));
   document.getElementById('zoneHeatmap').innerHTML = `
     <table style="border-collapse:collapse;font-size:11px;width:100%">
       <thead><tr>
         <th style="text-align:left;padding:5px 8px;position:sticky;left:0;background:var(--bg2)">구역</th>
-        ${heatStates.map(st=>`<th style="padding:5px 8px;background:var(--bg2)">${st}</th>`).join('')}
+        ${allStates.map(st=>`<th style="padding:5px 8px;background:var(--bg2);${st===metric?'box-shadow:inset 0 0 0 2px '+BS_STATE_COLORS[st]+';border-radius:4px':''}">${st}</th>`).join('')}
       </tr></thead>
       <tbody>
         ${stats.map(s=>`
           <tr>
             <td style="padding:5px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:var(--bg)">${esc(s.label)}</td>
-            ${heatStates.map(st=>{
+            ${allStates.map(st=>{
               const v=s[st]; const alpha = v ? (0.15+0.75*(v/maxCnt)) : 0.04;
-              return `<td style="padding:5px 8px;text-align:center;background:${hexToRgba(BS_STATE_COLORS[st],alpha)};font-weight:${v?700:400};color:${alpha>0.5?'#fff':'var(--t2)'}">${v||''}</td>`;
+              const emph = st===metric ? 'box-shadow:inset 0 0 0 2px '+BS_STATE_COLORS[st]+';' : '';
+              return `<td style="padding:5px 8px;text-align:center;background:${hexToRgba(BS_STATE_COLORS[st],alpha)};font-weight:${v?700:400};color:${alpha>0.5?'#fff':'var(--t2)'};${emph}">${v||''}</td>`;
             }).join('')}
           </tr>`).join('')}
       </tbody>
