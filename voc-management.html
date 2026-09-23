@@ -6,6 +6,8 @@
 <title>VOC 정보조회 v4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<!-- 영업구역 실적 리뷰의 트리맵 차트용. Chart.js 뒤에 로드하면 자체적으로 'treemap' 타입을 등록한다. -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@2.3.0/dist/chartjs-chart-treemap.min.js"></script>
 <!-- pptxgenjs는 동적 다중-CDN 폴백 로더로 처리 (generatePptReport 함수 내부) -->
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -767,6 +769,20 @@ tbody td{padding:7px 9px;vertical-align:top;font-size:12px}
   <div class="chrow" style="grid-template-columns:1fr">
     <div class="cc"><h4>🏢 지사별 VOC유형대 분포</h4><div class="cw" style="height:230px"><canvas id="bsChartVocType"></canvas></div></div>
   </div>
+
+  <!-- ▼ 영업구역 실적 리뷰 (전체 조망 — 지사 선택 없이 항상 노출, 상단 필터와 연동) ▼ -->
+  <div class="fp">
+    <div class="ft">🗺️ 영업구역 실적 리뷰 <span style="font-weight:400;color:var(--t3)">— 구역별 미접수·접수·처리완료로 누가 잘하고 못하는지 한눈에 (상단 필터 범위 연동)</span></div>
+    <div id="zoneReviewCallout" style="font-size:12px;margin-bottom:10px;line-height:1.8"></div>
+    <div class="chrow" style="grid-template-columns:1fr">
+      <div class="cc"><h4>구역별 처리현황 (막대)</h4><div class="cw" id="zoneChartBarWrap" style="height:240px"><canvas id="zoneChartBar"></canvas></div></div>
+    </div>
+    <div class="chrow" style="grid-template-columns:1fr 1fr">
+      <div class="cc"><h4>구역별 규모·완료율 (트리맵) <span style="font-weight:400;font-size:9px;color:var(--t3)">(크기=건수 · 색=완료율, 빨강↔초록)</span></h4><div class="cw" style="height:280px"><canvas id="zoneChartTreemap"></canvas></div></div>
+      <div class="cc"><h4>구역 × 상태 히트맵</h4><div id="zoneHeatmap" style="overflow-x:auto;max-height:280px;overflow-y:auto"></div></div>
+    </div>
+  </div>
+  <!-- ▲ 영업구역 실적 리뷰 끝 ▲ -->
 
   <!-- ▼ 전문가 분석 5종 (현재 필터 범위 연동) ▼ -->
   <div class="bs-mgr-title">🧠 전문가 분석 (T1·T3·T5·T7·T9 기법 — 현재 필터 범위 연동)</div>
@@ -2853,8 +2869,119 @@ function renderBranchSummary(){
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,font:{size:10}}}},scales:{x:{stacked:true,ticks:{font:{size:10}}},y:{stacked:true,beginAtZero:true,ticks:{stepSize:1}}}}
   });
 
+  renderZoneReview(d);
   renderExpertAnalysis(d);
   renderMgrSection();
+}
+
+// ── 영업구역 실적 리뷰 (전체 조망) — _bizZone(영업담당자매칭으로 확정된 실제 구역)
+// 기준으로 묶어서, 지사를 먼저 고르지 않아도 전체 구역을 한 화면에서 비교한다.
+// 표본이 3건 미만인 구역은 완료율 최고/최저 랭킹에서만 제외한다(우연히 1건 처리완료라
+// 100%로 잡히는 왜곡 방지) — 차트·히트맵에는 그대로 전부 표시한다.
+function hexToRgba(hex, alpha){
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function renderZoneReview(d){
+  const barWrap = document.getElementById('zoneChartBarWrap');
+  const rows = d.filter(r=>r._bizZone);
+  const unmatched = d.length - rows.length;
+  const zoneKeys = [...new Set(rows.map(r=>r._bizZone))];
+
+  const stats = zoneKeys.map(z=>{
+    const zr = rows.filter(r=>r._bizZone===z);
+    const cnt = {'미접수':0,'접수':0,'처리중':0,'처리완료':0,'결재요청':0,'미분류':0};
+    zr.forEach(r=>cnt[bsState(r)]++);
+    const total = zr.length;
+    const rate = total ? Math.round(cnt['처리완료']/total*100) : 0;
+    const name = zr[0]._zoneName || '';
+    const label = name ? `${z}·${name}` : z;
+    return {zone:z, name, label, total, rate, ...cnt};
+  }).sort((a,b)=>b.total-a.total);
+
+  const callout = document.getElementById('zoneReviewCallout');
+  if(!stats.length){
+    callout.innerHTML = '<span style="color:var(--t3)">영업구역 매칭 데이터가 없습니다. 상단 👤 영업담당자 버튼으로 구역변경현황 파일을 업로드하면 이 리뷰가 채워집니다.</span>';
+    if(charts.zoneBar){charts.zoneBar.destroy();charts.zoneBar=null;}
+    if(charts.zoneTreemap){charts.zoneTreemap.destroy();charts.zoneTreemap=null;}
+    document.getElementById('zoneHeatmap').innerHTML='';
+    return;
+  }
+
+  const ranked = stats.filter(s=>s.total>=3);
+  const best = ranked.length ? [...ranked].sort((a,b)=>b.rate-a.rate)[0] : null;
+  const worst = ranked.length ? [...ranked].sort((a,b)=>a.rate-b.rate)[0] : null;
+  callout.innerHTML = [
+    best ? `<span style="color:var(--grn);font-weight:700">🏆 완료율 최고: ${esc(best.label)} (${best.rate}%, ${best.total}건)</span>` : '',
+    worst && worst.zone!==best?.zone ? `<span style="color:var(--red);font-weight:700;margin-left:14px">⚠️ 완료율 최저: ${esc(worst.label)} (${worst.rate}%, ${worst.total}건)</span>` : '',
+    unmatched ? `<span style="color:var(--t3);margin-left:14px">영업구역 미매칭 ${unmatched}건은 제외</span>` : ''
+  ].filter(Boolean).join('');
+
+  // 막대그래프 — 가로 스택바, 구역이 많으면 세로 스크롤로 대응
+  barWrap.style.height = Math.max(240, stats.length*28) + 'px';
+  if(charts.zoneBar) charts.zoneBar.destroy();
+  charts.zoneBar = new Chart(document.getElementById('zoneChartBar'), {
+    type:'bar',
+    data:{
+      labels: stats.map(s=>s.label),
+      datasets: BS_STATES.map(st=>({label:st, data: stats.map(s=>s[st]), backgroundColor: BS_STATE_COLORS[st]}))
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,font:{size:9}}}},
+      scales:{x:{stacked:true,beginAtZero:true,ticks:{stepSize:1,font:{size:9}}}, y:{stacked:true,ticks:{font:{size:9}}}}
+    }
+  });
+
+  // 트리맵 — 박스 크기=총 건수, 색=완료율(빨강→초록)
+  if(charts.zoneTreemap) charts.zoneTreemap.destroy();
+  charts.zoneTreemap = new Chart(document.getElementById('zoneChartTreemap'), {
+    type:'treemap',
+    data:{ datasets:[{
+      tree: stats,
+      key: 'total',
+      labels:{display:true, color:'#fff', font:{size:10},
+        formatter(ctx){ const it=ctx.raw&&ctx.raw._data; return it ? [it.label, `${it.total}건 · ${it.rate}%`] : ''; }},
+      backgroundColor(ctx){
+        const it = ctx.raw && ctx.raw._data; if(!it) return '#94a3b8';
+        const t = Math.max(0, Math.min(100, it.rate))/100;
+        return `rgb(${Math.round(214-134*t)},${Math.round(72+104*t)},${Math.round(82-18*t)})`;
+      },
+      borderWidth:1, borderColor:'rgba(0,0,0,.15)', spacing:1
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title(items){ const it=items[0]&&items[0].raw&&items[0].raw._data; return it?it.label:''; },
+          label(item){ const it=item.raw._data; return [`총 ${it.total}건 · 완료율 ${it.rate}%`, `미접수 ${it['미접수']} · 접수 ${it['접수']} · 처리중 ${it['처리중']} · 완료 ${it['처리완료']}`]; }
+        }}
+      }
+    }
+  });
+
+  // 히트맵 — 수동 CSS 표(별도 차트 라이브러리 없이 상태색을 그대로 재사용)
+  const heatStates = ['미접수','접수','처리중','처리완료'];
+  const maxCnt = Math.max(1, ...stats.flatMap(s=>heatStates.map(st=>s[st])));
+  document.getElementById('zoneHeatmap').innerHTML = `
+    <table style="border-collapse:collapse;font-size:11px;width:100%">
+      <thead><tr>
+        <th style="text-align:left;padding:5px 8px;position:sticky;left:0;background:var(--bg2)">구역</th>
+        ${heatStates.map(st=>`<th style="padding:5px 8px;background:var(--bg2)">${st}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${stats.map(s=>`
+          <tr>
+            <td style="padding:5px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:var(--bg)">${esc(s.label)}</td>
+            ${heatStates.map(st=>{
+              const v=s[st]; const alpha = v ? (0.15+0.75*(v/maxCnt)) : 0.04;
+              return `<td style="padding:5px 8px;text-align:center;background:${hexToRgba(BS_STATE_COLORS[st],alpha)};font-weight:${v?700:400};color:${alpha>0.5?'#fff':'var(--t2)'}">${v||''}</td>`;
+            }).join('')}
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
 }
 
 // ── 전문가 분석 4종 (T1·T3·T5·T9, 현재 필터 범위 d 기준) ──
