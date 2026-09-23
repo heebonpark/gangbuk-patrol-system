@@ -2732,7 +2732,11 @@ function bsNorm(v){return (v||'').trim()||'(미지정)';}
 const BS_STATES=['미접수','접수','처리중','처리완료','결재요청'];
 const BS_STATE_COLORS={'미접수':'#dc2626','접수':'#d97706','처리중':'#7c3aed','처리완료':'#16a34a','결재요청':'#0891b2','미분류':'#64748b'};
 function bsState(r){const s=r['상태'];return BS_STATES.includes(s)?s:'미분류';}
-function bsMgrOf(r){return r._zoneName||r._mgr||'';}
+// 실제 컬럼명은 "담당유형"(VOC 원본에 항상 있음) — _zoneName/_mgr는 영업담당자매칭 파일을
+// 별도로 업로드해야만 채워지는 파생값이라, 그 업로드를 안 하면 전부 비어서 "담당" 드롭다운과
+// 담당자별 상세분석이 통째로 (미지정)으로만 나오던 문제가 있었다. 담당유형을 우선으로 쓰고,
+// 매칭 업로드로 더 구체적인 이름(_zoneName/_mgr)이 있으면 그쪽을 우선한다.
+function bsMgrOf(r){return r._zoneName||r._mgr||r['담당유형']||'';}
 // 처리자가 비어있으면 담당자(영업담당자매칭)를 기본 처리자로 사용 — 대시보드/필터링 전반에 적용
 function effHandler(r){return r['처리자']||bsMgrOf(r)||'';}
 function bsPalette(n){const out=[];for(let i=0;i<n;i++)out.push(CLR[i%CLR.length]);return out;}
